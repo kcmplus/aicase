@@ -1,0 +1,18 @@
+#!/bin/bash
+set -euo pipefail
+umask 077
+exec 9>/var/lock/aicase-backup.lock
+flock -n 9 || exit 0
+backup_root=/var/backups/aicase
+task_stamp=$(date -u +%Y%m%dT%H%M%SZ)
+task_dir="$backup_root/data-$task_stamp"
+mkdir -m 700 "$task_dir"
+docker exec aicase-postgres pg_dump -U postgres -d aicase -Fc > "$task_dir/database.dump"
+tar -czf "$task_dir/media.tar.gz" -C /var/lib/aicase media
+cp /etc/aicase/backend.env "$task_dir/backend.env"
+cp /www/server/panel/vhost/nginx/aicase.dinglh.cn.conf "$task_dir/nginx.conf"
+readlink -f /opt/aicase/current > "$task_dir/backend-release.txt"
+readlink -f /www/wwwroot/aicase.dinglh.cn/current > "$task_dir/web-release.txt"
+touch "$task_dir/COMPLETE"
+find "$backup_root" -maxdepth 1 -type d -name 'data-*' -mtime +7 -exec rm -rf -- {} +
+printf 'Backup complete: %s\n' "$task_dir"

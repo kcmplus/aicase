@@ -1,0 +1,23 @@
+[Unit]
+Description=POPOMO test management API
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+User=aicase
+Group=aicase
+WorkingDirectory=/opt/aicase/current
+EnvironmentFile=/etc/aicase/backend.env
+ExecStart=/opt/aicase/venvs/20261023-153023-admin/bin/gunicorn config.wsgi:application --bind 127.0.0.1:18010 --workers 2 --timeout 60 --access-logfile - --error-logfile -
+Restart=on-failure
+RestartSec=5
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/aicase/media
+UMask=0027
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+{
+  "name": "ai-case-studio",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test frontend/tests/core.test.mjs frontend/tests/editor.test.mjs frontend/tests/shop.test.mjs frontend/tests/marketing.test.mjs frontend/tests/creator.test.mjs frontend/tests/social.test.mjs frontend/tests/simple.test.mjs frontend/tests/ai.test.mjs frontend/tests/membership.test.mjs frontend/tests/artwork-drag.test.mjs frontend/tests/phone-catalog.test.mjs frontend/tests/runtime-catalog.test.mjs frontend/tests/order-service.test.mjs",
+    "admin": "npm --prefix frontend/admin run dev",
+    "build:admin": "npm --prefix frontend/admin run build",
+    "backend": "backend/.venv/bin/python backend/manage.py runserver 127.0.0.1:8000",
+    "test:backend": "backend/.venv/bin/python backend/manage.py test management_api"
+  }
+}

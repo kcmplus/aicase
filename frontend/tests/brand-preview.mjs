@@ -1,0 +1,15 @@
+import {createRequire} from 'node:module';
+const {chromium}=createRequire(import.meta.url)('C:/Users/53671/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const browser=await chromium.launch({headless:true,channel:'msedge'});
+const page=await browser.newPage({viewport:{width:1440,height:1000}});
+await page.goto('http://127.0.0.1:4173/');
+await page.locator('.brand-wordmark image').first().waitFor();
+await page.screenshot({path:'test-results/popomo-desktop.png',fullPage:true});
+await page.setViewportSize({width:390,height:844});
+await page.screenshot({path:'test-results/popomo-mobile.png',fullPage:true});
+await page.goto('http://127.0.0.1:4173/#studio');
+await page.screenshot({path:'test-results/popomo-studio.png',fullPage:true});
+await page.goto('http://127.0.0.1:4173/#device');
+await page.screenshot({path:'test-results/popomo-device.png',fullPage:true});
+console.log('POPOMO screenshots saved');
+await browser.close();

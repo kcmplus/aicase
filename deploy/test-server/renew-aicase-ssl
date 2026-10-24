@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+exec 9>/run/lock/aicase-ssl.lock
+flock -n 9 || exit 0
+cert=/www/server/panel/vhost/letsencrypt/aicase.dinglh.cn/fullchain.pem
+if openssl x509 -checkend 2592000 -noout -in "$cert"; then
+    exit 0
+fi
+cd /www/server/panel
+/www/server/panel/pyenv/bin/python class/acme_v2.py --domain aicase.dinglh.cn --type http --path /www/wwwroot/aicase.dinglh.cn
+openssl x509 -checkend 2592000 -noout -in "$cert"
+chmod 600 /www/server/panel/vhost/letsencrypt/aicase.dinglh.cn/privkey.pem
+nginx -t
+nginx -s reload

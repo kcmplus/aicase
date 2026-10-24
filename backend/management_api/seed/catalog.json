@@ -1,0 +1,648 @@
+{
+  "designs": [
+    {
+      "id": "bloom",
+      "name": "In Full Bloom",
+      "category": "A little joy, every day.",
+      "color": "#e7efea",
+      "legacy_index": 1,
+      "layout": {
+        "art": "solid",
+        "image": "",
+        "style": "original",
+        "zoom": 100,
+        "caption": "",
+        "enhance": false,
+        "background": "#30b7b9",
+        "layers": [
+          {
+            "id": "bloom-0",
+            "type": "sticker",
+            "x": 73,
+            "y": 30,
+            "size": 60,
+            "rotation": -12,
+            "asset": "daisy",
+            "source": {
+              "contentId": "sticker-daisy",
+              "creatorId": "mika",
+              "version": 1
+            }
+          },
+          {
+            "id": "bloom-1",
+            "type": "sticker",
+            "x": 36,
+            "y": 66,
+            "size": 75,
+            "rotation": 10,
+            "asset": "daisy",
+            "source": {
+              "contentId": "sticker-daisy",
+              "creatorId": "mika",
+              "version": 1
+            }
+          },
+          {
+            "id": "bloom-2",
+            "type": "text",
+            "x": 51,
+            "y": 85,
+            "size": 69,
+            "rotation": 0,
+            "text": "bloom.",
+            "color": "#283637",
+            "font": "serif"
+          }
+        ],
+        "templateId": "bloom",
+        "source": {
+          "contentId": "case-bloom",
+          "creatorId": "mika",
+          "version": 1
+        }
+      }
+    },
+    {
+      "id": "type",
+      "name": "Make It Yours",
+      "category": "Say it your way.",
+      "color": "#f2e8e8",
+      "legacy_index": 2,
+      "layout": {
+        "art": "solid",
+        "image": "",
+        "style": "original",
+        "zoom": 100,
+        "caption": "",
+        "enhance": false,
+        "background": "#fef4e8",
+        "layers": [
+          {
+            "id": "type-0",
+            "type": "text",
+            "x": 50,
+            "y": 38,
+            "size": 85,
+            "rotation": 0,
+            "text": "MAKE",
+            "color": "#e44592",
+            "font": "sans"
+          },
+          {
+            "id": "type-1",
+            "type": "text",
+            "x": 50,
+            "y": 53,
+            "size": 85,
+            "rotation": 0,
+            "text": "IT",
+            "color": "#e44592",
+            "font": "sans"
+          },
+          {
+            "id": "type-2",
+            "type": "text",
+            "x": 50,
+            "y": 68,
+            "size": 85,
+            "rotation": 0,
+            "text": "YOURS.",
+            "color": "#e44592",
+            "font": "sans"
+          }
+        ],
+        "templateId": "type",
+        "source": {
+          "contentId": "case-type",
+          "creatorId": "popomo",
+          "version": 1
+        }
+      }
+    },
+    {
+      "id": "abstract",
+      "name": "Off Script",
+      "category": "A different kind of everyday.",
+      "color": "#eae6f1",
+      "legacy_index": 3,
+      "layout": {
+        "art": "solid",
+        "image": "",
+        "style": "original",
+        "zoom": 100,
+        "caption": "",
+        "enhance": false,
+        "background": "#dfd4f2",
+        "layers": [
+          {
+            "id": "abstract-0",
+            "type": "sticker",
+            "x": 73,
+            "y": 30,
+            "size": 60,
+            "rotation": -12,
+            "asset": "wave",
+            "source": {
+              "contentId": "sticker-wave",
+              "creatorId": "mika",
+              "version": 1
+            }
+          },
+          {
+            "id": "abstract-1",
+            "type": "sticker",
+            "x": 36,
+            "y": 66,
+            "size": 75,
+            "rotation": 10,
+            "asset": "wave",
+            "source": {
+              "contentId": "sticker-wave",
+              "creatorId": "mika",
+              "version": 1
+            }
+          },
+          {
+            "id": "abstract-2",
+            "type": "text",
+            "x": 51,
+            "y": 85,
+            "size": 69,
+            "rotation": 0,
+            "text": "a little different.",
+            "color": "#283637",
+            "font": "serif"
+          }
+        ],
+        "templateId": "abstract",
+        "source": {
+          "contentId": "case-abstract",
+          "creatorId": "mika",
+          "version": 1
+        }
+      }
+    },
+    {
+      "id": "sunset",
+      "name": "Slow Moments",
+      "category": "Take the scenic route.",
+      "color": "#f3e9dc",
+      "legacy_index": 4,
+      "layout": {
+        "art": "solid",
+        "image": "",
+        "style": "original",
+        "zoom": 100,
+        "caption": "",
+        "enhance": false,
+        "background": "#fbd2b4",
+        "layers": [
+          {
+            "id": "sunset-0",
+            "type": "sticker",
+            "x": 73,
+            "y": 30,
+            "size": 60,
+            "rotation": -12,
+            "asset": "sun",
+            "source": {
+              "contentId": "sticker-sun",
+              "creatorId": "popomo",
+              "version": 1
+            }
+          },
+          {
+            "id": "sunset-1",
+            "type": "sticker",
+            "x": 36,
+            "y": 66,
+            "size": 75,
+            "rotation": 10,
+            "asset": "wave",
+            "source": {
+              "contentId": "sticker-wave",
+              "creatorId": "mika",
+              "version": 1
+            }
+          },
+          {
+            "id": "sunset-2",
+            "type": "text",
+            "x": 51,
+            "y": 85,
+            "size": 69,
+            "rotation": 0,
+            "text": "slow moments.",
+            "color": "#283637",
+            "font": "serif"
+          }
+        ],
+        "templateId": "sunset",
+        "source": {
+          "contentId": "case-sunset",
+          "creatorId": "noah",
+          "version": 1
+        }
+      }
+    },
+    {
+      "id": "minimal-heart",
+      "name": "Simply Yours",
+      "category": "Less, with a little love.",
+      "color": "#eeeae5",
+      "legacy_index": 5,
+      "layout": {
+        "art": "solid",
+        "image": "",
+        "style": "original",
+        "zoom": 100,
+        "caption": "",
+        "enhance": false,
+        "background": "#ffffff",
+        "layers": [
+          {
+            "id": "minimal-heart-0",
+            "type": "sticker",
+            "x": 72,
+            "y": 29,
+            "size": 42,
+            "rotation": -8,
+            "asset": "heart-line",
+            "source": {
+              "contentId": "sticker-heart-line",
+              "creatorId": "mika",
+              "version": 1
+            }
+          },
+          {
+            "id": "minimal-heart-1",
+            "type": "sticker",
+            "x": 31,
+            "y": 53,
+            "size": 47,
+            "rotation": 12,
+            "asset": "heart-line",
+            "source": {
+              "contentId": "sticker-heart-line",
+              "creatorId": "mika",
+              "version": 1
+            }
+          },
+          {
+            "id": "minimal-heart-2",
+            "type": "sticker",
+            "x": 73,
+            "y": 72,
+            "size": 33,
+            "rotation": -8,
+            "asset": "heart-line",
+            "source": {
+              "contentId": "sticker-heart-line",
+              "creatorId": "mika",
+              "version": 1
+            }
+          },
+          {
+            "id": "minimal-heart-3",
+            "type": "text",
+            "x": 50,
+            "y": 88,
+            "size": 70,
+            "rotation": 0,
+            "text": "always with you",
+            "color": "#283637",
+            "font": "serif"
+          }
+        ],
+        "templateId": "minimal-heart",
+        "source": {
+          "contentId": "case-minimal-heart",
+          "creatorId": "popomo",
+          "version": 1
+        }
+      }
+    },
+    {
+      "id": "citrus",
+      "name": "Sunday Club",
+      "category": "Keep the good days close.",
+      "color": "#e9ecdf",
+      "legacy_index": 6,
+      "layout": {
+        "art": "solid",
+        "image": "",
+        "style": "original",
+        "zoom": 100,
+        "caption": "",
+        "enhance": false,
+        "background": "#edf4e5",
+        "layers": [
+          {
+            "id": "citrus-0",
+            "type": "sticker",
+            "x": 72,
+            "y": 29,
+            "size": 42,
+            "rotation": -8,
+            "asset": "orange",
+            "source": {
+              "contentId": "sticker-orange",
+              "creatorId": "mika",
+              "version": 1
+            }
+          },
+          {
+            "id": "citrus-1",
+            "type": "sticker",
+            "x": 31,
+            "y": 53,
+            "size": 47,
+            "rotation": 12,
+            "asset": "orange",
+            "source": {
+              "contentId": "sticker-orange",
+              "creatorId": "mika",
+              "version": 1
+            }
+          },
+          {
+            "id": "citrus-2",
+            "type": "sticker",
+            "x": 73,
+            "y": 72,
+            "size": 33,
+            "rotation": -8,
+            "asset": "orange",
+            "source": {
+              "contentId": "sticker-orange",
+              "creatorId": "mika",
+              "version": 1
+            }
+          },
+          {
+            "id": "citrus-3",
+            "type": "text",
+            "x": 50,
+            "y": 88,
+            "size": 70,
+            "rotation": 0,
+            "text": "slow sunday",
+            "color": "#283637",
+            "font": "serif"
+          }
+        ],
+        "templateId": "citrus",
+        "source": {
+          "contentId": "case-citrus",
+          "creatorId": "mika",
+          "version": 1
+        }
+      }
+    }
+  ],
+  "models": [
+    {
+      "name": "iPhone 16 Pro",
+      "legacy_index": 1,
+      "brand": "Apple"
+    },
+    {
+      "name": "iPhone 16",
+      "legacy_index": 2,
+      "brand": "Apple"
+    },
+    {
+      "name": "iPhone 15 Pro",
+      "legacy_index": 3,
+      "brand": "Apple"
+    },
+    {
+      "name": "iPhone 15",
+      "legacy_index": 4,
+      "brand": "Apple"
+    },
+    {
+      "name": "Samsung S24",
+      "legacy_index": 5,
+      "brand": "Samsung"
+    }
+  ],
+  "graphics": [
+    {
+      "id": "cat",
+      "src": "./assets/stickers/1F431.svg",
+      "zh": "小猫",
+      "en": "Cat",
+      "creatorId": "popomo",
+      "license": "OpenMoji CC BY-SA 4.0"
+    },
+    {
+      "id": "dog",
+      "src": "./assets/stickers/1F436.svg",
+      "zh": "小狗",
+      "en": "Dog",
+      "creatorId": "popomo",
+      "license": "OpenMoji CC BY-SA 4.0"
+    },
+    {
+      "id": "butterfly",
+      "src": "./assets/stickers/1F98B.svg",
+      "zh": "蝴蝶",
+      "en": "Butterfly",
+      "creatorId": "popomo",
+      "license": "OpenMoji CC BY-SA 4.0"
+    },
+    {
+      "id": "blossom",
+      "src": "./assets/stickers/1F338.svg",
+      "zh": "樱花",
+      "en": "Blossom",
+      "creatorId": "popomo",
+      "license": "OpenMoji CC BY-SA 4.0"
+    },
+    {
+      "id": "sunflower",
+      "src": "./assets/stickers/1F33B.svg",
+      "zh": "向日葵",
+      "en": "Sunflower",
+      "creatorId": "popomo",
+      "license": "OpenMoji CC BY-SA 4.0"
+    },
+    {
+      "id": "cherries",
+      "src": "./assets/stickers/1F352.svg",
+      "zh": "樱桃",
+      "en": "Cherries",
+      "creatorId": "popomo",
+      "license": "OpenMoji CC BY-SA 4.0"
+    },
+    {
+      "id": "berry",
+      "src": "./assets/stickers/1F353.svg",
+      "zh": "草莓",
+      "en": "Strawberry",
+      "creatorId": "popomo",
+      "license": "OpenMoji CC BY-SA 4.0"
+    },
+    {
+      "id": "rainbow",
+      "src": "./assets/stickers/1F308.svg",
+      "zh": "彩虹",
+      "en": "Rainbow",
+      "creatorId": "popomo",
+      "license": "OpenMoji CC BY-SA 4.0"
+    },
+    {
+      "id": "sun",
+      "src": "./assets/stickers/1F31E.svg",
+      "zh": "太阳",
+      "en": "Sun",
+      "creatorId": "popomo",
+      "license": "OpenMoji CC BY-SA 4.0"
+    },
+    {
+      "id": "moon",
+      "src": "./assets/stickers/1F319.svg",
+      "zh": "月亮",
+      "en": "Moon",
+      "creatorId": "popomo",
+      "license": "OpenMoji CC BY-SA 4.0"
+    },
+    {
+      "id": "rocket",
+      "src": "./assets/stickers/1F680.svg",
+      "zh": "火箭",
+      "en": "Rocket",
+      "creatorId": "popomo",
+      "license": "OpenMoji CC BY-SA 4.0"
+    },
+    {
+      "id": "heart",
+      "src": "./assets/stickers/2764.svg",
+      "zh": "爱心",
+      "en": "Heart",
+      "creatorId": "popomo",
+      "license": "OpenMoji CC BY-SA 4.0"
+    },
+    {
+      "id": "daisy",
+      "zh": "品牌小花",
+      "en": "Pink daisy",
+      "src": "./assets/creator/daisy.svg",
+      "creatorId": "mika",
+      "license": "POPOMO demo artwork"
+    },
+    {
+      "id": "sparkle",
+      "zh": "灵感星芒",
+      "en": "Sparkle",
+      "src": "./assets/creator/sparkle.svg",
+      "creatorId": "mika",
+      "license": "POPOMO demo artwork"
+    },
+    {
+      "id": "tulip",
+      "zh": "一支郁金香",
+      "en": "Tulip",
+      "src": "./assets/creator/tulip.svg",
+      "creatorId": "mika",
+      "license": "POPOMO demo artwork"
+    },
+    {
+      "id": "bow",
+      "zh": "蝴蝶结",
+      "en": "Ribbon bow",
+      "src": "./assets/creator/bow.svg",
+      "creatorId": "mika",
+      "license": "POPOMO demo artwork"
+    },
+    {
+      "id": "smile",
+      "zh": "微笑日常",
+      "en": "Sunny smile",
+      "src": "./assets/creator/smile.svg",
+      "creatorId": "mika",
+      "license": "POPOMO demo artwork"
+    },
+    {
+      "id": "cloud",
+      "zh": "轻软白云",
+      "en": "Soft cloud",
+      "src": "./assets/creator/cloud.svg",
+      "creatorId": "mika",
+      "license": "POPOMO demo artwork"
+    },
+    {
+      "id": "wave",
+      "zh": "海浪线条",
+      "en": "Ocean wave",
+      "src": "./assets/creator/wave.svg",
+      "creatorId": "mika",
+      "license": "POPOMO demo artwork"
+    },
+    {
+      "id": "mushroom",
+      "zh": "森林蘑菇",
+      "en": "Forest mushroom",
+      "src": "./assets/creator/mushroom.svg",
+      "creatorId": "mika",
+      "license": "POPOMO demo artwork"
+    },
+    {
+      "id": "leaf",
+      "zh": "青色叶片",
+      "en": "Teal leaf",
+      "src": "./assets/creator/leaf.svg",
+      "creatorId": "mika",
+      "license": "POPOMO demo artwork"
+    },
+    {
+      "id": "orange",
+      "zh": "橘子汽水",
+      "en": "Sweet orange",
+      "src": "./assets/creator/orange.svg",
+      "creatorId": "mika",
+      "license": "POPOMO demo artwork"
+    },
+    {
+      "id": "checker",
+      "zh": "粉色棋盘",
+      "en": "Pink checker",
+      "src": "./assets/creator/checker.svg",
+      "creatorId": "mika",
+      "license": "POPOMO demo artwork"
+    },
+    {
+      "id": "heart-line",
+      "zh": "心动线条",
+      "en": "Heart outline",
+      "src": "./assets/creator/heart-line.svg",
+      "creatorId": "mika",
+      "license": "POPOMO demo artwork"
+    }
+  ],
+  "aiStyles": [
+    {
+      "id": "anime",
+      "name": "Anime portrait",
+      "tag": "Illustrated",
+      "description": "Expressive eyes, clean linework and a hand-painted world.",
+      "image": "./assets/ai-styles/anime.png"
+    },
+    {
+      "id": "realism",
+      "name": "Cinematic realism",
+      "tag": "Photographic",
+      "description": "Natural detail, beautiful light and an editorial finish.",
+      "image": "./assets/ai-styles/realism.png"
+    },
+    {
+      "id": "3d",
+      "name": "3D character",
+      "tag": "Playful",
+      "description": "A sculpted character with soft materials and studio lighting.",
+      "image": "./assets/ai-styles/3d.png"
+    }
+  ]
+}

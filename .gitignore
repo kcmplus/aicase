@@ -1,0 +1,26 @@
+test-results/
+node_modules/
+*.tar.gz
+.superpowers/
+.DS_Store
+._*
+.openai/
+*.log
+.env
+.env.*
+!.env.example
+
+# Historical Sites publication copy; active source is frontend/storefront/.
+/sites/
+
+backend/.venv/
+backend/.env
+backend/db.sqlite3*
+backend/.local-secret
+backend/staticfiles/
+backend/media/
+__pycache__/
+*.pyc
+frontend/admin/dist/
+backend/.local-admin.txt
+backend/.test-server-admin.txt
