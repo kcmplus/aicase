@@ -120,3 +120,11 @@ Web release `20261026-002343-photo-reset` replaces `20261025-235321-images`. Bac
 111 frontend tests passed. Local browser reproduced 9 stale layers before the fix, then verified 0 layers after replacement, persistence across reload, same-file reselection, clean checkout preview and new-sample selection. Invalid images retained the current artwork. All 222 web files passed SHA-256 checks; HTTPS served the new script hash and backend health remained OK. No payment was submitted during these checks. Evidence: ignored `test-results/photo-replacement/`.
 
 Rollback requires only switching the web current pointer back to `20261025-235321-images`; no backend restart, schema change or Nginx change is involved.
+
+## Collection selection clears previous edits (2026-10-26)
+
+Web release `20261026-003635-collection-reset` replaces `20261026-002343-photo-reset`; backend remains `20261025-235321-images`. The reported leftover graphics came from per-template saved drafts, not stale image responses. Explicitly choosing a collection thumbnail (including the same template) or a gallery card now restores that template's original layers, text, positions and effect. The picker explains that choosing a design clears its previous edits. Refreshing or returning from checkout continues to preserve the current draft.
+
+111 frontend tests passed. Local browser reproduced 6 stale layers after switching away and back, then verified only the original 3 remain after the fix. Same-template reselection, switching between templates, gallery selection, active inline-text replacement, draft retention on reload and clean checkout preview passed; no order/payment was submitted. All 222 web files passed SHA-256 verification, the public script matches local bytes with `Cache-Control: no-cache`, and backend health is OK. Evidence: ignored `test-results/collection-reset/`. Public browser inspection was unavailable; local UI checks and public HTTPS verification were used.
+
+Rollback: switch only the web current pointer back to `20261026-002343-photo-reset`. No backend, Nginx, schema or order data changes.
