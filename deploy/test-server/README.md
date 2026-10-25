@@ -112,3 +112,11 @@ Active web and backend release: `20261025-235321-images`; previous release `2026
 - Production browser navigation timed out again; visual checks were performed locally, while production was checked through HTTPS and the real admin upload API. Evidence is in ignored `test-results/image-optimization/`.
 
 Rollback: restore the above saved Nginx config, switch both current symlinks back to `20261024-224445-orders`, restart `aicase-backend`, validate and reload Nginx. Keep media originals/derivatives and all order data. See `docs/image-performance.md` for rebuilding and maintaining images.
+
+## Photo replacement clears old artwork (2026-10-26 00:24 Asia/Shanghai)
+
+Web release `20261026-002343-photo-reset` replaces `20261025-235321-images`. Backend remains on `20261025-235321-images`. Selecting a new uploaded photo or a new sample now clears the previous photo's stickers, text, retained template layers and placement only after the image has been decoded and saved. Merely switching source tabs retains existing behavior; applying an AI effect to the same photo still preserves its artwork. The upload area explains that choosing a photo starts with cleared graphics/text.
+
+111 frontend tests passed. Local browser reproduced 9 stale layers before the fix, then verified 0 layers after replacement, persistence across reload, same-file reselection, clean checkout preview and new-sample selection. Invalid images retained the current artwork. All 222 web files passed SHA-256 checks; HTTPS served the new script hash and backend health remained OK. No payment was submitted during these checks. Evidence: ignored `test-results/photo-replacement/`.
+
+Rollback requires only switching the web current pointer back to `20261025-235321-images`; no backend restart, schema change or Nginx change is involved.
