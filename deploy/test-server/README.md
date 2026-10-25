@@ -128,3 +128,11 @@ Web release `20261026-003635-collection-reset` replaces `20261026-002343-photo-r
 111 frontend tests passed. Local browser reproduced 6 stale layers after switching away and back, then verified only the original 3 remain after the fix. Same-template reselection, switching between templates, gallery selection, active inline-text replacement, draft retention on reload and clean checkout preview passed; no order/payment was submitted. All 222 web files passed SHA-256 verification, the public script matches local bytes with `Cache-Control: no-cache`, and backend health is OK. Evidence: ignored `test-results/collection-reset/`. Public browser inspection was unavailable; local UI checks and public HTTPS verification were used.
 
 Rollback: switch only the web current pointer back to `20261026-002343-photo-reset`. No backend, Nginx, schema or order data changes.
+
+## Keep editor drafts; start fresh from home (2026-10-26)
+
+Web release `20261026-004635-draft-session` replaces `20261026-003635-collection-reset`, refining the previous selection behavior. Editor thumbnails retain each design's draft, including reselecting the current design. Only selecting a design card from the home/gallery starts a fresh collection editing session and clears all previous collection drafts, so switching templates cannot resurrect an earlier session. Ordinary reloads and returning from checkout preserve drafts. The on-page hint reflects this behavior.
+
+111 frontend tests passed. Local browser checks verified separate graphics/text on two designs survive repeated switching, same-design selection and reload; selecting from home clears both drafts, and edits in the new session are again preserved. All 222 web files passed SHA-256 verification; the public script matches local bytes with `Cache-Control: no-cache` and backend health remains OK. Evidence: ignored `test-results/design-draft-session/`. Public browser visual verification was unavailable; the UI was checked locally. No payments or orders were created.
+
+Backend remains `20261025-235321-images`; Nginx, schema and order data are unchanged. Rollback only requires switching the web current pointer back to `20261026-003635-collection-reset`.
