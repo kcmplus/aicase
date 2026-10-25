@@ -1,3 +1,4 @@
+import {registerImageVariants} from './image-view.js';
 // Bundled defaults support standalone rule tests and legacy saved renders.
 // The browser loads the server catalog before offering new orders.
 export const bundledStyles=[
@@ -44,6 +45,7 @@ export function applyCatalog(data){
   return {id:e.code,name:e.name,subject:e.subject,original:e.original_path,origin:`popomo-${e.code}-v1`,results};
  }).filter(e=>Object.keys(e.results).length);
  if(new Set(examples.map(e=>e.id)).size!==examples.length)throw Error('Duplicate example');
+ registerImageVariants(data.image_variants);
  PRINT_AVAILABLE=!!print;PRINT_PRICE_CENTS=print?.cents??0;PRINT_PRICE=print?money(print.cents):'Unavailable';
  AI_AVAILABLE=!!ai;AI_MONTHLY_CENTS=ai?.cents??0;AI_MONTHLY_PRICE=ai?money(ai.cents):'Unavailable';AI_MONTHLY_LIMIT=ai?.monthly_credits??0;AI_TRIAL_LIMIT=ai?.trial_credits??0;
  aiStyles.splice(0,aiStyles.length,...styles);aiExamples.splice(0,aiExamples.length,...examples);catalogStatus='ready';

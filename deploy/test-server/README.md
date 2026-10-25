@@ -99,3 +99,16 @@ Active web and backend release: `20261024-224445-orders`. Previous release: `202
 Rollback: switch both `current` pointers back to `20261023-193732-catalog` and restart `aicase-backend`. Keep additive migration 0003 and all order data. Older versions cannot manage the new server-order workflow; restore the new release to resume it. The deployment used an activation-failure trap to restore both pointers.
 
 Current boundary: payment and station actions remain explicitly simulated. Customer access depends on a private browser key; no account recovery or cross-device station authentication yet. Private order photos are in the database snapshot, not public media. Existing browser-only orders are not silently imported.
+
+## Image optimization deployed (2026-10-25 23:56 Asia/Shanghai)
+
+Active web and backend release: `20261025-235321-images`; previous release `20261024-224445-orders` retained. Database/media/config backup: `/var/backups/aicase/data-20261025T155623Z`; previous Nginx config: `/var/backups/aicase/nginx-before-20261025-235321-images.conf`. No schema, catalog, price or order changes.
+
+- 222 web files and 29 backend files passed SHA-256 verification. Static images have content-addressed WebP display derivatives and responsive selection; originals and saved design paths are retained. The largest display versions of 26 source images total 6.75 MB versus 68.20 MB originally (90.1% reduction). Small tiles request smaller files still.
+- Admin uploads preserve normalized full-resolution originals and automatically create previews. Existing public uploads can use the idempotent `optimize_library_images` command; there were no existing uploads needing backfill on this server. Private order snapshots are not part of the public image pipeline.
+- Noncritical images load lazily and decode asynchronously. In the local browser, all 9 images inside the collapsed AI section remained unloaded; expansion requested WebP previews. Desktop and 390-pixel mobile layout were checked with no horizontal overflow.
+- Nginx caches only content-addressed static previews and public library previews for one year with immutable. Entry files and API responses retain existing cache policy. Nginx configuration and backend health passed.
+- 111 frontend tests, 38 backend tests and admin production build passed; final image edge-case tests passed. HTTPS served six changed source files and sample derivatives with matching bytes and correct WebP/cache headers. A disposable 2600×1300 transparent upload preserved dimensions/alpha, returned 320/640/1280 previews, and served successfully. Its files were removed after verification; audit event retained.
+- Production browser navigation timed out again; visual checks were performed locally, while production was checked through HTTPS and the real admin upload API. Evidence is in ignored `test-results/image-optimization/`.
+
+Rollback: restore the above saved Nginx config, switch both current symlinks back to `20261024-224445-orders`, restart `aicase-backend`, validate and reload Nginx. Keep media originals/derivatives and all order data. See `docs/image-performance.md` for rebuilding and maintaining images.

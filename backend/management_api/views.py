@@ -207,6 +207,8 @@ class UploadView(APIView):
     permission_classes = [IsAdminUser]
     def post(self, request):
         from PIL import Image, UnidentifiedImageError
+        from .image_processing import normalized_image
+        from .images import save_display_variants
         if not any(request.user.has_perm(f"management_api.{action}_{model}") for action in ("add", "change") for model in ("graphic", "designtemplate", "aistyle", "aiexample")):
             return Response(status=403)
         uploaded = request.FILES.get("file")
@@ -219,23 +221,25 @@ class UploadView(APIView):
                     if img.format not in ("JPEG", "PNG", "WEBP") or img.width * img.height > 20_000_000:
                         raise ValueError("Unsupported image")
                     img.load()
-                    safe = img.convert("RGBA")
-                    safe.thumbnail((2400, 2400))
+                    safe = normalized_image(img)
                     out = BytesIO()
                     safe.save(out, format="PNG")
         except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError, Image.DecompressionBombWarning):
             raise serializers.ValidationError({"file": "无法读取此图片；仅支持有效的 JPG / PNG / WebP，最多 2000 万像素。"})
         path = default_storage.save(f"uploads/{uuid.uuid4().hex}.png", ContentFile(out.getvalue()))
+        previews = save_display_variants(path, safe)
         audit(request, "upload", "asset", summary="上传图库图片")
-        return Response({"path": default_storage.url(path)}, status=201)
+        url = default_storage.url(path)
+        return Response({"path": url, "image_variants": {url: previews}}, status=201)
 
 @never_cache
 @api_view(["GET"])
 @permission_classes([AllowAny])
 @authentication_classes([])
 def public_catalog(request):
+    from .images import image_variants
     # Stable legacy indexes are never reassigned. This is an integration API, not a payment API.
-    return Response({
+    data = {
         "version": 2,
         "brands": s.BrandSerializer(m.Brand.objects.filter(active=True), many=True).data,
         "phone_models": s.PhoneModelSerializer(m.PhoneModel.objects.filter(active=True, brand__active=True), many=True).data,
@@ -248,4 +252,10 @@ def public_catalog(request):
             for example in m.AIExample.objects.filter(active=True, results__style__active=True).distinct().prefetch_related("results__style")
         ],
         "plans": s.PricingPlanSerializer(m.PricingPlan.objects.filter(active=True), many=True).data,
-    })
+    }
+    paths = [style["image_path"] for style in data["ai_styles"]]
+    for example in data["ai_examples"]:
+        paths.append(example["original_path"])
+        paths.extend(result["image_path"] for result in example["results"])
+    data["image_variants"] = image_variants(paths)
+    return Response(data)

@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 from django.db import transaction
 from .models import Brand, PhoneModel, Graphic, DesignTemplate, AIStyle, AIExample, AIExampleResult, PricingPlan, PrintOrder, AuditLog
+from .images import image_variants
 
 
 def validate_image_path(value):
@@ -15,6 +16,12 @@ def validate_image_path(value):
 
 class CatalogSerializer(serializers.ModelSerializer):
     active = serializers.BooleanField(default=True)
+    image_variants = serializers.SerializerMethodField()
+    def get_image_variants(self, instance):
+        paths = [getattr(instance, field, "") for field in ("image_path", "preview_path", "original_path")]
+        if isinstance(instance, AIExample):
+            paths.extend(result.image_path for result in instance.results.all())
+        return image_variants(paths)
     def validate(self, attrs):
         if self.instance and "code" in attrs and attrs["code"] != self.instance.code:
             raise serializers.ValidationError({"code": "标识创建后不能修改，避免破坏设计引用。"})

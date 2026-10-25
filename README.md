@@ -1,5 +1,7 @@
 # POPOMO · 用户端与管理后台
 
+图片已支持 WebP 多尺寸预览、懒加载及后台上传自动优化；原图独立保留。生成与维护方式见 [图片性能说明](docs/image-performance.md)。
+
 项目已拆分为前端和 Python 后端两个模块。管理后台与 API 已部署到测试服务器：https://aicase.dinglh.cn/admin/ 。用户端已接通后台价格、AI 次数、风格和一对多案例；后台保存后刷新用户端即可生效。
 
 ```text

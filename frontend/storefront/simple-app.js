@@ -1,3 +1,4 @@
+import {imageTag} from './image-view.js';
 import {orderRequest,savedOrder,checkoutBody} from './order-service.js';
 import {phoneBrand,phoneBrands,findPhoneModels} from './phone-catalog.js';
 import {fonts} from './editor-model.js';
@@ -146,7 +147,7 @@ function revealArtwork(){if(window.innerWidth<=700)document.querySelector('.larg
 function setArtwork(key,value){artworkTarget()[key]=value;save();updatePreview();}
 function creativeLibrary(){
  const disabled=state.source==='photo'&&!state.photo&&!state.keepCollection,items=[...stickers.slice(12),...stickers.slice(0,12)];
- return `<section class="graphic-library"><div class="library-title"><h2>Graphic library</h2><span>24 graphics</span></div><p>Little details. A little more you.</p><div class="graphic-grid">${items.slice(0,libraryExpanded?24:12).map(a=>`<button type="button" data-add-graphic="${a.id}" aria-label="Add ${esc(a.en)}" title="${esc(a.en)}" ${disabled?'disabled':''}><img src="${a.src}" alt=""><span>${esc(a.en)}</span></button>`).join('')}</div><button class="text-button library-more" data-action="toggle-library">${libraryExpanded?'Show less':'View all 24 graphics'} ${libraryExpanded?'−':'+'}</button><p class="library-credit">Original POPOMO artwork + OpenMoji · CC BY-SA 4.0</p></section>
+ return `<section class="graphic-library"><div class="library-title"><h2>Graphic library</h2><span>24 graphics</span></div><p>Little details. A little more you.</p><div class="graphic-grid">${items.slice(0,libraryExpanded?24:12).map(a=>`<button type="button" data-add-graphic="${a.id}" aria-label="Add ${esc(a.en)}" title="${esc(a.en)}" ${disabled?'disabled':''}>${imageTag(a.src,{alt:"",sizes:"64px"})}<span>${esc(a.en)}</span></button>`).join('')}</div><button class="text-button library-more" data-action="toggle-library">${libraryExpanded?'Show less':'View all 24 graphics'} ${libraryExpanded?'−':'+'}</button><p class="library-credit">Original POPOMO artwork + OpenMoji · CC BY-SA 4.0</p></section>
  <section class="text-editor"><h2>Your words</h2><p>Double-click text on your case to edit.<br>Choose fonts and colors right beside it.</p><button class="button text-add" data-action="text-submit" ${disabled?'disabled':''}>Add text ${icon('spark',16)}</button>${disabled?'<p class="field-note">Upload a photo to start adding graphics and text.</p>':''}</section>`;
 }
 
@@ -205,7 +206,7 @@ function highlightArtwork(){
 function refreshArtworkControls(){highlightArtwork();}
 const arrow = () => icon('arrow',18);
 const currentDesign = id => designs.find(d=>d.id===id) || designs[0];
-const casePreview = (id,model='iPhone 16 Pro') => phone(designFor(id),model).replace(/aria-label="[^"]*"/,`aria-label="${esc(currentDesign(id).name+' on '+model)}"`);
+const casePreview = (id,model='iPhone 16 Pro') => phone(designFor(id),model,'',{loading:'lazy',sizes:'(max-width: 700px) 100px, 180px'}).replace(/aria-label="[^"]*"/,`aria-label="${esc(currentDesign(id).name+' on '+model)}"`);
 function save() {
   try {const ref=p=>p?.version===2?{code:p.code}:p;localStorage.setItem(KEY,JSON.stringify({...state,photo:undefined,pass:ref(state.pass),job:state.job?{...state.job,pass:ref(state.job.pass)}:null}));storageWarning=false;}
   catch {storageWarning=true;notify('Your browser could not save this pass. Download the QR code or write down the code.');}

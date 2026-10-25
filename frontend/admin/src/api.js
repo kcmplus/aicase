@@ -1,4 +1,5 @@
 import {reactive} from 'vue';
+import {registerImageVariants} from '../../storefront/image-view.js';
 export const session = reactive({user:null,ready:false});
 let csrfToken = '';
 export function can(permission){return Boolean(session.user?.is_superuser || session.user?.permissions.includes(permission));}
@@ -18,6 +19,8 @@ export async function api(path,options={}){
     error.status=response.status;throw error;
   }
   if(data?.csrfToken)csrfToken=data.csrfToken;
+  registerImageVariants(data?.image_variants);
+  if(Array.isArray(data?.results))for(const record of data.results)registerImageVariants(record.image_variants);
   return data;
 }
 export async function restoreSession(){
