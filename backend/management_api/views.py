@@ -130,7 +130,7 @@ class AIStyleViewSet(AuditedViewSet):
     search_fields = ["name", "code"]
 
 class AIExampleViewSet(AuditedViewSet):
-    queryset = m.AIExample.objects.prefetch_related("results__style")
+    queryset = m.AIExample.objects.prefetch_related("results__style", "results__phone_model")
     serializer_class = s.AIExampleSerializer
     search_fields = ["name", "code", "subject"]
 

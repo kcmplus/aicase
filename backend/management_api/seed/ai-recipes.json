@@ -1,0 +1,149 @@
+{
+  "styles": [
+    {
+      "code": "gouache",
+      "name": "温暖水粉手绘",
+      "description": "保留宠物特征的水粉与蜡笔插画。",
+      "prompt": "将输入照片转换成温暖的水粉与蜡笔插画，保留主体身份、数量、表情、姿态和重要配饰。使用不规则轮廓、柔和大色块、纸张颗粒和少量手绘细节。根据目标机型缩小、平移主体并延展背景，让脸、耳朵、四肢避开镜头和裁切区。仅输出连续的平面印花，不画手机、镜头、边框、文字或水印。",
+      "image_path": "/assets/ai-recipes/pet-gouache.png",
+      "sort_order": 3
+    },
+    {
+      "code": "scrapbook",
+      "name": "旅行照片拼贴",
+      "description": "保留人物的真实照片，搭配海岸碎片和纸张肌理。",
+      "prompt": "将输入照片制作成旅行手账照片拼贴。保留人物身份、数量、发型、衣着和表情，人物照片保持完整，不把拼贴接缝放在脸上。用同一场景的海景、天空或景物作为周围纸片，暖白纸张、窄纸边和少量胶带。按目标机型安排主体和镜头避让，连续铺满画布。只输出平面印花，不画手机、镜头、孔洞、文字或水印。",
+      "image_path": "/assets/ai-recipes/couple-scrapbook.png",
+      "sort_order": 4
+    },
+    {
+      "code": "watercolor",
+      "name": "清透山湖水彩",
+      "description": "把旅行风景转换成透亮水彩和细腻彩铅。",
+      "prompt": "将输入风景照片转换成清透的水彩与彩铅插画，保留主要山形、建筑、船只及其左右关系。使用透明水彩叠色、细腻纸纹、轻柔彩铅线条和自然明亮的色彩。按目标机型重组构图，让重要景物避开镜头与边缘，必要时自然扩展天空和背景。只输出连续平面印花，不画手机、镜头、孔洞、文字、尺寸线或水印。",
+      "image_path": "/assets/ai-recipes/lake-watercolor.png",
+      "sort_order": 5
+    }
+  ],
+  "cases": [
+    {
+      "code": "pet-gouache",
+      "name": "宠物手绘 · 镜头避让",
+      "subject": "金毛与红领巾的水粉手绘；iPhone 15 Pro 构图预览。",
+      "original_path": "/assets/ai-styles/pets-original.png",
+      "style": "gouache",
+      "phone_model_code": "model-3",
+      "image_path": "/assets/ai-recipes/pet-gouache.png",
+      "prompt": "Use case: style-transfer. Input image 1 is the edit target: the golden retriever photograph. Create ONE flat full-bleed phone-case artwork, narrow portrait width:height 70.6:146.6 (approximately 1:2.0765). Transform the same golden retriever into a warm whimsical gouache and crayon illustration, expressive irregular dark outlines, bold soft color blocks, paper grain and tiny meadow flowers. Preserve one dog, golden floppy ears, smiling face, seated pose, both front paws and the red patterned triangular bandana. Recompose the WHOLE dog down and slightly right: its entire head starts below y=40%, face near x=55%, y=50%, full dog inside x=14–88%, y=40–91%. Fill the upper-left x=0–68%, y=0–35% with low-detail pale blue sky and cream clouds only, reserved for an iPhone 15 Pro camera region. Keep alpine mountains, meadow and lake recognizable but simplified, and naturally extend the scenery around the smaller dog. Keep all essential details at least 8% from the edges. No stretching or simple center cropping. Continuous artwork to all four edges. Output flat art only: no phone, camera lenses, camera holes, outline, rounded corners, guides, labels, text, logos, watermark, panels or padding. This composition is a visual study, not a certified manufacturing dieline.",
+      "sort_order": 0
+    },
+    {
+      "code": "couple-scrapbook",
+      "name": "情侣拼贴 · 海岸记忆",
+      "subject": "保留两人合照的旅行手账拼贴；iPhone 15 Pro 构图预览。",
+      "original_path": "/assets/ai-styles/couples-original.png",
+      "style": "scrapbook",
+      "phone_model_code": "model-3",
+      "image_path": "/assets/ai-recipes/couple-scrapbook.png",
+      "prompt": "Use case: style-transfer and compositing. Input image 1 is the edit target: the photograph of two fictional adults on the coast. Create ONE premium travel-scrapbook phone-case flat artwork, narrow portrait width:height 70.6:146.6 (about 1:2.0765). Preserve both adult identities, smiles, black bob haircut and rust sweater on woman, short brown hair and sage shirt on man, shoulder-to-shoulder pose. Retain real photographic texture inside a main gently tilted paper photo print placed in the LOWER TWO THIRDS: both heads entirely below y=42%, both faces near x=40–62%, y=54%, all important portrait details inside x=14–87%, y=42–88%. Surround this main intact couple photo with 4 to 6 small paper snippets using only the same blue sea, coastal cliffs and sky, warm ivory textured paper and a little translucent beige tape. Do not split or cut through faces, do not duplicate either person in the snippets. Upper-left x=0–68%, y=0–35% must be quiet warm ivory paper with faint pale-blue seaside texture and NO people or important details, reserved for an iPhone 15 Pro camera area. Subtle tactile paper shadows, airy cream and coastal blue palette, tasteful editorial balance. Keep continuous background to all four edges; essential details at least 8% from edges. No added people, writing, letters, logos, stickers with text, watermarks, phone body, camera, holes, border, guides or device mockup. Flat art only. This is a camera-aware visual study, not a calibrated printing template.",
+      "sort_order": 1
+    },
+    {
+      "code": "lake-watercolor",
+      "name": "山湖水彩 · 旅行留白",
+      "subject": "山湖、小屋与木船的清透水彩；iPhone 15 Pro 构图预览。",
+      "original_path": "/assets/ai-styles/travel-original.png",
+      "style": "watercolor",
+      "phone_model_code": "model-3",
+      "image_path": "/assets/ai-recipes/lake-watercolor.png",
+      "prompt": "【第一步：以案例原图为输入】\nUse case: style-transfer. Input image 1 is the edit target: the alpine lake photograph. Create ONE luminous watercolor and fine colored-pencil phone-case flat artwork. Narrow portrait width:height 70.6:146.6 (approximately 1:2.0765). Preserve the recognizable mountain silhouettes, blue alpine lake, evergreen forest, one small RED cabin on the RIGHT shore and one red wooden rowboat on the LOWER LEFT. Transparent watercolor washes, subtle paper grain, delicate pencil edges, luminous turquoise reflections, dusty sage trees and clear soft blue sky. Recompose for iPhone 15 Pro: main mountain peaks below y=38%, cabin around x=72%, y=58%, boat around x=32%, y=79%; all key objects inside x=12–88%, y=38–90%. Upper-left x=0–68%, y=0–35% must contain only airy low-detail pale sky and faint clouds, no key mountain peak or cabin, reserved for camera clearance. Naturally extend the scenery, do not stretch or merely center-crop. Full-bleed continuous painted backdrop to every edge, no opaque border. No people, extra boats, extra buildings, text, letters, logos, watermark, phone, camera lenses or holes, guides, measurements, device mockup or split panels. Output only the flat artwork. This is a composition study, not a certified manufacturing dieline.\n\n【第二步：以第一步结果为输入，调整构图】\nUse case: precise-object-edit. Edit target is the supplied completed watercolor alpine lake artwork. Keep the same narrow 70.6:146.6 aspect ratio, watercolor texture, blue and sage colors, one red cabin on the right and one red wooden rowboat at lower left. Change ONLY the vertical composition: lower and slightly reduce the entire mountain/forest/lake scene so that the HIGHEST MOUNTAIN PEAK begins at y=40% of the image height, never above y=38%. The entire top 38% must be uninterrupted pale blue sky with delicate clouds, especially the upper left 68% width; no mountains or trees may enter that upper band. Cabin around x=74%, y=62%, boat x=32%, y=81%, key details inside the inner 10% margin. Preserve natural landscape perspective and continuous background. Do not add new buildings, boats, text, phone, device borders, camera lenses, holes, watermark, guides or empty bands. Output one flat full-bleed phone-case composition study, not a device mockup or calibrated dieline.",
+      "sort_order": 2
+    }
+  ],
+  "legacy_prompts": [
+    {
+      "code": "portrait",
+      "style": "anime",
+      "original_path": "/assets/ai-styles/original.png",
+      "image_path": "/assets/ai-styles/anime.png",
+      "prompt": "Use case: style-transfer. Asset type: single before/after style sample for a phone-case design website. Input image 1 is the edit target. Transform into an exquisitely drawn contemporary anime portrait. Expressive brown eyes, refined ink linework, cel-shaded skin, softly painted seaside and floral background, rich teal and golden palette. Fully illustrated, visibly transformed, no photographic textures. Preserve the SAME fictional adult woman's identity, brown wavy shoulder-length hair, gentle smile, teal crewneck shirt, silver earrings, holding one yellow daisy at chest height with both hands, seaside setting, centered waist-up pose and original 2:3 portrait framing. Keep her an adult. No text, logos, watermark, panels, collages, or borders. Render one finished portrait."
+    },
+    {
+      "code": "portrait",
+      "style": "realism",
+      "original_path": "/assets/ai-styles/original.png",
+      "image_path": "/assets/ai-styles/realism.png",
+      "prompt": "Use case: style-transfer. Asset type: single before/after style sample for a phone-case design website. Input image 1 is the edit target. Transform into a premium cinematic editorial photograph. Dramatic warm sunset rim lighting, lifelike subtle skin texture and freckles, luminous eyes, softly blurred ocean background, tasteful teal shadows and amber highlights, sophisticated film color grading. Photorealistic, not illustration. Preserve the SAME fictional adult woman's identity, brown wavy shoulder-length hair, gentle smile, teal crewneck shirt, silver earrings, holding one yellow daisy at chest height with both hands, seaside setting, centered waist-up pose and original 2:3 portrait framing. Keep her an adult. No text, logos, watermark, panels, collages, or borders. Render one finished portrait."
+    },
+    {
+      "code": "portrait",
+      "style": "3d",
+      "original_path": "/assets/ai-styles/original.png",
+      "image_path": "/assets/ai-styles/3d.png",
+      "prompt": "Use case: style-transfer. Asset type: single before/after style sample for a phone-case design website. Input image 1 is the edit target. Transform into a charming high-end 3D animated character portrait. Sculpted rounded facial forms, expressive brown eyes, stylized softly waved hair strands, finely textured teal fabric, soft subsurface skin shading, warm studio-quality seaside lighting, softly modeled background. Clearly 3D animation, not a photograph. Preserve the SAME fictional adult woman's identity, brown wavy shoulder-length hair, gentle smile, teal crewneck shirt, silver earrings, holding one yellow daisy at chest height with both hands, seaside setting, centered waist-up pose and original 2:3 portrait framing. Keep her an adult. No text, logos, watermark, panels, collages, or borders. Render one finished portrait."
+    },
+    {
+      "code": "pets",
+      "style": "3d",
+      "original_path": "/assets/ai-styles/pets-original.png",
+      "image_path": "/assets/ai-styles/pets-3d.png",
+      "prompt": "Use case: style-transfer. Input image is the edit target. Single after image for a before/after sample gallery on a phone-case website. Transform the golden retriever into a delightful premium 3D animated character: oversized expressive brown eyes, rounded muzzle, sculpted fluffy golden fur, soft subsurface scattering, tactile red bandana, whimsical softly modeled meadow. Clearly animated stylization, not photorealistic. Preserve the exact dog breed, seated pose, red bandana, ears, front paws, happy expression, green meadow, vertical framing and subject placement. No text, labels, borders, split-screen layouts, collage, logos or watermark. Return one finished image only."
+    },
+    {
+      "code": "couples",
+      "style": "anime",
+      "original_path": "/assets/ai-styles/couples-original.png",
+      "image_path": "/assets/ai-styles/couples-anime.png",
+      "prompt": "Use case: style-transfer. Input image is the edit target. Single after image for a before/after sample gallery on a phone-case website. Transform both adults and the seaside into a beautiful fully illustrated anime scene, refined ink linework, cel shading, expressive eyes, richly hand-painted ocean, soft romantic summer light. Preserve both adult identities, facial hair on man, woman bob haircut, terracotta sweater, sage shirt, shoulder-to-shoulder pose, smiles, relative sizes and exact vertical framing. No extra people. No text, labels, borders, split-screen layouts, collage, logos or watermark. Return one finished image only."
+    },
+    {
+      "code": "travel",
+      "style": "realism",
+      "original_path": "/assets/ai-styles/travel-original.png",
+      "image_path": "/assets/ai-styles/travel-realism.png",
+      "prompt": "Use case: style-transfer. Input image is the edit target. Single after image for a before/after sample gallery on a phone-case website. Transform the landscape into an exquisite photoreal cinematic scene at golden sunset with dramatic golden light on the mountain ridges, delicate low mist over the lake, teal water and amber sky, realistic filmic highlights and atmospheric depth. Preserve the same mountain shapes, small red cabin on right, red rowboat at lower left, every major subject's position and size, exact 2:3 vertical framing and perspective. Do not add people or buildings. No text, labels, borders, split-screen layouts, collage, logos or watermark. Return one finished image only."
+    },
+    {
+      "code": "pets",
+      "style": "anime",
+      "original_path": "/assets/ai-styles/pets-original.png",
+      "image_path": "/assets/ai-styles/pets-anime.png",
+      "prompt": "Use case: style-transfer. Edit target: the provided original pets image. Create one full-frame portrait-format 2:3 AI effect preview in a polished hand-painted anime illustration with crisp expressive linework and soft watercolor shading. Preserve the exact original composition, viewpoint, subject identity, count, poses, clothing or object colors, and placement. Keep the same seated golden retriever, red bandana, alpine meadow and lake. Make the chosen style clearly visible but keep the original recognizable for before/after comparison. Output only the transformed image: no text, no labels, no borders, no collage, no split panels."
+    },
+    {
+      "code": "pets",
+      "style": "realism",
+      "original_path": "/assets/ai-styles/pets-original.png",
+      "image_path": "/assets/ai-styles/pets-realism.png",
+      "prompt": "Use case: style-transfer. Edit target: the provided original pets image. Create one full-frame portrait-format 2:3 AI effect preview in cinematic editorial photography with warm sunset rim light, rich filmic contrast and highly detailed realistic golden fur. Preserve the exact original composition, viewpoint, subject identity, count, poses, clothing or object colors, and placement. Keep the same seated golden retriever, red bandana, alpine meadow and lake. Make the chosen style clearly visible but keep the original recognizable for before/after comparison. Output only the transformed image: no text, no labels, no borders, no collage, no split panels."
+    },
+    {
+      "code": "couples",
+      "style": "realism",
+      "original_path": "/assets/ai-styles/couples-original.png",
+      "image_path": "/assets/ai-styles/couples-realism.png",
+      "prompt": "Use case: style-transfer. Edit target: the provided original couples image. Create one full-frame portrait-format 2:3 AI effect preview in cinematic editorial photography, golden-hour light, subtle film grain and realistic skin texture. Preserve the exact original composition, viewpoint, subject identity, count, poses, clothing or object colors, and placement. Keep the same two adult people, woman left in rust sweater and man right in sage shirt, smiling pose and coastal background. Make the chosen style clearly visible but keep the original recognizable for before/after comparison. Output only the transformed image: no text, no labels, no borders, no collage, no split panels."
+    },
+    {
+      "code": "couples",
+      "style": "3d",
+      "original_path": "/assets/ai-styles/couples-original.png",
+      "image_path": "/assets/ai-styles/couples-3d.png",
+      "prompt": "Use case: style-transfer. Edit target: the provided original couples image. Create one full-frame portrait-format 2:3 AI effect preview in a premium stylized 3D animated-film character portrait, soft sculpted forms and tactile materials. Preserve the exact original composition, viewpoint, subject identity, count, poses, clothing or object colors, and placement. Keep the same two adult people, woman left in rust sweater and man right in sage shirt, smiling pose and coastal background. Make the chosen style clearly visible but keep the original recognizable for before/after comparison. Output only the transformed image: no text, no labels, no borders, no collage, no split panels."
+    },
+    {
+      "code": "travel",
+      "style": "anime",
+      "original_path": "/assets/ai-styles/travel-original.png",
+      "image_path": "/assets/ai-styles/travel-anime.png",
+      "prompt": "Use case: style-transfer. Edit target: the provided original travel image. Create one full-frame portrait-format 2:3 AI effect preview in a beautiful hand-painted anime background painting, delicate linework and luminous painterly colors. Preserve the exact original composition, viewpoint, subject identity, count, poses, clothing or object colors, and placement. Keep the same mountains, blue lake, red cabin on right and red wooden rowboat in lower left. Make the chosen style clearly visible but keep the original recognizable for before/after comparison. Output only the transformed image: no text, no labels, no borders, no collage, no split panels."
+    },
+    {
+      "code": "travel",
+      "style": "3d",
+      "original_path": "/assets/ai-styles/travel-original.png",
+      "image_path": "/assets/ai-styles/travel-3d.png",
+      "prompt": "Use case: style-transfer. Edit target: the provided original travel image. Create one full-frame portrait-format 2:3 AI effect preview in a premium stylized 3D animated-film landscape, tactile miniature materials and soft physically based lighting. Preserve the exact original composition, viewpoint, subject identity, count, poses, clothing or object colors, and placement. Keep the same mountains, blue lake, red cabin on right and red wooden rowboat in lower left. Make the chosen style clearly visible but keep the original recognizable for before/after comparison. Output only the transformed image: no text, no labels, no borders, no collage, no split panels."
+    }
+  ]
+}

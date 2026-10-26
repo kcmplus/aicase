@@ -1,6 +1,7 @@
 <script setup>
 import {computed,onMounted,onBeforeUnmount,ref} from 'vue';
-import {onBeforeRouteLeave} from 'vue-router';
+import {onBeforeRouteLeave,useRoute} from 'vue-router';
+import AIExampleWorkbench from './AIExampleWorkbench.vue';
 import {ElMessage,ElMessageBox} from 'element-plus';
 import {api,allRecords,can,session} from './api.js';
 import {composePrompt,promptTemplates} from './prompt-templates.js';
@@ -10,7 +11,12 @@ const definitions={
   model:{resource:'phone-models',field:'adaptation_prompt',model:'phonemodel',label:'机型适配提示词'},
 };
 const visible=key=>can(`management_api.view_${definitions[key].model}`);
-const kind=ref(visible('style')?'style':'model');
+const route=useRoute();
+const tabs=[...(can('management_api.view_aiexample')?['examples']:[]),...Object.keys(definitions).filter(visible)];
+const kind=ref(tabs.includes(route.query.tab)?route.query.tab:tabs[0]);
+const exampleWorkbench=ref(null);
+async function beforeTabChange(){if(!await confirmDiscard())return false;if(exampleWorkbench.value&&!await exampleWorkbench.value.canLeave())return false;open.value=false;return true;}
+function refreshAll(){load();exampleWorkbench.value?.load();}
 const styles=ref([]),models=ref([]),loading=ref(false),error=ref(''),query=ref('');
 const open=ref(false),record=ref(null),editorKind=ref('style'),draft=ref(''),saving=ref(false),reading=ref(false),formError=ref(''),preset=ref(''),partner=ref(null);
 const definition=computed(()=>definitions[editorKind.value]);
@@ -82,10 +88,11 @@ onBeforeRouteLeave(()=>confirmDiscard());
 
 <template>
   <section class="prompt-page">
-    <div class="page-heading"><div><p class="eyebrow">AI CONFIGURATION</p><h1>AI 提示词<span class="greeting-dot">.</span></h1><p class="muted">设置生成风格与机型构图要求，查看完整内容并保存修改。</p></div><div><router-link v-if="session.user?.is_superuser" to="/ai-service" style="font-size:13px;color:#196967;margin-right:15px">生图服务配置</router-link><el-button :loading="loading" @click="load">刷新</el-button></div></div>
-    <el-alert title="提示词仅在后台保存。真实生图服务尚未接入，修改提示词不会重新生成现有案例图片。" type="info" :closable="false" show-icon/>
-    <div class="panel prompt-panel">
-      <el-tabs v-model="kind"><el-tab-pane v-if="visible('style')" label="风格提示词" name="style"/><el-tab-pane v-if="visible('model')" label="机型适配提示词" name="model"/></el-tabs>
+    <div class="page-heading"><div><p class="eyebrow">AI CONFIGURATION</p><h1>AI 案例与提示词<span class="greeting-dot">.</span></h1><p class="muted">对照原图与效果图，管理案例提示词、通用风格及机型适配规则。</p></div><div><router-link v-if="session.user?.is_superuser" to="/ai-service" style="font-size:13px;color:#196967;margin-right:15px">生图服务配置</router-link><el-button :loading="loading" @click="refreshAll">刷新</el-button></div></div>
+    <el-alert title="案例图片与提示词在同一处管理。修改提示词不会自动重新生成效果图；真实生图服务尚未接入。" type="info" :closable="false" show-icon/>
+    <el-tabs v-model="kind" class="workspace-tabs" :before-leave="beforeTabChange"><el-tab-pane v-if="can('management_api.view_aiexample')" label="案例与提示词" name="examples"/><el-tab-pane v-if="visible('style')" label="通用风格提示词" name="style"/><el-tab-pane v-if="visible('model')" label="机型适配提示词" name="model"/></el-tabs>
+    <AIExampleWorkbench v-if="kind==='examples'" ref="exampleWorkbench"/>
+    <div v-else class="panel prompt-panel">
       <div class="prompt-toolbar"><el-input v-model="query" aria-label="搜索提示词" placeholder="搜索名称、标识或提示词内容" clearable/><span class="muted">{{rows.length}} 条配置</span></div>
       <p class="muted prompt-help">{{kind==='style'?'每个 AI 风格保存一份提示词，描述画风、主体保留要求和输出效果。新增风格请到「AI 风格」管理。':'每个机型单独保存构图要求，例如主体位置、镜头避让与边缘裁切。文字规则不能替代实测打印模板。'}}</p>
       <el-alert v-if="error" :title="error" type="error" :closable="false"/>
@@ -123,5 +130,5 @@ onBeforeRouteLeave(()=>confirmDiscard());
 </template>
 
 <style scoped>
-.prompt-panel{margin-top:22px;padding:12px 24px 24px}.prompt-toolbar{display:flex;align-items:center;gap:16px;margin:12px 0}.prompt-toolbar .el-input{max-width:360px}.prompt-toolbar>span{white-space:nowrap}.prompt-help{font-size:12px}.prompt-excerpt{font-size:12px;line-height:1.7;margin:8px 0 0;color:#73847c;white-space:normal;overflow-wrap:anywhere}.prompt-code{font-size:10px;color:#96a39d;margin-top:6px}.prompt-meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:11px;color:#7b8887;margin-bottom:20px}.template-row{display:flex;gap:10px;margin:20px 0}.template-row .el-select{flex:1;min-width:0}.prompt-label{display:block;font-size:13px;color:#587165;margin:0 0 10px}.draft-note{font-size:11px;margin:10px 0 22px}.prompt-preview{background:#f6f9f7;border:1px solid #e0e7e3;border-radius:9px;padding:20px;margin-top:25px}.prompt-preview h2{font-size:16px;margin-bottom:10px}.prompt-preview>.muted{font-size:12px}.prompt-preview .el-select{margin-bottom:14px}.prompt-preview .el-button{margin-top:12px}.prompt-warning{font-size:12px;line-height:1.6;color:#9b712e}.prompt-page :deep(textarea){line-height:1.8;font-size:13px;overflow-wrap:anywhere}@media(max-width:700px){.prompt-panel{padding:8px 12px 18px}.prompt-preview{padding:14px}.prompt-toolbar{flex-wrap:wrap}}
+.workspace-tabs{margin-top:25px}.prompt-panel{margin-top:22px;padding:12px 24px 24px}.prompt-toolbar{display:flex;align-items:center;gap:16px;margin:12px 0}.prompt-toolbar .el-input{max-width:360px}.prompt-toolbar>span{white-space:nowrap}.prompt-help{font-size:12px}.prompt-excerpt{font-size:12px;line-height:1.7;margin:8px 0 0;color:#73847c;white-space:normal;overflow-wrap:anywhere}.prompt-code{font-size:10px;color:#96a39d;margin-top:6px}.prompt-meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:11px;color:#7b8887;margin-bottom:20px}.template-row{display:flex;gap:10px;margin:20px 0}.template-row .el-select{flex:1;min-width:0}.prompt-label{display:block;font-size:13px;color:#587165;margin:0 0 10px}.draft-note{font-size:11px;margin:10px 0 22px}.prompt-preview{background:#f6f9f7;border:1px solid #e0e7e3;border-radius:9px;padding:20px;margin-top:25px}.prompt-preview h2{font-size:16px;margin-bottom:10px}.prompt-preview>.muted{font-size:12px}.prompt-preview .el-select{margin-bottom:14px}.prompt-preview .el-button{margin-top:12px}.prompt-warning{font-size:12px;line-height:1.6;color:#9b712e}.prompt-page :deep(textarea){line-height:1.8;font-size:13px;overflow-wrap:anywhere}@media(max-width:700px){.prompt-panel{padding:8px 12px 18px}.prompt-preview{padding:14px}.prompt-toolbar{flex-wrap:wrap}}
 </style>

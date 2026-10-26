@@ -4,6 +4,7 @@ from django.contrib.auth.models import User, Group, Permission
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
+from rest_framework.exceptions import APIException
 from django.db import transaction
 from .models import Brand, PhoneModel, Graphic, DesignTemplate, AIStyle, AIExample, AIExampleResult, PricingPlan, PrintOrder, AuditLog
 from .images import image_variants
@@ -75,14 +76,20 @@ class AIStyleSerializer(CatalogSerializer):
 class AIExampleResultSerializer(serializers.ModelSerializer):
     style_code = serializers.CharField(source="style.code", read_only=True)
     style_name = serializers.CharField(source="style.name", read_only=True)
+    phone_model_name = serializers.CharField(source="phone_model.name", read_only=True, default="")
     class Meta:
         model = AIExampleResult
-        fields = ["style", "style_code", "style_name", "image_path"]
+        fields = ["style", "style_code", "style_name", "image_path", "prompt", "phone_model", "phone_model_name"]
     def validate_image_path(self, value):
         return validate_image_path(value)
 
+class ExampleConflict(APIException):
+    status_code = 409
+    default_detail = "案例已被其他操作更新，请关闭后重新打开，再保存修改。"
+
 class AIExampleSerializer(CatalogSerializer):
     results = AIExampleResultSerializer(many=True)
+    revision = serializers.IntegerField(min_value=0, required=False)
     class Meta:
         model = AIExample
         fields = "__all__"
@@ -94,6 +101,7 @@ class AIExampleSerializer(CatalogSerializer):
         return value
     @transaction.atomic
     def create(self, validated_data):
+        validated_data.pop("revision", None)
         results = validated_data.pop("results")
         example = super().create(validated_data)
         AIExampleResult.objects.bulk_create([AIExampleResult(example=example, **item) for item in results])
@@ -101,8 +109,20 @@ class AIExampleSerializer(CatalogSerializer):
     @transaction.atomic
     def update(self, instance, validated_data):
         results = validated_data.pop("results", None)
+        revision = validated_data.pop("revision", None)
         # Serialize simultaneous edits of the same case, including its effect list.
         instance = AIExample.objects.select_for_update().get(pk=instance.pk)
+        if revision is not None and instance.revision != revision:
+            raise ExampleConflict()
+        validated_data["revision"] = instance.revision + 1
+        if results is not None:
+            previous = {item.style_id: item for item in instance.results.all()}
+            for item in results:
+                old = previous.get(item["style"].pk)
+                if old:
+                    # Older clients omit these new fields; do not erase saved recipes.
+                    item.setdefault("prompt", old.prompt)
+                    item.setdefault("phone_model", old.phone_model)
         instance = super().update(instance, validated_data)
         if results is not None:
             instance.results.all().delete()

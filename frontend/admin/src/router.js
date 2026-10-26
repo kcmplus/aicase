@@ -9,7 +9,8 @@ import AIServiceSettings from './AIServiceSettings.vue';
 export const router=createRouter({history:createWebHistory(import.meta.env.BASE_URL),routes:[
   {path:'/login',component:Login},
   {path:'/',component:Dashboard},
-  ...Object.keys(resources).map(resource=>({path:'/'+resource,component:resource==='ai-prompts'?PromptSettings:resource==='ai-service'?AIServiceSettings:ResourcePage,props:{resource},meta:{resource}})),
+  {path:'/ai-examples',redirect:'/ai-prompts?tab=examples'},
+  ...Object.keys(resources).filter(key=>key!=='ai-examples').map(resource=>({path:'/'+resource,component:resource==='ai-prompts'?PromptSettings:resource==='ai-service'?AIServiceSettings:ResourcePage,props:{resource},meta:{resource}})),
   {path:'/:pathMatch(.*)*',redirect:'/'},
 ]});
 router.beforeEach(async to=>{

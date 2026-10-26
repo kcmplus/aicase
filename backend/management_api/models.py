@@ -69,11 +69,14 @@ class AIServiceConfig(Timestamped):
 class AIExample(CatalogItem):
     subject = models.CharField(max_length=200)
     original_path = models.CharField(max_length=300)
+    revision = models.PositiveIntegerField(default=0, editable=False)
 
 class AIExampleResult(models.Model):
     example = models.ForeignKey(AIExample, on_delete=models.CASCADE, related_name="results")
     style = models.ForeignKey(AIStyle, on_delete=models.PROTECT, related_name="example_results")
     image_path = models.CharField(max_length=300)
+    prompt = models.TextField(blank=True, max_length=8000)
+    phone_model = models.ForeignKey(PhoneModel, null=True, blank=True, on_delete=models.PROTECT, related_name="ai_example_results")
     class Meta:
         ordering = ["style__sort_order", "style_id"]
         default_permissions = ()

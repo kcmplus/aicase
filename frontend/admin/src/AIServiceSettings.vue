@@ -79,7 +79,7 @@ onBeforeRouteLeave(()=>confirmDiscard());
         </aside>
       </div>
       <el-alert title="本页用于保存服务配置。前台真实生图流程尚未接入，保存 Key 不会立即生成图片或改变现有案例。" type="info" :closable="false" show-icon/>
-      <router-link to="/ai-prompts" class="prompt-link">管理风格与机型提示词 →</router-link>
+      <router-link to="/ai-prompts" class="prompt-link">管理 AI 案例与提示词 →</router-link>
     </template>
   </section>
 </template>
