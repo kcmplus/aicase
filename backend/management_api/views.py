@@ -242,7 +242,7 @@ def public_catalog(request):
     data = {
         "version": 2,
         "brands": s.BrandSerializer(m.Brand.objects.filter(active=True), many=True).data,
-        "phone_models": s.PhoneModelSerializer(m.PhoneModel.objects.filter(active=True, brand__active=True), many=True).data,
+        "phone_models": s.PublicPhoneModelSerializer(m.PhoneModel.objects.filter(active=True, brand__active=True), many=True).data,
         "designs": s.DesignTemplateSerializer(m.DesignTemplate.objects.filter(active=True), many=True).data,
         "graphics": s.GraphicSerializer(m.Graphic.objects.filter(active=True), many=True).data,
         "ai_styles": list(m.AIStyle.objects.filter(active=True).values("code", "name", "description", "image_path")),

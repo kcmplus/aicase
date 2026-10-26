@@ -1,5 +1,15 @@
 # Test server deployment
 
+## Current prompt settings release (2026-10-27)
+
+Web and backend now use `20261027-002200-prompts`. The admin page is https://aicase.dinglh.cn/admin/ai-prompts . Previous web release `20261026-004635-draft-session` and backend release `20261025-235321-images` are retained for rollback. Database/media/config backup completed at `/var/backups/aicase/data-20261026T162108Z` before migration 0004.
+
+This release adds independent style and per-model prompt management, reusable templates, combined preview/copy, and unsaved-change protection. The new model prompt is private to authorized admin APIs. Existing configured prompts, prices, cases, orders, role grants, and storefront assets are preserved. No real image-generation API is connected.
+
+Verification: 111 storefront tests and 44 backend tests pass; production admin build, migration consistency and Django checks pass. Local browser verification covers editing, template fill, persistence after reload, model/style combination and discard protection. Public HTTPS verified every admin build file against local hashes, confirmed unchanged storefront JavaScript, anonymous denial, authenticated prompt read/write/clear and public catalog privacy. Disposable inactive style/model records used for live checks were removed; audit logs remain. Backend health and service activation passed.
+
+Rollback: switch web and backend symlinks to the previous releases and restart `aicase-backend`. Retain the additive migration and saved data; do not reverse the migration or restore local SQLite onto the server.
+
 Deployed 2026-10-23 (Asia/Shanghai) with the user's approval.
 
 - URL: https://aicase.dinglh.cn

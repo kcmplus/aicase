@@ -46,6 +46,13 @@ class PhoneModelSerializer(CatalogSerializer):
             raise serializers.ValidationError({"name": "已有二维码绑定的机型名称不能修改；请新建机型。"})
         return attrs
 
+class PublicPhoneModelSerializer(PhoneModelSerializer):
+    class Meta:
+        model = PhoneModel
+        fields = ["id", "code", "name", "brand", "brand_name", "active", "sort_order",
+                  "preview_family", "legacy_index", "print_ready", "notes",
+                  "created_at", "updated_at", "image_variants"]
+
 class GraphicSerializer(CatalogSerializer):
     class Meta:
         model = Graphic

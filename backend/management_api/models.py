@@ -30,6 +30,7 @@ class PhoneModel(CatalogItem):
     legacy_index = models.PositiveSmallIntegerField(unique=True, null=True, blank=True, editable=False)
     print_ready = models.BooleanField(default=False)
     notes = models.TextField(blank=True, max_length=2000)
+    adaptation_prompt = models.TextField(blank=True, max_length=4000)
 
 class Graphic(CatalogItem):
     category = models.CharField(max_length=80, default="graphic")
