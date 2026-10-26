@@ -5,6 +5,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from management_api import views
 from management_api.orders import StoreOrders, StoreOrder, StoreOrderAction
+from management_api.ai_service import AIServiceSettingsView, AIServiceCheckView
 
 router = DefaultRouter()
 router.register("ai-examples", views.AIExampleViewSet)
@@ -20,6 +21,8 @@ urlpatterns = [
     path("api/v1/auth/session/", views.SessionView.as_view()),
     path("api/v1/auth/password/", views.PasswordView.as_view()),
     path("api/v1/admin/dashboard/", views.DashboardView.as_view()),
+    path("api/v1/admin/ai-service/", AIServiceSettingsView.as_view()),
+    path("api/v1/admin/ai-service/check/", AIServiceCheckView.as_view()),
     path("api/v1/admin/permissions/", views.PermissionsView.as_view()),
     path("api/v1/admin/uploads/", views.UploadView.as_view()),
     path("api/v1/admin/", include(router.urls)),

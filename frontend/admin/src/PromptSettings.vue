@@ -2,7 +2,7 @@
 import {computed,onMounted,onBeforeUnmount,ref} from 'vue';
 import {onBeforeRouteLeave} from 'vue-router';
 import {ElMessage,ElMessageBox} from 'element-plus';
-import {api,allRecords,can} from './api.js';
+import {api,allRecords,can,session} from './api.js';
 import {composePrompt,promptTemplates} from './prompt-templates.js';
 
 const definitions={
@@ -82,7 +82,7 @@ onBeforeRouteLeave(()=>confirmDiscard());
 
 <template>
   <section class="prompt-page">
-    <div class="page-heading"><div><p class="eyebrow">AI CONFIGURATION</p><h1>AI 提示词<span class="greeting-dot">.</span></h1><p class="muted">设置生成风格与机型构图要求，查看完整内容并保存修改。</p></div><el-button :loading="loading" @click="load">刷新</el-button></div>
+    <div class="page-heading"><div><p class="eyebrow">AI CONFIGURATION</p><h1>AI 提示词<span class="greeting-dot">.</span></h1><p class="muted">设置生成风格与机型构图要求，查看完整内容并保存修改。</p></div><div><router-link v-if="session.user?.is_superuser" to="/ai-service" style="font-size:13px;color:#196967;margin-right:15px">生图服务配置</router-link><el-button :loading="loading" @click="load">刷新</el-button></div></div>
     <el-alert title="提示词仅在后台保存。真实生图服务尚未接入，修改提示词不会重新生成现有案例图片。" type="info" :closable="false" show-icon/>
     <div class="panel prompt-panel">
       <el-tabs v-model="kind"><el-tab-pane v-if="visible('style')" label="风格提示词" name="style"/><el-tab-pane v-if="visible('model')" label="机型适配提示词" name="model"/></el-tabs>

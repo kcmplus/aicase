@@ -1,4 +1,5 @@
 import os
+import base64
 import secrets
 from pathlib import Path
 from django.core.exceptions import ImproperlyConfigured
@@ -19,6 +20,17 @@ if not SECRET_KEY:
             pass
     SECRET_KEY = secret_file.read_text().strip()
 ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
+AI_CONFIG_ENCRYPTION_KEY = os.environ.get("AI_CONFIG_ENCRYPTION_KEY", "")
+if DEBUG and not AI_CONFIG_ENCRYPTION_KEY:
+    ai_key_file = BASE_DIR / ".local-ai-encryption-key"
+    if not ai_key_file.exists():
+        try:
+            fd = os.open(ai_key_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w") as output:
+                output.write(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())
+        except FileExistsError:
+            pass
+    AI_CONFIG_ENCRYPTION_KEY = ai_key_file.read_text().strip()
 CSRF_TRUSTED_ORIGINS = [v for v in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "http://127.0.0.1:5173,http://localhost:5173").split(",") if v]
 INSTALLED_APPS = ["django.contrib.auth", "django.contrib.contenttypes", "django.contrib.sessions", "django.contrib.staticfiles", "rest_framework", "management_api"]
 MIDDLEWARE = ["django.middleware.security.SecurityMiddleware", "django.contrib.sessions.middleware.SessionMiddleware", "django.middleware.common.CommonMiddleware", "django.middleware.csrf.CsrfViewMiddleware", "django.contrib.auth.middleware.AuthenticationMiddleware", "django.middleware.clickjacking.XFrameOptionsMiddleware"]
@@ -63,7 +75,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
     "DEFAULT_FILTER_BACKENDS": ["rest_framework.filters.SearchFilter", "rest_framework.filters.OrderingFilter"],
-    "DEFAULT_THROTTLE_RATES": {"login": "10/min", "orders": "60/min"},
+    "DEFAULT_THROTTLE_RATES": {"login": "10/min", "orders": "60/min", "ai_connection": "6/min"},
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "EXCEPTION_HANDLER": "management_api.exceptions.exception_handler",
 }

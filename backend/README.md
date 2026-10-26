@@ -30,6 +30,8 @@ npm run backend
 - `/api/v1/admin/users/`：账号查询、新增、编辑、停用。不提供删除账号或提升超级管理员接口。
 - `/api/v1/admin/roles/`：角色和模型权限。角色仍有关联账号时不可删除。
 - `GET /api/v1/admin/permissions/`：权限清单。
+- `GET/PATCH /api/v1/admin/ai-service/`：仅超级管理员查看及更新生图服务配置；不回传完整密钥。PATCH 要求 `revision`，空密钥保留已有值，`clear_api_key: true` 显式清除。
+- `POST /api/v1/admin/ai-service/check/`：检查已保存密钥是否可读取所选模型信息；要求 `revision`，每用户每进程每分钟最多 6 次，不生成图片。
 - `POST /api/v1/admin/uploads/`：multipart file。10 MB / 2000 万像素上限，仅 JPG / PNG / WebP，解码后转 PNG、删除元数据、最长边 2400，生成随机文件名。不是生产原图存储服务。
 - `/api/v1/admin/orders/`：分页、搜索、status 筛选；详情含私有设计快照，列表不含图像。PATCH 仅更新客服 notes。
 - `GET /api/v1/admin/audit-logs/`：只读审计日志。

@@ -51,6 +51,21 @@ class AIStyle(CatalogItem):
     prompt = models.TextField(blank=True, max_length=4000)
     provider = models.CharField(max_length=50, default="demo", choices=[("demo", "演示样片")])
 
+class AIServiceConfig(Timestamped):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    model_name = models.CharField(max_length=100, default="gpt-image-2")
+    api_key_ciphertext = models.TextField(blank=True, editable=False)
+    key_last_four = models.CharField(max_length=4, blank=True, editable=False)
+    key_updated_at = models.DateTimeField(null=True, blank=True, editable=False)
+    revision = models.PositiveIntegerField(default=0, editable=False)
+    last_check_at = models.DateTimeField(null=True, blank=True, editable=False)
+    last_check_status = models.CharField(max_length=20, default="untested", editable=False)
+    last_check_message = models.CharField(max_length=300, blank=True, editable=False)
+
+    class Meta:
+        default_permissions = ()
+        constraints = [models.CheckConstraint(condition=models.Q(id=1), name="single_ai_service_config")]
+
 class AIExample(CatalogItem):
     subject = models.CharField(max_length=200)
     original_path = models.CharField(max_length=300)

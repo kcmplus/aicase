@@ -6,7 +6,7 @@ import * as icons from '@element-plus/icons-vue';
 import {session,api,can} from './api.js';
 import {resources,viewPermissionsFor} from './resources.js';
 const router=useRouter(),route=useRoute(),mobileOpen=ref(false),passwordOpen=ref(false),oldPassword=ref(''),newPassword=ref(''),saving=ref(false);
-const menus=computed(()=>Object.entries(resources).filter(([key])=>viewPermissionsFor(key).some(can)));
+const menus=computed(()=>Object.entries(resources).filter(([key])=>(!resources[key].superuserOnly||session.user.is_superuser)&&viewPermissionsFor(key).some(can)));
 const content=computed(()=>menus.value.filter(([key])=>!['users','roles','audit-logs'].includes(key)));
 const system=computed(()=>menus.value.filter(([key])=>['users','roles','audit-logs'].includes(key)));
 watch(()=>route.path,()=>mobileOpen.value=false);

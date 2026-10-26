@@ -1,4 +1,7 @@
 asgiref==3.12.1
+cryptography==50.0.2
+cffi==2.1.1
+pycparser==3.12
 Django==5.2.18
 djangorestframework==3.16.1
 gunicorn==23.0.0
