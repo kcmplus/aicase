@@ -66,7 +66,7 @@ elif name == 'curl' and fail == 'health':
         executable = self.root / 'fake-executable'
         executable.write_text(f'#!{sys.executable}\n' + self.fake.read_text())
         executable.chmod(0o755)
-        for name in ['python3', 'runuser', 'chown', 'systemctl', 'curl', 'sleep', 'pg_dump']:
+        for name in ['python3', 'id', 'runuser', 'chown', 'systemctl', 'curl', 'sleep', 'pg_dump']:
             (self.bin / name).symlink_to(executable)
         tree = self.root / 'payload'
         (tree / 'backend').mkdir(parents=True)
