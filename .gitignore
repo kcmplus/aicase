@@ -23,5 +23,6 @@ backend/media/
 __pycache__/
 *.pyc
 frontend/admin/dist/
+dist-release/
 backend/.local-admin.txt
 backend/.test-server-admin.txt

@@ -74,6 +74,8 @@ npm run admin      # 管理后台 http://127.0.0.1:5173/admin/
 
 ## 检查与构建
 
+开发环境使用 GitHub Actions：推送或合并到 `dev` 后自动测试、构建并部署到 `https://aicase.chunpat.cc`。GitHub 配置、服务器目录和故障处理见 [dev 部署说明](deploy/dev/README.md)。
+
 ```sh
 npm test
 npm run test:backend

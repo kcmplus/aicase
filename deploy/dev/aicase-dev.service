@@ -1,0 +1,21 @@
+[Unit]
+Description=POPOMO dev API
+After=network.target postgresql.service
+
+[Service]
+User=aicase-dev
+Group=aicase-dev
+WorkingDirectory=/opt/aicase-dev/current/backend
+EnvironmentFile=/etc/aicase-dev/backend.env
+ExecStart=/opt/aicase-dev/current/.venv/bin/gunicorn config.wsgi:application --bind 127.0.0.1:18011 --workers 2 --timeout 60 --access-logfile - --error-logfile -
+Restart=on-failure
+RestartSec=3
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/aicase-dev/media
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target
