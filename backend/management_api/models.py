@@ -46,6 +46,8 @@ class DesignTemplate(CatalogItem):
     legacy_index = models.PositiveSmallIntegerField(unique=True, null=True, blank=True, editable=False)
 
 class AIStyle(CatalogItem):
+    name_zh = models.CharField(max_length=120, blank=True)
+    description_zh = models.CharField(max_length=500, blank=True)
     description = models.CharField(max_length=500, blank=True)
     image_path = models.CharField(max_length=300)
     prompt = models.TextField(blank=True, max_length=4000)
@@ -67,6 +69,8 @@ class AIServiceConfig(Timestamped):
         constraints = [models.CheckConstraint(condition=models.Q(id=1), name="single_ai_service_config")]
 
 class AIExample(CatalogItem):
+    name_zh = models.CharField(max_length=120, blank=True)
+    subject_zh = models.CharField(max_length=200, blank=True)
     subject = models.CharField(max_length=200)
     original_path = models.CharField(max_length=300)
     revision = models.PositiveIntegerField(default=0, editable=False)
@@ -120,3 +124,40 @@ class AuditLog(models.Model):
     class Meta:
         ordering = ["-created_at", "-id"]
         default_permissions = ("view",)
+
+
+class AIAccount(Timestamped):
+    owner_hash = models.CharField(primary_key=True, max_length=64, editable=False)
+    trial_used = models.PositiveIntegerField(default=0)
+    subscription = models.JSONField(null=True, blank=True)
+
+    class Meta:
+        default_permissions = ()
+
+
+class AIRender(Timestamped):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    request_key = models.UUIDField(unique=True, editable=False)
+    owner_hash = models.CharField(max_length=64, db_index=True, editable=False)
+    status = models.CharField(max_length=20, default='queued', db_index=True)
+    style_code = models.CharField(max_length=80)
+    style_name = models.CharField(max_length=120)
+    model_name = models.CharField(max_length=80)
+    phone_model = models.CharField(max_length=120)
+    phone_template_id = models.CharField(max_length=80)
+    prompt = models.TextField(editable=False)
+    input_image = models.BinaryField(editable=False)
+    input_mime = models.CharField(max_length=20)
+    input_hash = models.CharField(max_length=64, editable=False)
+    result_image = models.BinaryField(null=True, editable=False)
+    allocation = models.JSONField(default=dict)
+    credit_restored = models.BooleanField(default=False)
+    started_at = models.DateTimeField(null=True)
+    completed_at = models.DateTimeField(null=True)
+    error_code = models.CharField(max_length=60, blank=True)
+    error_message = models.CharField(max_length=300, blank=True)
+    provider_request_id = models.CharField(max_length=150, blank=True, editable=False)
+
+    class Meta:
+        ordering = ['-created_at']
+        default_permissions = ()

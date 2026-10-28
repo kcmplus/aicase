@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {designs,phoneModels,createPass,readPass,stationAvailability,startPrint,advancePrint} from '../storefront/simple-core.js';
+import {designs,legacyPhoneModels,phoneModels,createPass,readPass,stationAvailability,startPrint,advancePrint} from '../storefront/simple-core.js';
 
 test('all 30 preset and phone combinations round-trip through unique design codes',()=>{
  const codes=new Set();
- for(const d of designs)for(const model of phoneModels){const pass=createPass(d.id,model);assert.deepEqual(readPass(pass.code),pass);codes.add(pass.code);}
+ for(const d of designs)for(const model of legacyPhoneModels){const pass=createPass(d.id,model);assert.deepEqual(readPass(pass.code),pass);codes.add(pass.code);}
  assert.equal(codes.size,30);
 });
 test('missing models, unknown designs and malformed or mistyped codes are rejected',()=>{
@@ -34,7 +34,7 @@ test('printing preserves the design snapshot and advances once through collectio
  assert.deepEqual(JSON.parse(JSON.stringify(collected)),collected);
 });
 test('every supported combination has a local QR asset with a quiet zone',async()=>{
- for(const d of designs)for(const model of phoneModels){
+ for(const d of designs)for(const model of legacyPhoneModels){
   const {code}=createPass(d.id,model);
   const svg=await readFile(new URL(`../storefront/assets/passes/${code}.svg`,import.meta.url),'utf8');
   assert.match(svg,/<svg/);assert.match(svg,/viewBox="0 0 29 29"/);assert.match(svg,/<path/);

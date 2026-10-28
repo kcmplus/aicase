@@ -14,6 +14,7 @@ export const aiStyles=structuredClone(bundledStyles),aiExamples=structuredClone(
 export let PRINT_PRICE_CENTS=1000,PRINT_PRICE='$10.00',PRINT_AVAILABLE=true;
 export let AI_MONTHLY_CENTS=990,AI_MONTHLY_PRICE='$9.90',AI_MONTHLY_LIMIT=20,AI_TRIAL_LIMIT=1,AI_AVAILABLE=true;
 export let catalogStatus='demo';
+export let AI_GENERATION_CONNECTED=false;
 export const money=cents=>'$'+(cents/100).toFixed(2);
 export const safeAssetPath=value=>typeof value==='string'&&/^\.?\/(?:assets|media)\/[a-zA-Z0-9_/-]+\.(?:svg|png|jpg|jpeg|webp)$/.test(value);
 const code=value=>typeof value==='string'&&/^[a-zA-Z0-9_-]{1,80}$/.test(value);
@@ -32,7 +33,7 @@ export function applyCatalog(data){
  const print=plan(data.plans,'print'),ai=plan(data.plans,'ai_monthly');
  const styles=data.ai_styles.map(s=>{
   if(!code(s.code)||!label(s.name)||!safeAssetPath(s.image_path))throw Error('Invalid AI style');
-  return {id:s.code,name:s.name,description:s.description||'',image:s.image_path,tag:'AI style'};
+  return {id:s.code,name:s.name,name_zh:typeof s.name_zh==='string'?s.name_zh:'',description:s.description||'',description_zh:typeof s.description_zh==='string'?s.description_zh:'',image:s.image_path,tag:'AI style'};
  });
  if(new Set(styles.map(s=>s.id)).size!==styles.length)throw Error('Duplicate style');
  const examples=data.ai_examples.map(e=>{
@@ -42,15 +43,17 @@ export function applyCatalog(data){
    if(!styles.some(s=>s.id===r.style_code)||!safeAssetPath(r.image_path)||Object.hasOwn(results,r.style_code))throw Error('Invalid AI result');
    results[r.style_code]=r.image_path;
   }
-  return {id:e.code,name:e.name,subject:e.subject,original:e.original_path,origin:`popomo-${e.code}-v1`,results};
+  return {id:e.code,name:e.name,name_zh:typeof e.name_zh==='string'?e.name_zh:'',subject:e.subject,subject_zh:typeof e.subject_zh==='string'?e.subject_zh:'',original:e.original_path,origin:`popomo-${e.code}-v1`,results};
  }).filter(e=>Object.keys(e.results).length);
  if(new Set(examples.map(e=>e.id)).size!==examples.length)throw Error('Duplicate example');
  registerImageVariants(data.image_variants);
+ AI_GENERATION_CONNECTED=data.ai_generation_connected===true;
  PRINT_AVAILABLE=!!print;PRINT_PRICE_CENTS=print?.cents??0;PRINT_PRICE=print?money(print.cents):'Unavailable';
  AI_AVAILABLE=!!ai;AI_MONTHLY_CENTS=ai?.cents??0;AI_MONTHLY_PRICE=ai?money(ai.cents):'Unavailable';AI_MONTHLY_LIMIT=ai?.monthly_credits??0;AI_TRIAL_LIMIT=ai?.trial_credits??0;
  aiStyles.splice(0,aiStyles.length,...styles);aiExamples.splice(0,aiExamples.length,...examples);catalogStatus='ready';
 }
 export function unavailableCatalog(){
+ AI_GENERATION_CONNECTED=false;
  PRINT_AVAILABLE=false;AI_AVAILABLE=false;PRINT_PRICE='Unavailable';AI_MONTHLY_PRICE='Unavailable';AI_TRIAL_LIMIT=0;
  aiStyles.splice(0);aiExamples.splice(0);catalogStatus='unavailable';
 }

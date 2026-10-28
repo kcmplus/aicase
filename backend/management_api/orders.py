@@ -6,6 +6,8 @@ import re
 import warnings
 from io import BytesIO
 from pathlib import Path
+from django.db.models import Q
+from .phone_templates import template_for, PHONE_TEMPLATES
 from decimal import Decimal
 from django.db import transaction
 from django.shortcuts import get_object_or_404
@@ -80,7 +82,7 @@ class Layout(StrictSerializer):
 class AIMetadata(StrictSerializer):
     styleId = serializers.SlugField(max_length=80)
     jobId = serializers.CharField(max_length=50, allow_blank=True)
-    mode = serializers.ChoiceField(choices=['demo'])
+    mode = serializers.ChoiceField(choices=['demo','live'])
 
 class Snapshot(Layout):
     version = serializers.IntegerField(min_value=2, max_value=2)
@@ -88,6 +90,7 @@ class Snapshot(Layout):
     source = serializers.ChoiceField(choices=['collection','photo'])
     designId = serializers.SlugField(max_length=80)
     model = serializers.CharField(max_length=120)
+    phoneTemplateId = serializers.SlugField(max_length=80, required=False)
     photo = serializers.CharField(max_length=3_000_000, allow_blank=True, default='')
     effect = serializers.ChoiceField(choices=['original','fresh','warm','bold'])
     intensity = serializers.FloatField(min_value=0, max_value=100)
@@ -102,8 +105,16 @@ class Snapshot(Layout):
             json.dumps(data, allow_nan=False)
         except ValueError:
             raise serializers.ValidationError('Invalid design numbers.')
-        if not PhoneModel.objects.filter(name=data['model'], active=True, brand__active=True, legacy_index__isnull=False).exists():
+        if not PhoneModel.objects.filter(
+            Q(legacy_index__isnull=False) | Q(code__in=[t['code'] for t in PHONE_TEMPLATES]),
+            name=data['model'], active=True, brand__active=True,
+        ).exists():
             raise serializers.ValidationError('This phone model is unavailable.')
+        if 'phoneTemplateId' in data and not template_for(data['model'], data['phoneTemplateId']):
+            raise serializers.ValidationError('This phone template is unavailable.')
+        template = template_for(data['model'])
+        if template:
+            data.setdefault('phoneTemplateId', template['id'])
         if data['designId'] not in LAYERS or not DesignTemplate.objects.filter(code=data['designId'], active=True).exists():
             raise serializers.ValidationError('This design is unavailable.')
         for layout in (data, data.get('collectionLayout', {})):

@@ -81,7 +81,7 @@ class AIServiceTests(TestCase):
 
     def test_invalid_key_model_and_unknown_settings_cannot_be_saved(self):
         for body in (
-            {"api_key": "bad"}, {"api_key": "sk-"+"x"*1100},
+            {"api_key": FAKE_KEY+"\x7f"}, {"api_key": "sk-"+"x"*1100},
             {"api_key": FAKE_KEY+"\nInjected: header"},
             {"api_key": FAKE_KEY, "clear_api_key": True},
             {"model_name": FAKE_KEY}, {"base_url": "https://example.com"},
@@ -96,6 +96,39 @@ class AIServiceTests(TestCase):
         result = self.client.patch(PATH, {"revision": 0, "api_key": "sk-test-other-"+"b"*36}, format="json")
         self.assertEqual(result.status_code, 409)
         self.assertEqual(decrypt_api_key(AIServiceConfig.objects.get()), FAKE_KEY)
+
+    def test_key_format_errors_identify_the_problem_without_echoing_input(self):
+        for value, message in (
+            ("Bearer " + FAKE_KEY, "不要包含 Bearer"),
+            ("Authorization: Bearer " + FAKE_KEY, "不要包含 Bearer"),
+            ('"' + FAKE_KEY + '"', "两侧包含引号"),
+            (FAKE_KEY + "\nextra", "中间包含空格或换行"),
+            (FAKE_KEY + "\x01", "不支持的字符"),
+            (FAKE_KEY + "\u200b", "不支持的字符"),
+            (FAKE_KEY + "…", "不支持的字符"),
+        ):
+            with self.subTest(problem=message):
+                result = self.client.patch(PATH, {"revision": 0, "api_key": value}, format="json")
+                self.assertEqual(result.status_code, 400)
+                self.assertIn(message, str(result.data["api_key"]))
+                self.assertNotIn(value, result.content.decode())
+        self.assertFalse(AIServiceConfig.objects.exists())
+
+    def test_pasted_outer_whitespace_is_trimmed_without_changing_the_key(self):
+        result = self.client.patch(PATH, {"revision": 0, "api_key": " \r\n" + FAKE_KEY + "\n\t"}, format="json")
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(decrypt_api_key(AIServiceConfig.objects.get()), FAKE_KEY)
+
+    def test_credentials_are_opaque_and_not_restricted_to_sk_prefix_or_fixed_format(self):
+        values = [prefix + "TestOnly_0123456789-" * 10 for prefix in ("sk-", "sk-proj-", "sk-svcacct-", "at-")]
+        values.extend(("at_TestOnly.valid~-/+==", "short-test"))
+        for revision, value in enumerate(values):
+            with self.subTest(revision=revision):
+                result = self.client.patch(PATH, {"revision": revision, "api_key": value}, format="json")
+                self.assertEqual(result.status_code, 200)
+                self.assertEqual(decrypt_api_key(AIServiceConfig.objects.get()), value)
+                self.assertNotIn(value, result.content.decode())
+                self.assertEqual(result.json()["last_check_status"], "untested")
 
     @override_settings(AI_CONFIG_ENCRYPTION_KEY="")
     def test_missing_master_key_fails_closed(self):

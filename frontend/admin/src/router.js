@@ -10,7 +10,8 @@ export const router=createRouter({history:createWebHistory(import.meta.env.BASE_
   {path:'/login',component:Login},
   {path:'/',component:Dashboard},
   {path:'/ai-examples',redirect:'/ai-prompts?tab=examples'},
-  ...Object.keys(resources).filter(key=>key!=='ai-examples').map(resource=>({path:'/'+resource,component:resource==='ai-prompts'?PromptSettings:resource==='ai-service'?AIServiceSettings:ResourcePage,props:{resource},meta:{resource}})),
+  {path:'/ai-styles',redirect:'/ai-prompts?tab=style'},
+  ...Object.keys(resources).filter(key=>!['ai-examples','ai-styles'].includes(key)).map(resource=>({path:'/'+resource,component:resource==='ai-prompts'?PromptSettings:resource==='ai-service'?AIServiceSettings:ResourcePage,props:{resource},meta:{resource}})),
   {path:'/:pathMatch(.*)*',redirect:'/'},
 ]});
 router.beforeEach(async to=>{

@@ -69,6 +69,8 @@ def current_config():
 
 
 def safe_config(config):
+    from .models import AIRender
+    latest = AIRender.objects.only('status','model_name','error_code','error_message','created_at','completed_at').first()
     return {
         "provider": "openai", "base_url": API_BASE, "model_name": config.model_name,
         "available_models": list(IMAGE_MODELS), "has_api_key": bool(config.api_key_ciphertext),
@@ -76,7 +78,11 @@ def safe_config(config):
         "key_updated_at": config.key_updated_at, "updated_at": config.updated_at,
         "revision": config.revision, "encryption_ready": encryption_ready(),
         "last_check_at": config.last_check_at, "last_check_status": config.last_check_status,
-        "last_check_message": config.last_check_message, "generation_connected": False,
+        "last_check_message": config.last_check_message,
+        "generation_connected": bool(config.api_key_ciphertext) and encryption_ready(),
+        "last_generation": {"status": latest.status, "model": latest.model_name,
+                            "error_code": latest.error_code, "error_message": latest.error_message,
+                            "created_at": latest.created_at, "completed_at": latest.completed_at} if latest else None,
     }
 
 
@@ -87,8 +93,18 @@ class UpdateConfigSerializer(serializers.Serializer):
     clear_api_key = serializers.BooleanField(required=False, default=False)
 
     def validate_api_key(self, value):
-        if value and not re.fullmatch(r"sk-[A-Za-z0-9_-]{16,1021}", value):
-            raise serializers.ValidationError("请输入完整的 OpenAI API Key，不能包含空格或换行。")
+        if not value:
+            return value
+        if value.lower().startswith("bearer ") or value.lower().startswith("authorization:"):
+            raise serializers.ValidationError("请只粘贴 API Key 本身，不要包含 Bearer 或 Authorization 请求头。")
+        if value.startswith(("\"", "'", "“", "‘")) or value.endswith(("\"", "'", "”", "’")):
+            raise serializers.ValidationError("API Key 两侧包含引号，请只粘贴密钥本身。")
+        if re.search(r"\s", value):
+            raise serializers.ValidationError("API Key 中间包含空格或换行，请重新复制完整密钥；首尾空白会自动去除。")
+        # Credentials are opaque: prefixes and token formats can change.
+        # Only reject characters that cannot safely be sent in an HTTP header.
+        if any(ord(char) < 33 or ord(char) > 126 for char in value):
+            raise serializers.ValidationError("API Key 包含不支持的字符，请检查是否混入不可见字符、中文标点或省略号。")
         return value
 
     def validate(self, attrs):

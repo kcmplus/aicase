@@ -53,11 +53,11 @@ test('catalog load fails closed on network, invalid shape, and unsafe asset path
  assert.equal(await loadCatalog(async(url,opts)=>{assert.equal(url,'/api/v1/catalog/');assert.equal(opts.cache,'no-store');return {ok:true,json:async()=>fixture()};}),true);
  assert.equal(AI_MONTHLY_PRICE,'$5.99');
 });
-test('all AI views show configured prices and counts and escape managed text',()=>{
+test('the editor defers pricing while plan views retain configured prices and all views escape managed text',()=>{
  const data=fixture();data.ai_examples[0].name='<img onerror=alert(1)>';data.ai_styles[0].name='<script>alert(1)</script>';applyCatalog(data);
  const html=stylePanel({aiExample:'portrait',aiStyle:'anime'},null,true,freshMembership());
- assert.match(html,/15 generations/);assert.match(html,/\$5\.99/);assert.match(html,/&lt;script&gt;/);assert.ok(!html.includes('<script>alert'));
- const plan=membershipPage(freshMembership());assert.match(plan,/15 AI generations/);assert.match(plan,/\$9\.90 per print/);assert.ok(!plan.includes('20 generations'));
+ assert.doesNotMatch(html,/\$\d/);assert.match(html,/&lt;script&gt;/);assert.ok(!html.includes('<script>alert'));
+ const plan=membershipPage(freshMembership());assert.match(plan,/15 AI generations/);assert.match(plan,/\$5\.99/);assert.match(plan,/\$9\.90 per print/);assert.ok(!plan.includes('20 generations'));
  assert.match(aiPage(null,freshMembership()),/\$5\.99\/month · 15 generations/);
  const disabled=fixture();disabled.plans=[];disabled.ai_examples=[];applyCatalog(disabled);
  assert.match(stylePanel({},null),/No style examples/);assert.ok(!membershipPage(freshMembership()).includes('id="ai-subscription-form"'));

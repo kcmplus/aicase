@@ -56,6 +56,8 @@ MEDIA_ROOT = Path(os.environ.get("DJANGO_MEDIA_ROOT", str(BASE_DIR / "media")))
 FILE_UPLOAD_PERMISSIONS = 0o644
 FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o755
 DATA_UPLOAD_MAX_MEMORY_SIZE = 12 * 1024 * 1024
+AI_DAILY_RENDER_LIMIT = int(os.environ.get('AI_DAILY_RENDER_LIMIT', '20'))
+AI_CONCURRENT_RENDER_LIMIT = int(os.environ.get('AI_CONCURRENT_RENDER_LIMIT', '2'))
 FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
@@ -75,7 +77,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
     "DEFAULT_FILTER_BACKENDS": ["rest_framework.filters.SearchFilter", "rest_framework.filters.OrderingFilter"],
-    "DEFAULT_THROTTLE_RATES": {"login": "10/min", "orders": "60/min", "ai_connection": "6/min"},
+    "DEFAULT_THROTTLE_RATES": {"login": "10/min", "orders": "60/min", "ai_connection": "6/min", "ai_render": "90/min"},
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "EXCEPTION_HANDLER": "management_api.exceptions.exception_handler",
 }

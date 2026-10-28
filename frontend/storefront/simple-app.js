@@ -1,31 +1,37 @@
+import {t,locale,setLocale,localized,languageControl,localize} from './simple-i18n.js';
 import {imageTag} from './image-view.js';
 import {orderRequest,savedOrder,checkoutBody} from './order-service.js';
 import {phoneBrand,phoneBrands,findPhoneModels} from './phone-catalog.js';
 import {fonts} from './editor-model.js';
 import {dragPlacement,scaleFromPointer,rotationFromPointer,rotateGroup} from './artwork-drag.js';
 import {freshOrders,orderForCode,currentOrder,commitPrintOrder,beginOrderPrint} from './print-orders.js';
-import {freshMembership,refreshMembership,subscribe,stopRenewal,addRender,startRender,updateRender,migrateRender} from './ai-membership.js';
+import {freshMembership,refreshMembership,migrateRender} from './ai-membership.js';
 import {PRINT_PRICE,PRINT_PRICE_CENTS,PRINT_AVAILABLE,money} from './simple-pricing.js';
-import {loadCatalog,catalogStatus} from './runtime-catalog.js';
+import {loadCatalog,catalogStatus,AI_GENERATION_CONNECTED} from './runtime-catalog.js';
 import {aiExamples,exampleFor} from './ai-examples.js';
 import {designFor,stickers} from './catalog.js';
 import {phone, icon, brandLogo, esc} from './art.js';
-import {designs, phoneModels, stations, readPass, stationAvailability, advancePrint, createPersonalPass} from './simple-core.js';
+import {designs, selectablePhoneModels as phoneModels, stations, readPass, stationAvailability, advancePrint, createPersonalPass} from './simple-core.js';
 
-import {effects, collectionForPhoto, validateAddedArtwork, validatePlacement, isPhoto, makePersonalDesign, personalPassName} from './simple-personalize.js';
+import {effects, validateAddedArtwork, validatePlacement, isPhoto, makePersonalDesign, personalPassName} from './simple-personalize.js';
 import {readDesign, writeDesign, updateDesign} from './simple-storage.js';
-import {stylePanel, aiPage, membershipPage, trialOffer, planSummary} from './ai-view.js';
-import {aiStyles,refreshAIOrder,canApplyAIOrder,DEMO_QUEUE_MS,DEMO_RENDER_MS} from './ai-core.js';
+import {stylePanel, aiPage, membershipPage} from './ai-view.js';
+import {setAIView,setAIComparison,mountAIStudio} from './ai-interactions.js';
+import {activeLook,lookBrowserContent,setLookMode,setLookComparison,updateLookImageState} from './ai-look-browser.js';
+import {aiStyles,refreshAIOrder,canApplyAIOrder} from './ai-core.js';
+import {createLiveRender,getAIAccount,changeAIAccount,submitLiveRender,refreshLiveRender,cancelLiveRender} from './ai-service.js';
 import {importPhoto} from './simple-upload.js';
 import {create as createQR} from './vendor/qr.js';
 
 const KEY = 'popomo-simple-v1';
 const app = document.querySelector('#app');
-app.textContent='Loading POPOMO…';
+app.textContent=t('Loading POPOMO…');
 await loadCatalog();
 let state = {designId:'bloom',model:'',pass:null,stationId:'DEMO-01',job:null,source:'collection',photo:'',effect:'original',intensity:65,zoom:100,x:50,y:50,aiStyle:'anime',aiExample:'portrait',artworkLayouts:{},photoArtwork:[],keepCollection:false,photoPlacement:null,photoOrigin:'upload',ai:null,aiJobId:null};
 let storageWarning = false;
 let aiJob=null,aiBusy=false;
+const aiUi={mode:'pair',compare:50,lookMode:'effect',lookCompare:50,accepted:false,error:''};
+let cleanupAIStudio=()=>{};
 let membership=await updateDesign('ai-membership-v1',refreshMembership,freshMembership());
 let orderBook=await updateDesign('print-orders-v1',v=>v,freshOrders());
 let checkoutDraft=await readDesign('checkout-draft');
@@ -63,10 +69,13 @@ state.aiExample=exampleFor(state.aiExample).id;
 if(!exampleFor(state.aiExample).results[state.aiStyle])state.aiStyle=Object.keys(exampleFor(state.aiExample).results)[0]||'';
 membership=await updateDesign('ai-membership-v1',a=>migrateRender(a,aiJob),freshMembership());
 if(aiJob)aiJob=membership.jobs[aiJob.id];
+try{await syncAIAccount();if(aiJob?.mode==='live')await rememberLiveJob(await refreshLiveRender(aiJob));}catch{/* A saved job can be resumed when the service returns. */}
 let scannedPass = null;
 let noticeTimer;
 let comparing=false,photoBusy=false,passBusy=false;
 let effectPanelOpen=false,cropPanelOpen=false,selectedArtwork=null,libraryExpanded=false;
+const editorPanels={collection:false,graphics:false};
+let canvasExpanded=false,canvasObserver=null,canvasHome=null;
 let modelBrand=phoneBrand(state.model||phoneModels[0]),modelQuery='';
 let textDraft={font:'sans',color:'#242822'},inlineTextId=null;
 function layoutSelection(value){
@@ -81,20 +90,31 @@ function layoutSelection(value){
 function artworkLayout(){return state.artworkLayouts[state.designId]??={zoom:100,x:50,y:50,artworkEdits:{},addedArtwork:[]};}
 function extraArtwork(){return state.source==='photo'?state.photoArtwork:(artworkLayout().addedArtwork??=[]);}
 function photoTarget(){return state.photoPlacement??={x:50,y:50,scale:state.zoom,rotation:0};}
-// A newly chosen photo starts clean; switching source tabs alone keeps the draft.
+// A newly chosen photo starts clean.
 // Call only after the replacement image has been decoded and saved successfully.
 function clearPreviousPhotoArtwork(){
  state.photoArtwork=[];state.keepCollection=false;state.photoPlacement=null;
  artworkDrag=null;selectedArtwork='photo';comparing=false;
 }
+// Starting another photo must clear both the visible draft and its persisted image.
+// Saved orders and render snapshots have their own copies and remain resumable.
+async function clearPhotoDraft(){
+ finishInlineText();
+ await writeDesign('draft-photo','');
+ Object.assign(state,{photo:'',photoOrigin:'upload',ai:null,effect:'original',intensity:65,zoom:100,x:50,y:50});
+ clearPreviousPhotoArtwork();selectedArtwork=null;
+ effectPanelOpen=false;cropPanelOpen=false;
+ editorPanels.collection=false;editorPanels.graphics=false;
+ Object.assign(aiUi,{accepted:false,error:''});
+}
 // The editor keeps a draft per template. Choosing from the home gallery begins
 // a fresh editing session so drafts from the previous visit cannot reappear.
-function selectCollectionDesign(id,{startFresh=false}={}){
+async function selectCollectionDesign(id,{startFresh=false}={}){
  if(!designs.some(design=>design.id===id))return;
  finishInlineText();
- if(startFresh){state.artworkLayouts={};state.effect='original';state.intensity=65;state.keepCollection=false;}
+ if(startFresh){await clearPhotoDraft();state.artworkLayouts={};state.editOrderId=null;}
  state.designId=id;state.source='collection';
- artworkDrag=null;lastArtworkTap=null;selectedArtwork='all';comparing=false;
+ artworkDrag=null;lastArtworkTap=null;selectedArtwork=startFresh?null:'all';comparing=false;
  save();
 }
 function artworkTarget(){
@@ -107,17 +127,18 @@ function artworkTarget(){
 }
 function selectedText(){if(!selectedArtwork||selectedArtwork==='photo'||state.source==='photo'&&!state.photo&&!state.keepCollection)return null;return makePersonalDesign(layoutSelection(state)).layers.find(l=>l.id===selectedArtwork&&l.type==='text');}
 function syncTextTools(canvas){
- const selected=selectedText();let tools=canvas.querySelector('.text-quick-tools');
+ const selected=selectedText();let tools=document.querySelector('.text-quick-tools');
  if(!selected){tools?.remove();return;}
  if(!tools||tools.dataset.forText!==selected.id){
-  tools?.remove();tools=document.createElement('div');tools.className='text-quick-tools';tools.dataset.forText=selected.id;tools.setAttribute('role','group');tools.setAttribute('aria-label','Text style shortcuts');
+  tools?.remove();tools=document.createElement('div');tools.className='text-quick-tools';tools.dataset.forText=selected.id;tools.setAttribute('role','group');tools.setAttribute('aria-label',t('Text style shortcuts'));
   tools.innerHTML=`<span class="quick-label">Font</span><div class="quick-fonts">${[['sans','Modern'],['serif','Classic'],['hand','Handwritten'],['mono','Typewriter']].map(([font,name])=>`<button type="button" data-quick-font="${font}" aria-label="${name} font" title="${name}" style="font-family:${fonts[font]}">Aa</button>`).join('')}</div><span class="quick-label">Color</span><div class="quick-colors">${['#242822','#ffffff','#e44592','#146561','#f3c44d','#7964ac'].map((color,i)=>`<button type="button" data-quick-color="${color}" style="--color:${color}" aria-label="${['Charcoal','White','Pink','Teal','Gold','Purple'][i]} text" title="${['Charcoal','White','Pink','Teal','Gold','Purple'][i]}"></button>`).join('')}</div><label class="quick-custom">Custom<input type="color" data-text-field="color" aria-label="Custom text color"></label>`;
-  canvas.append(tools);
+  localize(tools);(canvasExpanded?document.querySelector('.canvas-text-style'):canvas).append(tools);
  }
  for(const button of tools.querySelectorAll('[data-quick-font]'))button.setAttribute('aria-pressed',String(button.dataset.quickFont===selected.font));
  for(const button of tools.querySelectorAll('[data-quick-color]'))button.setAttribute('aria-pressed',String(button.dataset.quickColor===selected.color.toLowerCase()));
  const colorInput=tools.querySelector('input');if(document.activeElement!==colorInput)colorInput.value=selected.color;
- const phone=canvas.querySelector('.phone-case');tools.style.top=Math.max(0,Math.min(phone.clientHeight-tools.offsetHeight,phone.clientHeight*selected.y/100-tools.offsetHeight/2))+'px';
+ const host=canvasExpanded?document.querySelector('.canvas-text-style'):canvas;if(tools.parentElement!==host)host.append(tools);
+ if(!canvasExpanded){const phone=canvas.querySelector('.phone-case');tools.style.top=Math.max(0,Math.min(phone.clientHeight-tools.offsetHeight,phone.clientHeight*selected.y/100-tools.offsetHeight/2))+'px';}
 }
 function writeInlineText(element){
  const selected=selectedText();if(!selected||selected.id!==inlineTextId)return;
@@ -137,7 +158,7 @@ function beginInlineText(selectAll=true){
  if(inlineTextId&&inlineTextId!==selected.id)finishInlineText();
  inlineTextId=selected.id;
  const element=document.querySelector(`.artwork-canvas [data-layer-id="${selected.id}"] .layer-text`);
- element.setAttribute('contenteditable','plaintext-only');element.dataset.inlineText='true';element.setAttribute('role','textbox');element.setAttribute('aria-label','Edit text on case');element.setAttribute('aria-multiline','true');element.tabIndex=0;element.spellcheck=false;
+ element.setAttribute('contenteditable','plaintext-only');element.dataset.inlineText='true';element.setAttribute('role','textbox');element.setAttribute('aria-label',t('Edit text on case'));element.setAttribute('aria-multiline','true');element.tabIndex=0;element.spellcheck=false;
  element.closest('.large-preview').scrollIntoView({block:'nearest'});element.focus({preventScroll:true});
  const range=document.createRange();range.selectNodeContents(element);if(!selectAll)range.collapse(false);getSelection().removeAllRanges();getSelection().addRange(range);highlightArtwork();
 }
@@ -159,12 +180,12 @@ function deleteSelectedArtwork(){
  selectedArtwork=null;lastArtworkTap=null;save();updatePreview();notify('Artwork deleted.');return true;
 }
 function resetPresetLayer(id){const edits=artworkLayout().artworkEdits,edit=edits[id],base=designFor(state.designId).layers.find(l=>l.id===id);if(edit?.deleted)return;if(edit?.text!==undefined&&base)edits[id]={x:base.x,y:base.y,scale:100,rotation:base.rotation,text:edit.text,font:edit.font,color:edit.color};else delete edits[id];}
-function revealArtwork(){if(window.innerWidth<=700)document.querySelector('.large-preview')?.scrollIntoView({behavior:'smooth',block:'center'});}
+function revealArtwork(){openCanvasEditor();}
 function setArtwork(key,value){artworkTarget()[key]=value;save();updatePreview();}
 function creativeLibrary(){
  const disabled=state.source==='photo'&&!state.photo&&!state.keepCollection,items=[...stickers.slice(12),...stickers.slice(0,12)];
- return `<section class="graphic-library"><div class="library-title"><h2>Graphic library</h2><span>24 graphics</span></div><p>Little details. A little more you.</p><div class="graphic-grid">${items.slice(0,libraryExpanded?24:12).map(a=>`<button type="button" data-add-graphic="${a.id}" aria-label="Add ${esc(a.en)}" title="${esc(a.en)}" ${disabled?'disabled':''}>${imageTag(a.src,{alt:"",sizes:"64px"})}<span>${esc(a.en)}</span></button>`).join('')}</div><button class="text-button library-more" data-action="toggle-library">${libraryExpanded?'Show less':'View all 24 graphics'} ${libraryExpanded?'−':'+'}</button><p class="library-credit">Original POPOMO artwork + OpenMoji · CC BY-SA 4.0</p></section>
- <section class="text-editor"><h2>Your words</h2><p>Double-click text on your case to edit.<br>Choose fonts and colors right beside it.</p><button class="button text-add" data-action="text-submit" ${disabled?'disabled':''}>Add text ${icon('spark',16)}</button>${disabled?'<p class="field-note">Upload a photo to start adding graphics and text.</p>':''}</section>`;
+ return `<details class="editor-panel" data-editor-panel="graphics" ${editorPanels.graphics?'open':''}><summary><span class="editor-tool-icon" aria-hidden="true">${icon('image',18)}</span><span>Graphics & text</span><span class="editor-chevron" aria-hidden="true">⌄</span></summary><div class="editor-panel-body"><section class="graphic-library"><div class="library-title"><h2>Graphic library</h2><span>24 graphics</span></div><p>Little details. A little more you.</p><div class="graphic-grid">${items.slice(0,libraryExpanded?24:12).map(a=>`<button type="button" data-add-graphic="${a.id}" aria-label="Add ${esc(locale()==='zh-CN'?a.zh:a.en)}" title="${esc(locale()==='zh-CN'?a.zh:a.en)}" ${disabled?'disabled':''}>${imageTag(a.src,{alt:"",sizes:"64px"})}<span>${esc(locale()==='zh-CN'?a.zh:a.en)}</span></button>`).join('')}</div><button class="text-button library-more" data-action="toggle-library">${libraryExpanded?'Show less':'View all 24 graphics'} ${libraryExpanded?'−':'+'}</button><p class="library-credit">Original POPOMO artwork + OpenMoji · CC BY-SA 4.0</p></section>
+ <section class="text-editor"><h2>Your words</h2><p>Double-click text on your case to edit.<br>Choose fonts and colors right beside it.</p><button class="button text-add" data-action="text-submit" ${disabled?'disabled':''}>Add text ${icon('spark',16)}</button>${disabled?'<p class="field-note">Upload a photo to start adding graphics and text.</p>':''}</section></div></details>`;
 }
 
 async function rememberOrder(data){
@@ -193,47 +214,85 @@ function personalizedPreview(selection,model,label,original=false){
 }
 const passName=p=>p.version===2?personalPassName(p,designs):currentDesign(p.designId).name;
 const passPreview=p=>p.version===2?personalizedPreview(p,p.model,passName(p)):casePreview(p.designId,p.model);
-const effectCaption=p=>p.source==='photo'&&p.ai?`<span class="effect-caption">✦ ${esc(aiStyles.find(s=>s.id===p.ai.styleId)?.name||'AI style')} · Demo sample</span>`:p.version===2&&p.effect!=='original'&&p.intensity>0?`<span class="effect-caption">${icon('spark',13)} ${effects.find(e=>e.id===p.effect).name} · AI effect preview</span>`:'';
+const effectCaption=p=>p.source==='photo'&&p.ai?`<span class="effect-caption">✦ ${esc(localized(aiStyles.find(s=>s.id===p.ai.styleId))||t('AI style'))} · ${p.ai.mode==='live'?'AI image':'Demo sample'}</span>`:p.version===2&&p.effect!=='original'&&p.intensity>0?`<span class="effect-caption">${icon('spark',13)} ${effects.find(e=>e.id===p.effect).name} · AI effect preview</span>`:'';
 function updatePreview(){finishInlineText();const el=document.querySelector('.large-case');if(el&&!(state.source==='photo'&&!state.photo&&!state.keepCollection))el.innerHTML=personalizedPreview(state,state.model||phoneModels[0],state.source==='photo'?'Your photo':currentDesign(state.designId).name,comparing);highlightArtwork();}
 function highlightArtwork(){
  document.querySelector('.artwork-selection-actions')?.remove();
  const canvas=document.querySelector('.artwork-canvas');if(!canvas)return;
  const phone=canvas.querySelector('.phone-case');phone?.setAttribute('role','group');canvas.querySelector('.artwork-gizmo')?.remove();
- for(const layer of canvas.querySelectorAll('.design-layer')){layer.classList.remove('artwork-selected');layer.removeAttribute('aria-hidden');layer.setAttribute('role',layer.dataset.layerId===inlineTextId?'group':'button');layer.tabIndex=layer.dataset.layerId===inlineTextId?-1:0;layer.setAttribute('aria-label','Move '+(layer.textContent.trim()||'graphic'));layer.setAttribute('aria-pressed',String(layer.dataset.layerId===selectedArtwork));}
+ for(const layer of canvas.querySelectorAll('.design-layer')){layer.classList.remove('artwork-selected');layer.removeAttribute('aria-hidden');layer.setAttribute('role',layer.dataset.layerId===inlineTextId?'group':'button');layer.tabIndex=layer.dataset.layerId===inlineTextId?-1:0;layer.setAttribute('aria-label',t('Move')+' '+(layer.textContent.trim()||t('graphic')));layer.setAttribute('aria-pressed',String(layer.dataset.layerId===selectedArtwork));}
  canvas.classList.remove('whole-design-selected');
- const photo=canvas.querySelector('[data-photo-layer]');if(photo){photo.setAttribute('role','button');photo.tabIndex=0;photo.setAttribute('aria-label','Move your photo');photo.setAttribute('aria-pressed',String(selectedArtwork==='photo'));}
+ const photo=canvas.querySelector('[data-photo-layer]');if(photo){photo.setAttribute('role','button');photo.tabIndex=0;photo.setAttribute('aria-label',t('Move your photo'));photo.setAttribute('aria-pressed',String(selectedArtwork==='photo'));}
  syncTextTools(canvas);
- const caption=canvas.closest('.large-preview').querySelector('.preview-caption');
- caption.textContent=inlineTextId?'Type right here · Up to 80 characters · Tap outside to finish':selectedArtwork?'Drag to move · Corners to resize · ↻ to rotate · Tap outside to finish':'Tap artwork to adjust · Double-click text to edit';
+ syncCanvasControls();
+ if(!canvasExpanded){for(const layer of canvas.querySelectorAll('[data-layer-id],[data-photo-layer]'))layer.tabIndex=-1;return;}
+ canvas.setAttribute('aria-description',t(inlineTextId?'Type right here · Up to 80 characters · Tap outside to finish':selectedArtwork?'Drag to move · Corners to resize · ↻ to rotate · Tap outside to finish':'Tap artwork to adjust · Double-click text to edit'));
  if(!selectedArtwork)return;
  const all=selectedArtwork==='all',isPhotoLayer=selectedArtwork==='photo',model=makePersonalDesign(layoutSelection(state)),layer=model.layers.find(l=>l.id===selectedArtwork),element=isPhotoLayer?photo:all?null:canvas.querySelector(`[data-layer-id="${selectedArtwork}"]`),layout=artworkLayout(),placement=isPhotoLayer?photoTarget():null;
  if(!all&&!element)return;
  if(layer){
   const actions=document.createElement('div');actions.className='artwork-selection-actions';
   actions.innerHTML=`<button type="button" data-action="delete-artwork" aria-label="Delete selected artwork" title="Delete selected artwork (Delete / Backspace)">${icon('trash',17)} Delete</button>`;
-  canvas.closest('.large-preview').append(actions);
+  localize(actions);canvas.closest('.large-preview').append(actions);
  }
  const visualScale=isPhotoLayer?Math.min(placement.scale,100)/100:1;
  const cx=phone.offsetLeft+phone.clientLeft+(isPhotoLayer?phone.clientWidth*placement.x/100:all?phone.clientWidth*layout.x/100:element.offsetLeft),cy=phone.offsetTop+phone.clientTop+(isPhotoLayer?phone.clientHeight*placement.y/100:all?phone.clientHeight*layout.y/100:element.offsetTop),width=isPhotoLayer?phone.clientWidth*visualScale:all?phone.clientWidth*layout.zoom/100:element.offsetWidth,height=isPhotoLayer?phone.clientHeight*visualScale:all?phone.clientHeight*layout.zoom/100:element.offsetHeight;
  const box=document.createElement('div');box.className='artwork-gizmo';box.style.cssText=`left:${cx}px;top:${cy}px;width:${width}px;height:${height}px;transform:translate(-50%,-50%) rotate(${isPhotoLayer?placement.rotation:all?0:layer.rotation}deg)`;
  box.innerHTML=`${['nw','ne','sw','se'].map(c=>`<button type="button" class="artwork-handle resize-${c}" data-transform="scale" aria-label="Resize artwork ${c}" title="Drag to resize"></button>`).join('')}<span class="rotation-stem" aria-hidden="true"></span><button type="button" class="artwork-handle rotate-handle" data-transform="rotate" aria-label="Rotate artwork" title="Drag to rotate">↻</button><button type="button" class="artwork-reset" data-action="reset-artwork" aria-label="Reset selected artwork" title="Reset selected artwork">↺</button>${layer?.type==='text'?`<button type="button" class="artwork-edit-text" data-action="edit-text" aria-label="${inlineTextId?'Finish editing text':'Edit text on case'}" title="${inlineTextId?'Done':'Edit text'}">${inlineTextId?'✓':'✎'}</button>`:''}`;
- canvas.append(box);
+ localize(box);canvas.append(box);
 }
 function refreshArtworkControls(){highlightArtwork();}
+function canvasEditor(){
+ return `<dialog class="canvas-editor" aria-labelledby="canvas-editor-title"><header class="canvas-editor-header"><div><h2 id="canvas-editor-title">Edit your design</h2><span>${esc(state.model||phoneModels[0])}</span></div><button type="button" class="canvas-done" data-action="close-canvas" autofocus>Done ${icon('check',16)}</button></header><div class="canvas-stage"></div><footer class="canvas-toolbar"><div class="canvas-toolbar-heading"><p class="canvas-selection-label">Tap a photo, graphic or text to adjust.</p><details class="canvas-text-options" hidden><summary>Text style <span>⌄</span></summary><div class="canvas-text-style"></div></details><button type="button" data-action="text-submit"><span aria-hidden="true">＋</span> Add text</button></div><div class="canvas-adjustments" hidden><div class="canvas-size"><label for="canvas-size">Size</label><input id="canvas-size" type="range" min="25" max="200" step="1" value="100"><output for="canvas-size">100%</output></div><div class="canvas-actions"><button type="button" data-action="rotate-canvas-artwork">↻ <span>Rotate</span></button><button type="button" data-action="reset-artwork">↺ <span>Reset</span></button><button type="button" data-action="edit-text" class="canvas-edit-text"><span aria-hidden="true">✎</span> <span>Edit text</span></button><button type="button" data-action="delete-artwork" class="canvas-delete">${icon('trash',16)} <span>Delete</span></button></div></div><p class="canvas-gesture-note">Drag to move · Use the corners to resize</p></footer></dialog>`;
+}
+function syncCanvasControls(){
+ const dialog=document.querySelector('.canvas-editor');if(!dialog||!canvasExpanded)return;
+ const target=selectedArtwork?artworkTarget():null,selected=selectedText();
+ dialog.querySelector('.canvas-adjustments').hidden=false;
+ dialog.querySelectorAll('.canvas-adjustments button,.canvas-adjustments input').forEach(control=>control.disabled=!target);
+ dialog.querySelector('.canvas-selection-label').textContent=t(!target?'Tap a photo, graphic or text to adjust.':selected?'Text':selectedArtwork==='photo'?'Your photo':selectedArtwork==='all'?'Your design':'Graphic');
+ dialog.querySelector('.canvas-edit-text').hidden=!selected;
+ dialog.querySelector('.canvas-delete').hidden=!target||['all','photo'].includes(selectedArtwork);
+ const textOptions=dialog.querySelector('.canvas-text-options');textOptions.hidden=!selected;if(!selected)textOptions.open=false;
+ const value=target?target[selectedArtwork==='all'?'zoom':'scale']:100,slider=dialog.querySelector('#canvas-size');slider.min=selectedArtwork==='all'?50:25;slider.max=selectedArtwork==='all'?180:200;slider.value=value;dialog.querySelector('output').textContent=target?Math.round(value)+'%':'—';
+}
+function fitCanvasEditor(){
+ const stage=document.querySelector('.canvas-stage'),canvas=stage?.querySelector('.artwork-canvas'),phone=canvas?.querySelector('.phone-case');if(!canvasExpanded||!phone)return;
+ const ratio=phone.offsetWidth/phone.offsetHeight;
+ const width=Math.max(45,Math.min(stage.clientWidth-88,(stage.clientHeight-80)*ratio,430));
+ canvas.style.width=width+'px';highlightArtwork();
+}
+function openCanvasEditor(){
+ const dialog=document.querySelector('.canvas-editor'),preview=document.querySelector('.large-preview');if(!dialog||!preview?.querySelector('.artwork-canvas')||dialog.open)return;
+ finishInlineText();canvasExpanded=true;
+ canvasHome=document.createComment('editor-preview');preview.before(canvasHome);dialog.querySelector('.canvas-stage').append(preview);
+ if(state.source==='photo'&&!selectedArtwork)selectedArtwork='photo';
+ document.body.classList.add('canvas-editor-open');dialog.showModal();
+ canvasObserver?.disconnect();canvasObserver=new ResizeObserver(fitCanvasEditor);canvasObserver.observe(dialog.querySelector('.canvas-stage'));
+ fitCanvasEditor();
+}
+function closeCanvasEditor({restoreFocus=true}={}){
+ const dialog=document.querySelector('.canvas-editor');if(!dialog)return;
+ finishInlineText();canvasExpanded=false;canvasObserver?.disconnect();canvasObserver=null;
+ const preview=dialog.querySelector('.large-preview');if(preview){canvasHome?.replaceWith(preview);preview.querySelector('.artwork-canvas').style.removeProperty('width');}
+ canvasHome=null;dialog.close();document.body.classList.remove('canvas-editor-open');selectedArtwork=null;lastArtworkTap=null;
+ document.querySelector('.text-quick-tools')?.remove();updatePreview();save();
+ if(restoreFocus)document.querySelector('[data-action="open-canvas"]')?.focus({preventScroll:true});
+}
 const arrow = () => icon('arrow',18);
 const currentDesign = id => designs.find(d=>d.id===id) || designs[0];
-const casePreview = (id,model='iPhone 16 Pro') => phone(designFor(id),model,'',{loading:'lazy',sizes:'(max-width: 700px) 100px, 180px'}).replace(/aria-label="[^"]*"/,`aria-label="${esc(currentDesign(id).name+' on '+model)}"`);
+const casePreview = (id,model=phoneModels[0]) => phone(designFor(id),model,'',{loading:'lazy',sizes:'(max-width: 700px) 100px, 180px'}).replace(/aria-label="[^"]*"/,`aria-label="${esc(currentDesign(id).name+' on '+model)}"`);
 function save() {
   try {const ref=p=>p?.version===2?{code:p.code}:p;localStorage.setItem(KEY,JSON.stringify({...state,photo:undefined,pass:ref(state.pass),job:state.job?{...state.job,pass:ref(state.job.pass)}:null}));storageWarning=false;}
   catch {storageWarning=true;notify('Your browser could not save this pass. Download the QR code or write down the code.');}
 }
 function notify(message) {
-  const el=document.querySelector('#notice');el.textContent=message;el.classList.add('visible');
+  const el=document.querySelector('#notice');el.textContent=t(message);el.classList.add('visible');
   clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>el.classList.remove('visible'),5000);
 }
 function go(route) {if(location.hash==='#'+route)render();else location.hash=route;}
 function header() {
-  return `<header class="header wrap"><a class="wordmark" href="#home" aria-label="POPOMO home">${brandLogo()}</a><nav aria-label="Main navigation"><a href="#designs">The designs</a><a href="#orders">My orders</a></nav><a class="saved-link" href="#pass">${icon('scan',18)}<span>My design</span>${state.pass?'<i aria-label="Design saved"></i>':''}</a></header>${aiJob&&['queued','generating','ready'].includes(aiJob.status)&&state.ai?.jobId!==aiJob.id?`<div class="ai-resume wrap"><a href="#ai">✦ AI studio · ${aiJob.status==='ready'?'Your example is ready':aiJob.status==='queued'?'Waiting in queue':'Rendering'} <span>View render →</span></a></div>`:''}`;
+  return `<header class="header wrap"><a class="wordmark" href="#home" aria-label="POPOMO home">${brandLogo()}</a><nav aria-label="Main navigation"><a href="#designs">The designs</a><a href="#orders">My orders</a></nav><a class="saved-link" href="#pass">${icon('scan',18)}<span>My design</span>${state.pass?'<i aria-label="Design saved"></i>':''}</a>${languageControl()}</header>${aiJob&&['queued','generating','ready'].includes(aiJob.status)&&state.ai?.jobId!==aiJob.id?`<div class="ai-resume wrap"><a href="#ai">✦ AI studio · ${aiJob.status==='ready'?'Your AI image is ready':aiJob.status==='queued'?'Waiting in queue':'Rendering'} <span>View render →</span></a></div>`:''}`;
 }
 function footer() {
   return `<footer class="footer wrap"><a href="#home" class="footer-wordmark">POPOMO<span> A little more you.</span></a><p>Prototype · Scanning & printing are simulated.</p><a href="#kiosk">Station demo ${arrow()}</a></footer>`;
@@ -242,13 +301,13 @@ function steps(active) {
   return `<ol class="steps" aria-label="Your design journey">${['Pick your design','Confirm & save','Scan & print'].map((label,i)=>`<li ${i===active?'aria-current="step"':''} class="${i===active?'active':i<active?'complete':''}"><span>${i<active?'✓':i+1}</span>${label}</li>`).join('')}</ol>`;
 }
 function home() {
-  return `<section class="hero wrap"><div class="hero-copy"><p class="eyebrow">YOUR PHONE. YOUR LITTLE WORLD.</p><h1>A little more<br><em>you.</em></h1><p class="intro">Pick a design you love.<br>Bring it to life at a POPOMO station.</p><a class="button primary" href="#designs">Find your design ${arrow()}</a><a class="upload-home-link" href="#choose?source=photo">Or start with your own photo ${icon('upload',15)}</a><p class="hero-note">Choose online. Scan in store. Make it yours.<br>Standard printing ${PRINT_PRICE} per print.</p></div><div class="hero-scene" aria-label="Two colorful POPOMO phone case designs"><span class="scene-top">GOOD THINGS ARE PERSONAL.</span><div class="hero-case back-case">${casePreview('type')}</div><div class="hero-case front-case">${casePreview('bloom')}</div><span class="scene-star" aria-hidden="true">✳</span><span class="scene-bottom">DESIGNED TO GO WITH YOU.</span><span class="scene-number">01 — 06</span></div></section>
+  return `<section class="hero wrap"><div class="hero-copy"><p class="eyebrow">YOUR PHONE. YOUR LITTLE WORLD.</p><h1>A little more<br><em>you.</em></h1><p class="intro">Pick a design you love.<br>Bring it to life at a POPOMO station.</p><a class="button primary" href="#designs">Find your design ${arrow()}</a><a class="upload-home-link" href="#choose?source=photo&fresh=1">Or start with your own photo ${icon('upload',15)}</a><p class="hero-note">Choose online. Scan in store. Make it yours.<br>Standard printing ${PRINT_PRICE} per print.</p></div><div class="hero-scene" aria-label="Two colorful POPOMO phone case designs"><span class="scene-top">GOOD THINGS ARE PERSONAL.</span><div class="hero-case back-case">${casePreview('type',phoneModels[1])}</div><div class="hero-case front-case">${casePreview('bloom')}</div><span class="scene-star" aria-hidden="true">✳</span><span class="scene-bottom">DESIGNED TO GO WITH YOU.</span><span class="scene-number">01 — 06</span></div></section>
   <section class="collection wrap" id="designs"><div class="section-heading"><div><p class="eyebrow">THE SMALL, GOOD COLLECTION</p><h2>Find your kind of happy.</h2></div><p>Six designs. One that feels like you.</p></div><div class="design-grid">${designs.map((d,i)=>`<a class="design-card" data-start-design="${d.id}" href="#choose?design=${d.id}" aria-label="Choose ${d.name}"><div class="design-image" style="--card:${d.color}"><span class="card-index">0${i+1}</span><div class="card-case">${casePreview(d.id)}</div><span class="card-arrow">${arrow()}</span></div><div class="card-caption"><div><h3>${d.name}</h3><p>${d.category}</p></div></div></a>`).join('')}</div></section>
   <section class="how-section" id="how-it-works"><div class="wrap how-layout"><div><p class="eyebrow">FROM YOUR SCREEN TO YOUR HAND.</p><h2>Love it.<br>Scan it.<br>Keep it.</h2></div><ol class="how-list"><li><span>01</span><div><h3>Find your design.</h3><p>Choose your phone model first. Then pick a design or upload your photo, with optional AI effects.</p></div></li><li><span>02</span><div><h3>Keep your code.</h3><p>Preview your design, confirm your ${PRINT_PRICE} print order, then save the QR code.</p></div></li><li><span>03</span><div><h3>Make it real.</h3><p>Show your code to the station scanner. Confirm your prepaid design, then print and collect.</p></div></li></ol></div></section>`;
 }
 function modelResults(){
  const models=findPhoneModels(phoneModels,modelBrand,modelQuery);
- return `<p class="model-result-count" role="status">${models.length} ${models.length===1?'model':'models'} available</p><div class="model-options" role="group" aria-label="${esc(modelBrand)} models">${models.map(model=>`<button type="button" data-phone-model="${esc(model)}" aria-pressed="${model===state.model}"><span>${esc(model)}</span><span aria-hidden="true">${model===state.model?'✓':'→'}</span></button>`).join('')}</div>${models.length?'':'<p class="model-empty">No matching model. Try another search or brand.</p>'}`;
+ return `<p class="model-result-count" role="status">${models.length} ${models.length===1?'model':'models'} available</p><div class="model-options model-template-options" role="group" aria-label="${esc(modelBrand)} models">${models.map(model=>`<button type="button" data-phone-model="${esc(model)}" aria-label="${esc(model)}" aria-pressed="${model===state.model}"><span class="model-template-preview" aria-hidden="true">${casePreview(state.designId,model)}</span><span class="model-template-name">${esc(model)}</span><span aria-hidden="true">${model===state.model?'✓':'→'}</span></button>`).join('')}</div>${models.length?'':'<p class="model-empty">No matching model. Try another search or brand.</p>'}`;
 }
 function modelPickerBody(){
  return `<div class="model-brand-section"><h2>1. Brand</h2><div class="model-brands" role="group" aria-label="Phone brand">${phoneBrands(phoneModels).map(brand=>`<button type="button" data-phone-brand="${esc(brand)}" aria-pressed="${brand===modelBrand}">${esc(brand)}</button>`).join('')}</div></div><div class="model-device-section"><label for="model-search">2. Model</label><input id="model-search" type="search" placeholder="Search ${esc(modelBrand)} models" aria-label="Search phone models" aria-describedby="model-first-note" autocomplete="off" value="${esc(modelQuery)}"><div class="model-results">${modelResults()}</div><p id="model-first-note">Choose the exact model in your phone’s settings. Pro and standard cases fit differently.</p></div>`;
@@ -260,19 +319,90 @@ function phonePicker(){
 function selectPhoneModel(model){
  if(!phoneModels.includes(model))return;
  state.model=model;modelBrand=phoneBrand(model);modelQuery='';save();updatePreview();
+ for(const button of document.querySelectorAll('[data-design]')){
+  const thumbnail=button.querySelector('.design-thumbnail-case');
+  if(thumbnail)thumbnail.innerHTML=casePreview(button.dataset.design,model);
+ }
  const panel=document.querySelector('.model-first');
  panel.querySelector('.model-summary-label').textContent='Your phone';
  panel.querySelector('.model-summary-value').textContent=model;
  panel.querySelector('.model-summary-action').textContent='Change';
  panel.querySelector('.model-first-body').innerHTML=modelPickerBody();
- panel.open=false;panel.querySelector('summary').focus({preventScroll:true});
+ localize(panel);panel.open=false;panel.querySelector('summary').focus({preventScroll:true});
 }
+function openPhotoPicker(){
+ // Run inside the click gesture, before any await, so mobile browsers allow it.
+ const input=document.querySelector('#photo-file');
+ if(!input||photoBusy||aiBusy||passBusy)return;
+ input.value=''; // Picking the same file again should still replace the draft.
+ input.click();
+}
+function bindEditorPanel(panel){
+ panel.addEventListener('toggle',()=>{
+  if(!panel.isConnected)return;
+  const remember=element=>{const key=element.dataset.editorPanel;if(key==='ai')effectPanelOpen=element.open;else editorPanels[key]=element.open;};
+  remember(panel);
+  if(panel.open)document.querySelectorAll('[data-editor-panel]').forEach(other=>{if(other!==panel&&other.open){other.open=false;remember(other);}});
+ });
+}
+function refreshAIStudio({resetScroll=false}={}){
+ const dialog=document.querySelector('.look-browser');if(!dialog)return;
+ const scroll=resetScroll?0:dialog.querySelector('.look-filmstrip')?.scrollLeft||0,tabsScroll=dialog.querySelector('.look-subjects')?.scrollLeft||0;
+ dialog.innerHTML=lookBrowserContent(state,aiJob,aiUi);localize(dialog);
+ updateLookImageState(dialog);
+ dialog.querySelector('.look-filmstrip').scrollLeft=scroll;dialog.querySelector('.look-subjects').scrollLeft=tabsScroll;
+ const selected=dialog.querySelector('.look-thumb[aria-pressed=true]');selected?.focus({preventScroll:true});selected?.scrollIntoView({block:'nearest',inline:'nearest'});
+ const label=document.querySelector('.ai-picker-launch small');if(label)label.textContent=localized(activeLook(state).look.style);
+}
+function openAIStudio(){
+ const dialog=document.querySelector('.look-browser');if(!dialog)return;
+ effectPanelOpen=true;
+ document.querySelectorAll('[data-editor-panel]').forEach(panel=>panel.open=false);
+ if(!dialog.open)dialog.showModal();
+ updateLookImageState(dialog);
+ dialog.querySelector('.look-thumb[aria-pressed=true]')?.scrollIntoView({block:'nearest',inline:'nearest'});
+}
+function closeAIStudio(){
+ effectPanelOpen=false;const dialog=document.querySelector('.look-browser');dialog?.close();dialog?.classList.remove('is-zoomed');
+ document.querySelector('.ai-picker-launch')?.focus({preventScroll:true});
+}
+function zoomAIStudio(){
+ const dialog=document.querySelector('.look-browser');if(!dialog)return;
+ const expanded=dialog.classList.toggle('is-zoomed');const button=dialog.querySelector('[data-look-action=zoom]');button.setAttribute('aria-pressed',String(expanded));button.setAttribute('aria-label',t(expanded?'Back to styles':'Enlarge style example'));
+}
+async function receivePhoto(file){
+ if(!file||photoBusy||aiBusy)return;
+ photoBusy=true;render(true);
+ try{const photo=await importPhoto(file);await writeDesign('draft-photo',photo);state.photo=photo;state.photoOrigin='upload';state.ai=null;state.effect='original';state.source='photo';state.zoom=100;state.x=50;state.y=50;state.intensity=65;clearPreviousPhotoArtwork();save();notify('New photo added. Previous graphics and text cleared.');}
+ catch(error){notify(error.message||'Your photo could not be saved. Try a smaller image.');}
+ finally{photoBusy=false;render(true);}
+}
+app.addEventListener('dragover',event=>{
+ const zone=event.target.closest('[data-photo-drop]');if(!zone||!event.dataTransfer?.types.includes('Files'))return;
+ event.preventDefault();event.dataTransfer.dropEffect=photoBusy||aiBusy?'none':'copy';zone.classList.add('is-drag-over');
+});
+app.addEventListener('dragleave',event=>{const zone=event.target.closest('[data-photo-drop]');if(zone&&!zone.contains(event.relatedTarget))zone.classList.remove('is-drag-over');});
+app.addEventListener('drop',async event=>{
+ const zone=event.target.closest('[data-photo-drop]');if(!zone)return;
+ event.preventDefault();zone.classList.remove('is-drag-over');await receivePhoto(event.dataTransfer?.files[0]);
+});
 function choose() {
-  const d=currentDesign(state.designId), own=state.source==='photo', hasPhoto=Boolean(state.photo);
-  
-  return `<section class="flow wrap">${steps(0)}${phonePicker()}<div class="choose-layout"><div class="large-preview" style="--card:${own?'#eeece7':d.color}"><span class="preview-label">${comparing?'ORIGINAL PREVIEW':'YOUR NEXT EVERYDAY FAVORITE'}</span>${own&&!hasPhoto&&!state.keepCollection?`<div class="photo-placeholder">${icon('image',48)}<h2>A moment.<br>Made yours.</h2><p>Your favorite photo, on your everyday case.</p><label class="button primary" for="photo-file">Upload a photo ${icon('upload',17)}</label></div>`:`<div class="large-case artwork-canvas">${personalizedPreview(state,state.model||phoneModels[0],own?'Your photo':d.name,comparing)}</div>`}<span class="preview-caption">${own?'Illustrative preview · Camera cutouts vary by model':'Tap a design element to edit'}</span></div><div class="choose-details"><a class="back-link" href="#designs">${icon('back',16)} All designs</a><div class="source-switch" role="group" aria-label="Design source"><button data-source="collection" aria-pressed="${!own}">The collection</button><button data-source="photo" aria-pressed="${own}">${icon('upload',15)} Your photo</button></div><h1>${own?'Make it personal.':d.name+'.'}</h1><p class="intro">${own?'Your memories. Your everyday favorite.':d.category}</p>${own?`<section class="photo-upload-prominent" aria-labelledby="upload-title"><div class="upload-heading"><span class="upload-icon" aria-hidden="true">${icon('upload',28)}</span><div><h2 id="upload-title">Upload your photo</h2><p>${own&&hasPhoto?'Photo added. Make it yours or try another.':'Turn a favorite memory into your next case.'}</p></div></div><button type="button" class="button upload-primary full" data-ai-action="upload" ${photoBusy?'disabled':''}>${icon('upload',20)} ${photoBusy?'Reading your photo…':own&&hasPhoto?'Replace photo':'Choose a photo'} <span aria-hidden="true">↗</span></button><p class="upload-formats">JPG, PNG or WebP · Up to 10 MB<br>Choosing a photo clears the current graphics and text.<br>Your photo stays here until you confirm an order.</p></section>`:''}<div class="print-price-card" aria-label="Printing price"><div><span>Standard printing</span><strong>${PRINT_PRICE}<small> / print</small></strong></div><p>${own?'Your photo, printed your way.':'Choose a design from the collection.'}</p>${own?`<p class="print-price-extra">${trialOffer()}.<br>Optional AI plan: <b>${planSummary()}</b>.<br>Printing is billed separately.</p>`:''}</div>${own?`<input class="file-input" type="file" id="photo-file" accept="image/jpeg,image/png,image/webp" aria-label="Upload your photo" ${photoBusy?'disabled':''}>`:''}${own?'':`<fieldset class="design-choices visual-design-choices"><legend>Pick a design</legend>${designs.map(item=>`<button type="button" data-design="${item.id}" class="design-thumbnail ${d.id===item.id?'selected':''}" aria-label="${item.name}" aria-pressed="${d.id===item.id}" style="--swatch:${designFor(item.id).background}"><span class="design-thumbnail-case">${casePreview(item.id,state.model||phoneModels[0])}</span><span class="design-thumbnail-check" aria-hidden="true">${d.id===item.id?'✓':''}</span></button>`).join('')}</fieldset><p class="field-note">Your edits are kept when switching designs. Choose from the home page to start fresh.</p>`}
-  ${creativeLibrary()}${own?stylePanel(state,aiJob,effectPanelOpen,membership):''}${state.source==='photo'&&state.ai?'<p class="effect-selection">✓ AI sample applied · Original photo can be replaced above.</p>':''}
-  <form id="design-form"><button class="button primary full" type="submit" ${photoBusy||passBusy||own&&!hasPhoto||!PRINT_AVAILABLE&&!state.editOrderId?'disabled':''}>${passBusy?'Saving your design…':state.editOrderId?'Review updated design':`Review ${PRINT_PRICE} print order`} ${arrow()}</button></form><div class="next-note">${icon('scan',23)}<p>Preview first. Confirm your order. Then scan in store.<br><span>Printing ${PRINT_PRICE} per print${own?' · AI is optional.':'.'}</span></p></div></div></div></section>`;
+ const d=currentDesign(state.designId),own=state.source==='photo',hasPhoto=Boolean(state.photo);
+ return `<section class="flow wrap editor-flow">${steps(0)}${phonePicker()}
+ <div class="choose-layout">
+  <div class="source-switch editor-sources" role="group" aria-label="Design source"><button type="button" data-source="collection" aria-pressed="${!own}" ${photoBusy?'disabled':''}>The collection</button><button type="button" data-source="photo" aria-pressed="${own}" aria-busy="${photoBusy}" ${photoBusy?'disabled':''}>${photoBusy?'<i class="studio-spinner"></i> Reading your photo…':icon('upload',15)+' Your photo'}</button></div>
+  <div class="large-preview" ${own?'data-photo-drop':''} aria-busy="${photoBusy}" style="--card:${own?'#eeece7':d.color}">
+   ${own&&!hasPhoto&&!state.keepCollection?`<div class="photo-placeholder">${icon('image',32)}<h2>Your photo goes here.</h2><label class="button primary" for="photo-file">Upload a photo ${icon('upload',17)}</label></div>`:`<div class="large-case artwork-canvas">${personalizedPreview(state,state.model||phoneModels[0],own?'Your photo':d.name,comparing)}</div>`}
+   ${!own||hasPhoto||state.keepCollection?`<button type="button" class="canvas-open-hit" data-action="open-canvas" aria-label="Expand to edit"><span>${icon('scan',16)} Expand to edit</span></button>`:''}
+  </div>
+  <div class="choose-details"><h1 class="sr-only">${own?'Make it personal.':d.name+'.'}</h1>
+   <input class="file-input" type="file" id="photo-file" accept="image/jpeg,image/png,image/webp" aria-label="Upload your photo" ${photoBusy?'disabled':''}>
+   ${own?'':`<details class="editor-panel" data-editor-panel="collection" ${editorPanels.collection?'open':''}><summary><span class="editor-tool-icon" aria-hidden="true">${icon('image',18)}</span><span>Collection</span><small>${esc(d.name)}</small><span class="editor-chevron" aria-hidden="true">⌄</span></summary><div class="editor-panel-body"><fieldset class="design-choices visual-design-choices"><legend class="sr-only">Pick a design</legend>${designs.map(item=>`<button type="button" data-design="${item.id}" class="design-thumbnail ${d.id===item.id?'selected':''}" aria-label="${item.name}" aria-pressed="${d.id===item.id}" style="--swatch:${designFor(item.id).background}"><span class="design-thumbnail-case">${casePreview(item.id,state.model||phoneModels[0])}</span><span class="design-thumbnail-check" aria-hidden="true">${d.id===item.id?'✓':''}</span></button>`).join('')}</fieldset></div></details>`}
+   ${stylePanel(state,aiJob,effectPanelOpen,membership,aiUi)}${creativeLibrary()}
+   ${own&&state.ai?'<p class="effect-selection">✓ AI image applied · You can adjust the crop or replace the photo above.</p>':''}
+   <div class="editor-next"><form id="design-form"><button class="button primary full" type="submit" ${photoBusy||passBusy||own&&!hasPhoto||!PRINT_AVAILABLE&&!state.editOrderId?'disabled':''}>${passBusy?'Saving your design…':'Next'} ${arrow()}</button></form></div>
+  </div>
+ </div>${canvasEditor()}</section>`;
 }
 function passPage() {
   const pass=state.pass;
@@ -299,23 +429,47 @@ function printPage(job) {
   return `<section class="flow wrap station-flow">${steps(2)}<div class="station-top">POPOMO STATION <span class="demo-badge">DEMO</span></div><div class="completion-icon ${status==='printing'?'working':''}">${icon(status==='printing'?'spark':'check',32)}</div><h1>${titles[status]}</h1><p class="intro">${status==='printing'?'Your design is making itself at home.':status==='ready'?'Take your new case from the collection tray.':'A small thing. A little more you.'}</p><div class="print-summary"><div class="station-case">${passPreview(job.pass)}</div><h2>${passName(job.pass)}</h2>${effectCaption(job.pass)}<p>${esc(job.pass.model)} · ${esc(job.stationId)}</p><ol class="print-progress">${['Design confirmed','Printing','Ready to collect'].map((label,i)=>`<li class="${i<=(status==='printing'?1:2)?'done':''}"><span>${icon('check',14)}</span>${label}</li>`).join('')}</ol>${status==='collected'?'<button class="button primary full" data-action="finish-session">Back to the designs '+arrow()+'</button>':`<button class="button primary full" data-action="advance-print">${status==='printing'?'Finish demo print':'I’ve collected my case'} ${arrow()}</button>`}</div><p class="demo-note">Demo only · No physical item has been printed.</p></section>`;
 }
 function orderStatus(status){return ({paid:'Confirmed',printing:'Printing',ready:'Ready to collect',completed:'Collected',collected:'Collected',cancelled:'Cancelled'})[status]||status;}
-function ordersPage(){return `<section class="flow wrap"><div class="ai-heading"><p class="eyebrow">YOUR DESIGNS, ALL TOGETHER.</p><h1>My orders.</h1><p>Your test orders are saved on the server and accessible from this browser.</p></div><button class="text-button" data-action="refresh-orders">Refresh orders ↻</button>${orderError?`<p class="error" role="alert">${esc(orderError)}</p>`:orderRows.length?`<div class="order-list">${orderRows.map(o=>`<article class="order-row"><div><span class="eyebrow">${esc(orderStatus(o.status))} · TEST PAYMENT</span><h2>${esc(o.model_name)}</h2><p>${esc(o.reference)}</p><small>${new Date(o.created_at).toLocaleString()}</small></div><div><strong>${esc(o.currency)} ${Number(o.amount).toFixed(2)}</strong><button class="button secondary" data-action="view-order" data-id="${esc(o.reference)}">View design →</button></div></article>`).join('')}</div><div class="pass-actions">${orderPage>1?`<button class="text-button" data-action="orders-page" data-page="${orderPage-1}">← Previous</button>`:''}${orderHasMore?`<button class="text-button" data-action="orders-page" data-page="${orderPage+1}">Next →</button>`:''}</div>`:'<div class="empty"><h2>Your first design is waiting.</h2><p>Confirm a print order to see it here.</p><a class="button primary" href="#choose">Create a design →</a></div>'}<p class="demo-note">Test payments do not charge money. Keep this browser’s site data to retain access to your orders.</p></section>`;}
+function ordersPage(){return `<section class="flow wrap"><div class="ai-heading"><p class="eyebrow">YOUR DESIGNS, ALL TOGETHER.</p><h1>My orders.</h1><p>Your test orders are saved on the server and accessible from this browser.</p></div><button class="text-button" data-action="refresh-orders">Refresh orders ↻</button>${orderError?`<p class="error" role="alert">${esc(orderError)}</p>`:orderRows.length?`<div class="order-list">${orderRows.map(o=>`<article class="order-row"><div><span class="eyebrow">${esc(orderStatus(o.status))} · TEST PAYMENT</span><h2>${esc(o.model_name)}</h2><p>${esc(o.reference)}</p><small>${new Date(o.created_at).toLocaleString(locale())}</small></div><div><strong>${esc(o.currency)} ${Number(o.amount).toFixed(2)}</strong><button class="button secondary" data-action="view-order" data-id="${esc(o.reference)}">View design →</button></div></article>`).join('')}</div><div class="pass-actions">${orderPage>1?`<button class="text-button" data-action="orders-page" data-page="${orderPage-1}">← Previous</button>`:''}${orderHasMore?`<button class="text-button" data-action="orders-page" data-page="${orderPage+1}">Next →</button>`:''}</div>`:'<div class="empty"><h2>Your first design is waiting.</h2><p>Confirm a print order to see it here.</p><a class="button primary" href="#choose">Create a design →</a></div>'}<p class="demo-note">Test payments do not charge money. Keep this browser’s site data to retain access to your orders.</p></section>`;}
+function quoteBreakdown(pass,price,editing){
+ const hasAI=pass.source==='photo'&&Boolean(pass.ai);
+ return `<section class="print-quote" aria-label="Price details"><h2>Price details</h2><dl>
+  <div><dt>Standard printing · 1 case</dt><dd>${price}</dd></div>
+  <div><dt>Graphics & text</dt><dd>Included</dd></div>
+  <div><dt>AI image</dt><dd>${hasAI?'Already generated':'Not used'}</dd></div>
+  ${editing?`<div><dt>Already paid · Demo</dt><dd>${price}</dd></div><div><dt>Design update</dt><dd>$0.00</dd></div>`:''}
+  <div class="quote-total"><dt>Total due · Demo</dt><dd>${editing?'$0.00':price}</dd></div>
+ </dl>${hasAI?'<p class="quote-note">AI generation uses your separate allowance. It is not charged again with this print.</p>':''}<p class="quote-note">No real payment is taken in this demo.</p></section>`;
+}
 function checkoutPage(){
  if(!checkoutDraft)return '<section class="empty wrap"><h1>Choose your design first.</h1><a class="button primary" href="#choose">Back to your design</a></section>';
  const {pass,editId}=checkoutDraft,order=editId?orderBook.orders[editId]:null,locked=editId&&order?.status!=='paid';
  const price=order?money(order.priceCents):PRINT_PRICE;
- return `<section class="flow wrap"><a class="back-link" href="#choose">← Keep editing</a><div class="ai-heading"><p class="eyebrow">REVIEW YOUR PRINT · DEMO</p><h1>${editId?'Make it just right.':'Happy with your design?'}</h1><p>Check your artwork and phone model before confirming.</p></div><div class="ai-order-layout"><div class="checkout-preview"><div class="checkout-case">${passPreview(pass)}</div><h2>${passName(pass)}</h2><p>${esc(pass.model)}</p>${effectCaption(pass)}</div><div class="ai-order-card"><div class="price-row"><span>One standard print</span><strong>${price}</strong></div><div class="price-row"><span>${editId?'Already paid · Demo':'Due now · Demo'}</span><strong>${price}</strong></div>${editId?'<div class="price-row"><span>Design update</span><strong>$0.00</strong></div>':''}<p class="ai-demo-note">AI membership is separate. ${trialOffer()}. ${planSummary()}. Printing is not included.</p><p class="field-note">You can edit your design until printing starts. Saving a revision replaces the QR code. After printing starts, changes need a new order.</p>${!PRINT_AVAILABLE&&!editId?'<p class="error">Printing is unavailable. Please reload and try again.</p>':locked?'<p class="error">This order has started printing. Return to My design to create a new order.</p>':`<form id="print-checkout-form">${!editId?'<label class="order-email">Email (optional)<input name="email" type="email" maxlength="254" autocomplete="email" placeholder="you@example.com"><small>Saved with your order for support. No email will be sent.</small></label>':''}<label class="ai-consent"><input name="accepted" type="checkbox" required><span>I confirm this design and phone model. ${editId?'Replace my existing design and QR code at no extra printing charge.':`Simulate a ${price} payment for one print.`} No real charge. The design and any photo will be securely saved with this order.</span></label><button class="button primary full">${editId?'Save changes & replace QR code':`Pay ${price} & get my code · Demo`}</button></form>`}</div></div></section>`;
+ return `<section class="flow wrap review-flow">${steps(1)}<a class="back-link" href="#choose">← Keep editing</a><div class="ai-heading"><p class="eyebrow">REVIEW YOUR PRINT · DEMO</p><h1>${editId?'Make it just right.':'Happy with your design?'}</h1><p>Check your artwork and phone model before confirming.</p></div><div class="ai-order-layout"><div class="checkout-preview"><div class="checkout-case">${passPreview(pass)}</div><h2>${passName(pass)}</h2><p>${esc(pass.model)}</p>${effectCaption(pass)}</div><div class="ai-order-card">${quoteBreakdown(pass,price,Boolean(editId))}<p class="field-note">You can edit your design until printing starts. Saving a revision replaces the QR code. After printing starts, changes need a new order.</p>${!PRINT_AVAILABLE&&!editId?'<p class="error">Printing is unavailable. Please reload and try again.</p>':locked?'<p class="error">This order has started printing. Return to My design to create a new order.</p>':`<form id="print-checkout-form">${!editId?'<label class="order-email">Email (optional)<input name="email" type="email" maxlength="254" autocomplete="email" placeholder="you@example.com"><small>Saved with your order for support. No email will be sent.</small></label>':''}<label class="ai-consent"><input name="accepted" type="checkbox" required><span>I confirm this design and phone model. ${editId?'Replace my existing design and QR code at no extra printing charge.':`Simulate a ${price} payment for one print.`} No real charge. The design and any photo will be securely saved with this order.</span></label><button class="button primary full">${editId?'Save changes & replace QR code':`Pay ${price} & get my code · Demo`}</button></form>`}</div></div></section>`;
 }
 function render(preserveScroll=false) {
   finishInlineText();
+  cleanupAIStudio();
   const oldY=window.scrollY;
   const [route='home',query='']=location.hash.slice(1).split('?');
-  const pages={choose,pass:passPage,kiosk:kioskPage,ai:()=>aiPage(aiJob,membership),membership:()=>membershipPage(membership),checkout:checkoutPage,orders:ordersPage};
+  canvasObserver?.disconnect();canvasObserver=null;canvasHome=null;
+  if(route!=='choose')canvasExpanded=false;
+  if(route!=='choose')effectPanelOpen=false;
+  document.body.classList.toggle('canvas-editor-open',canvasExpanded);
+  const pages={choose,pass:passPage,kiosk:kioskPage,ai:()=>aiPage(aiJob,membership,aiBusy,aiUi),membership:()=>membershipPage(membership),checkout:checkoutPage,orders:ordersPage};
+  app.classList.toggle('is-ai-studio',route==='ai'&&aiJob?.mode==='live');
+  app.classList.toggle('is-editor',route==='choose');
   app.innerHTML=header()+`<main id="main" tabindex="-1">${catalogStatus==='unavailable'?'<div class="catalog-warning" role="status">Prices and AI previews could not be loaded. Your saved designs are still available. <button class="text-button" data-action="reload-catalog">Try again</button></div>':''}${(Object.hasOwn(pages,route)?pages[route]:home)()}</main>`+footer();
   if(aiBusy)document.querySelectorAll('[data-ai-action],#ai-credit-form button,#ai-subscription-form button').forEach(el=>el.disabled=true);
   const title=({choose:'Choose your case',pass:'Your design pass',kiosk:'Station demo',ai:'Your AI render',membership:'AI membership',checkout:'Review print order',orders:'My orders'})[route];
-  document.title=title?`${title} · POPOMO`:'POPOMO — A little more you.';
-  document.querySelector('.ai-studio-card')?.addEventListener('toggle',e=>{if(e.target.isConnected)effectPanelOpen=e.target.open;});
+  document.title=title?`${t(title)} · POPOMO`:t('POPOMO — A little more you.');
+  localize(app);document.querySelector('.skip-link').textContent=t('Skip to content');
+  cleanupAIStudio=mountAIStudio(app);
+  document.querySelector('#language').disabled=aiBusy||photoBusy||passBusy;
+  document.querySelectorAll('[data-editor-panel]').forEach(bindEditorPanel);
+  document.querySelector('.canvas-editor')?.addEventListener('cancel',event=>{event.preventDefault();closeCanvasEditor();});
+  document.querySelector('.look-browser')?.addEventListener('cancel',event=>{event.preventDefault();closeAIStudio();});
+  if(canvasExpanded)openCanvasEditor();
+  else if(effectPanelOpen)openAIStudio();
   highlightArtwork();
   document.querySelector('.crop-panel')?.addEventListener('toggle',e=>cropPanelOpen=e.target.open);
   if(preserveScroll)window.scrollTo(0,oldY);
@@ -333,13 +487,14 @@ function deselectArtwork(){
 }
 document.addEventListener('pointerdown',event=>{
  if(event.isPrimary===false||event.button!==0||artworkDrag)return;
- if(!event.target.closest('.artwork-canvas [data-layer-id],.artwork-canvas [data-photo-layer],.artwork-gizmo,.text-quick-tools,.artwork-selection-actions'))deselectArtwork();
+ if(!event.target.closest('.artwork-canvas [data-layer-id],.artwork-canvas [data-photo-layer],.artwork-gizmo,.text-quick-tools,.artwork-selection-actions,.canvas-toolbar,.canvas-editor-header'))deselectArtwork();
 });
 document.addEventListener('keydown',event=>{
+ if(event.key==='Escape'&&effectPanelOpen){event.preventDefault();if(document.querySelector('.look-browser.is-zoomed'))zoomAIStudio();else closeAIStudio();return;}
  if(['Delete','Backspace'].includes(event.key)&&!event.isComposing&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&!event.target.closest('input,textarea,select,[contenteditable],[role="textbox"]')){
   if(deleteSelectedArtwork())event.preventDefault();
  }
- if(event.key==='Escape'&&!artworkDrag&&!event.isComposing){event.preventDefault();finishInlineText();deselectArtwork();}
+ if(event.key==='Escape'&&!artworkDrag&&!event.isComposing){event.preventDefault();if(canvasExpanded&&!inlineTextId)closeCanvasEditor();else{finishInlineText();deselectArtwork();}}
 });
 app.addEventListener('pointerdown',event=>{
  const canvas=event.target.closest('.artwork-canvas');
@@ -350,6 +505,7 @@ app.addEventListener('pointerdown',event=>{
  if(!handle)selectedArtwork=layer.dataset.photoLayer?'photo':layer.dataset.layerId;
  if(document.activeElement?.closest('.text-editor'))document.activeElement.blur();
  highlightArtwork();
+ fitCanvasEditor();
  const target=artworkTarget(),phone=canvas.querySelector('.phone-case'),box=canvas.querySelector('.artwork-gizmo').getBoundingClientRect(),cx=box.x+box.width/2,cy=box.y+box.height/2;
  artworkDrag={mode:handle?.dataset.transform||'move',pointerId:event.pointerId,canvas,startX:event.clientX,startY:event.clientY,x:target.x,y:target.y,width:phone.clientWidth,height:phone.clientHeight,groupScale:selectedArtwork==='all'||selectedArtwork==='photo'||selectedArtwork.startsWith('extra-')?1:artworkLayout().zoom/100,cx,cy,startDistance:Math.max(1,Math.hypot(event.clientX-cx,event.clientY-cy)),startAngle:Math.atan2(event.clientY-cy,event.clientX-cx),scale:selectedArtwork==='all'?target.zoom:target.scale,rotation:target.rotation||0,snapshot:structuredClone(artworkLayout()),photoSnapshot:structuredClone({photoPlacement:state.photoPlacement,photoArtwork:state.photoArtwork})};
  canvas.setPointerCapture(event.pointerId);canvas.classList.add('is-dragging');event.preventDefault();
@@ -404,17 +560,28 @@ app.addEventListener('keydown',event=>{
  const selector=handle?'.'+[...handle.classList].find(c=>c!=='artwork-handle'):(selectedArtwork==='photo'?'[data-photo-layer]':`[data-layer-id="${selectedArtwork}"]`);save();updatePreview();canvas.querySelector(selector)?.focus({preventScroll:true});
 });
 app.addEventListener('change',async event=>{
+  if(event.target.matches('#ai-credit-form [name=accepted]'))aiUi.accepted=event.target.checked;
+  if(event.target.id==='language'){
+    if(aiBusy||photoBusy||passBusy)return;
+    finishInlineText();
+    const fields=[...app.querySelectorAll('input:not([type=file]),textarea,select:not(#language)')].map(el=>({id:el.id,name:el.name,form:el.form?.id,value:el.value,checked:el.checked}));
+    const details=[...app.querySelectorAll('details')].map(el=>el.open),brand=modelBrand,search=modelQuery;
+    setLocale(event.target.value);render(true);
+    if(document.querySelector('.model-first-body')){modelBrand=brand;modelQuery=search;document.querySelector('.model-first-body').innerHTML=modelPickerBody();localize(document.querySelector('.model-first-body'));}
+    for(const field of fields){const el=[...app.querySelectorAll('input:not([type=file]),textarea,select:not(#language)')].find(el=>field.id?el.id===field.id:field.name&&el.name===field.name&&el.form?.id===field.form);if(el){el.value=field.value;if('checked' in el)el.checked=field.checked;}}
+    [...app.querySelectorAll('details')].forEach((el,i)=>{if(details[i]!==undefined)el.open=details[i];});
+    document.querySelector('#language').focus({preventScroll:true});return;
+  }
   if(event.target.id==='station'){state.stationId=event.target.value;save();render(true);document.querySelector('#station')?.focus({preventScroll:true});}
   if(event.target.id==='photo-file'){
-    const file=event.target.files[0];if(!file||photoBusy)return;
-    photoBusy=true;render(true);
-    try{const photo=await importPhoto(file);await writeDesign('draft-photo',photo);state.photo=photo;state.photoOrigin='upload';state.ai=null;state.effect='original';state.source='photo';state.zoom=100;state.x=50;state.y=50;state.intensity=65;clearPreviousPhotoArtwork();save();notify('New photo added. Previous graphics and text cleared.');}
-    catch(error){notify(error.message||'Your photo could not be saved. Try a smaller image.');}
-    finally{photoBusy=false;render(true);}
+    await receivePhoto(event.target.files[0]);
   }
 });
 app.addEventListener('input',event=>{
- if(event.target.id==='model-search'){modelQuery=event.target.value;document.querySelector('.model-results').innerHTML=modelResults();return;}
+  if(event.target.matches('.look-wipe')){aiUi.lookCompare=setLookComparison(document.querySelector('.look-browser'),event.target.value);return;}
+  if(event.target.id==='canvas-size'&&selectedArtwork){artworkTarget()[selectedArtwork==='all'?'zoom':'scale']=Number(event.target.value);save();updatePreview();return;}
+ if(event.target.matches('[data-ai-compare]')){aiUi.compare=setAIComparison(app,event.target.value);return;}
+ if(event.target.id==='model-search'){modelQuery=event.target.value;document.querySelector('.model-results').innerHTML=modelResults();localize(document.querySelector('.model-results'));return;}
  if(event.target.matches('[data-inline-text]')){if(!event.isComposing){writeInlineText(event.target);highlightArtwork();}return;}
  if(event.target.dataset.textField){applyTextStyle(event.target.dataset.textField,event.target.value);return;}
 
@@ -426,10 +593,10 @@ app.addEventListener('input',event=>{
 app.addEventListener('submit',async event=>{
   if(event.target.id==='ai-credit-form'||event.target.id==='ai-subscription-form'){
     event.preventDefault();if(aiBusy)return;const accepted=new FormData(event.target).has('accepted');
-    await changeMembership(a=>event.target.id==='ai-credit-form'?startRender(a,aiJob.id,{accepted}):subscribe(a,{accepted}));return;
+    await confirmAI(event.target.id==='ai-credit-form',accepted);return;
   }
   if(event.target.id==='print-checkout-form'){event.preventDefault();if(passBusy||!checkoutDraft)return;passBusy=true;
-    const button=event.target.querySelector('button');button.disabled=true;button.textContent='Saving your order…';
+    const button=event.target.querySelector('button');button.disabled=true;button.textContent=t('Saving your order…');
     try{
       const values=new FormData(event.target),accepted=values.has('accepted'),existing=orderBook.orders[checkoutDraft.editId];let order;
       if(checkoutDraft.editId&&!existing)throw Error('This order could not be loaded. Open it from My orders and retry.');
@@ -456,15 +623,31 @@ app.addEventListener('submit',async event=>{
   if(event.target.id==='scan-form'){
     event.preventDefault();
     try{scannedPass=await resolvePass(new FormData(event.target).get('code'));render(true);}
-    catch(error){const el=document.querySelector('#scan-error');if(el){el.textContent=error.message;document.querySelector('#design-code').setAttribute('aria-invalid','true');}}
+    catch(error){const el=document.querySelector('#scan-error');if(el){el.textContent=t(error.message);document.querySelector('#design-code').setAttribute('aria-invalid','true');}}
   }
 });
 app.addEventListener('click',async event=>{
-  const el=event.target.closest('[data-phone-brand],[data-phone-model],[data-action],[data-design],[data-start-design],[data-source],[data-effect],[data-ai-action],[data-ai-style],[data-ai-example],[data-artwork-item],[data-add-graphic],[data-quick-font],[data-quick-color]');if(!el||el.disabled||photoBusy||passBusy||aiBusy)return;
+  const el=event.target.closest('[data-phone-brand],[data-phone-model],[data-action],[data-design],[data-start-design],[data-source],[data-effect],[data-ai-action],[data-ai-look-example],[data-ai-look-step],[data-look-action],[data-look-mode],[data-ai-group],[data-ai-view],[data-artwork-item],[data-add-graphic],[data-quick-font],[data-quick-color]');if(!el||el.disabled||photoBusy||passBusy||aiBusy)return;
+  if(el.dataset.lookAction==='open'){openAIStudio();return;}
+  if(el.dataset.lookAction==='close'){closeAIStudio();return;}
+  if(el.dataset.lookAction==='zoom'){zoomAIStudio();return;}
+  if(el.dataset.lookMode){const dialog=document.querySelector('.look-browser');aiUi.lookMode=setLookMode(dialog,el.dataset.lookMode);updateLookImageState(dialog);return;}
+  if(el.dataset.aiLookStep){
+   const {group,index}=activeLook(state),next=group.looks[(index+Number(el.dataset.aiLookStep)+group.looks.length)%group.looks.length];
+   state.aiExample=next.example.id;state.aiStyle=next.style.id;save();refreshAIStudio();return;
+  }
   if(el.dataset.action==='reload-catalog'){location.reload();return;}
+  if(el.dataset.action==='open-canvas'){openCanvasEditor();return;}
+  if(el.dataset.action==='close-canvas'){closeCanvasEditor();return;}
+  if(el.dataset.action==='rotate-canvas-artwork'&&selectedArtwork){
+   const target=artworkTarget();
+   if(selectedArtwork==='all'){const phone=document.querySelector('.artwork-canvas .phone-case');target.artworkEdits=rotateGroup(target.artworkEdits,designFor(state.designId).layers,15,phone.clientWidth/phone.clientHeight);}
+   else target.rotation=rotationFromPointer({rotation:target.rotation||0,startAngle:0,angle:Math.PI/12});
+   save();updatePreview();return;
+  }
   if(el.dataset.phoneBrand){
    if(!phoneBrands(phoneModels).includes(el.dataset.phoneBrand))return;
-   modelBrand=el.dataset.phoneBrand;modelQuery='';document.querySelector('.model-first-body').innerHTML=modelPickerBody();
+   modelBrand=el.dataset.phoneBrand;modelQuery='';const body=document.querySelector('.model-first-body');body.innerHTML=modelPickerBody();localize(body);
    document.querySelector(`[data-phone-brand="${modelBrand}"]`)?.focus({preventScroll:true});return;
   }
   if(el.dataset.phoneModel){selectPhoneModel(el.dataset.phoneModel);return;}
@@ -476,18 +659,32 @@ app.addEventListener('click',async event=>{
    finishInlineText();const item={id:'extra-'+crypto.randomUUID(),type:'sticker',asset:el.dataset.addGraphic,x:50,y:55,scale:100,rotation:0};extraArtwork().push(item);selectedArtwork=item.id;save();updatePreview();revealArtwork();return;
   }
   if(el.dataset.artworkItem){selectedArtwork=el.dataset.artworkItem;refreshArtworkControls();document.querySelector(`[data-artwork-item="${selectedArtwork}"]`)?.focus({preventScroll:true});return;}
-  if(el.dataset.aiExample){const example=exampleFor(el.dataset.aiExample);state.aiExample=example.id;if(!example.results[state.aiStyle])state.aiStyle=Object.keys(example.results)[0];effectPanelOpen=true;save();render(true);document.querySelector(`[data-ai-example="${example.id}"]`)?.focus({preventScroll:true});return;}
-  if(el.dataset.aiStyle){state.aiStyle=el.dataset.aiStyle;effectPanelOpen=true;save();render(true);document.querySelector(`[data-ai-style="${state.aiStyle}"]`)?.focus({preventScroll:true});return;}
+  if(el.dataset.aiGroup){
+   const group=activeLook(state).groups.find(g=>g.example.id===el.dataset.aiGroup);if(!group)return;
+   const next=group.looks.find(l=>l.style.id===state.aiStyle)||group.looks[0];state.aiExample=next.example.id;state.aiStyle=next.style.id;save();refreshAIStudio({resetScroll:true});
+   document.querySelector(`[data-ai-group="${CSS.escape(el.dataset.aiGroup)}"]`)?.focus({preventScroll:true});return;
+  }
+  if(el.dataset.aiView){aiUi.mode=setAIView(app,el.dataset.aiView);return;}
+  if(el.dataset.aiLookExample){
+   const example=aiExamples.find(e=>e.id===el.dataset.aiLookExample),styleId=el.dataset.aiLookStyle;
+   if(!example?.results[styleId])return;
+   state.aiExample=example.id;state.aiStyle=styleId;effectPanelOpen=true;save();refreshAIStudio();
+   document.querySelector(`[data-ai-look-example="${CSS.escape(example.id)}"][data-ai-look-style="${CSS.escape(styleId)}"]`)?.focus({preventScroll:true});return;
+  }
   if(el.dataset.aiAction){await handleAI(el.dataset.aiAction);return;}
   if(el.dataset.source){
+   if(el.dataset.source==='photo'){openPhotoPicker();return;}
    finishInlineText();
-   if(el.dataset.source==='photo'&&state.source==='collection'){
-    try{const retained=collectionForPhoto(layoutSelection(state),state.photoArtwork);state.photoArtwork=retained.addedArtwork;state.keepCollection=true;}
-    catch(error){notify(error.message);return;}
-   }
    selectedArtwork=null;state.source=el.dataset.source;comparing=false;history.replaceState(null,'','#choose');save();render(true);return;
   }
-  if(el.dataset.design||el.dataset.startDesign){event.preventDefault();const startFresh=Boolean(el.dataset.startDesign);selectCollectionDesign(el.dataset.design||el.dataset.startDesign,{startFresh});history.replaceState(null,'',`#choose?design=${state.designId}`);render(!startFresh);document.querySelector(`[data-design="${state.designId}"]`)?.focus({preventScroll:true});if(startFresh)notify('New design started. Previous edits cleared.');return;}
+  if(el.dataset.design||el.dataset.startDesign){
+   event.preventDefault();const startFresh=Boolean(el.dataset.startDesign);photoBusy=true;
+   try{await selectCollectionDesign(el.dataset.design||el.dataset.startDesign,{startFresh});}
+   catch(error){notify(error.message||'Your design could not be saved. Please try again.');return;}
+   finally{photoBusy=false;}
+   editorPanels.collection=false;history.replaceState(null,'',`#choose?design=${state.designId}`);render(!startFresh);document.querySelector('[data-editor-panel=collection]>summary')?.focus({preventScroll:true});if(startFresh)notify('New design started. Previous edits cleared.');
+   return;
+  }
   if(el.dataset.effect){state.effect=el.dataset.effect;comparing=false;effectPanelOpen=true;save();render(true);document.querySelector(`[data-effect="${state.effect}"]`)?.focus({preventScroll:true});return;}
   try {
     if(el.dataset.action==='toggle-library'){libraryExpanded=!libraryExpanded;render(true);return;}
@@ -495,7 +692,7 @@ app.addEventListener('click',async event=>{
     if(el.dataset.action==='text-submit'){
      if(extraArtwork().length>=20){notify('You can add up to 20 graphics and text elements.');return;}
      finishInlineText();
-     const item={id:'extra-'+crypto.randomUUID(),type:'text',...textDraft,text:'Your text',x:50,y:65,scale:100,rotation:0};extraArtwork().push(item);selectedArtwork=item.id;save();updatePreview();beginInlineText();return;
+     const item={id:'extra-'+crypto.randomUUID(),type:'text',...textDraft,text:'Your text',x:50,y:65,scale:100,rotation:0};extraArtwork().push(item);selectedArtwork=item.id;save();updatePreview();openCanvasEditor();beginInlineText();return;
     }
     if(el.dataset.action==='delete-artwork'){deleteSelectedArtwork();return;}
     if(el.dataset.action==='reset-artwork'){
@@ -510,6 +707,7 @@ if(selectedArtwork==='all'){const layout=artworkLayout();layout.zoom=100;layout.
       event.preventDefault();const current=orderForCode(orderBook,state.pass.code);if(current?.server){const latest=await refreshOrder(current.id);state.pass=latest.pass;}const p=state.pass;orderBook=await readDesign('print-orders-v1')||freshOrders();const order=orderForCode(orderBook,p.code);selectedArtwork=null;if(p.source==='collection')state.artworkLayouts[p.designId]={zoom:p.zoom,x:p.x,y:p.y,artworkEdits:structuredClone(p.artworkEdits||{}),addedArtwork:structuredClone(p.addedArtwork||[])};state.editOrderId=order?.status==='paid'?order.id:null;
       if(p.version===2){if(p.source==='photo')await writeDesign('draft-photo',p.photo);Object.assign(state,{source:p.source,designId:p.designId,model:p.model,photo:p.source==='photo'?p.photo:state.photo,effect:p.effect,intensity:p.intensity,zoom:p.zoom,x:p.x,y:p.y,ai:p.ai||null,photoOrigin:'upload',...(p.source==='photo'?{photoArtwork:structuredClone(p.addedArtwork||[]),photoPlacement:structuredClone(p.photoPlacement||null),keepCollection:Boolean(p.collectionLayout)}:{})});}
       else Object.assign(state,{source:'collection',designId:p.designId,model:p.model,effect:'original'});
+      if(!phoneModels.includes(state.model))state.model='';
       if(p.source==='photo'&&p.collectionLayout)state.artworkLayouts[p.designId]={...structuredClone(p.collectionLayout),addedArtwork:structuredClone(p.addedArtwork||[])};
       comparing=false;save();go('choose');
     }
@@ -537,65 +735,103 @@ async function navigate(){
  }
  if(route==='orders'){try{const data=await orderRequest('?page='+orderPage);orderRows=data.results;orderHasMore=data.has_more;orderError='';}catch(e){orderError=e.message;}}
  if(route==='choose'&&designs.some(d=>d.id===params.get('design'))){state.designId=params.get('design');state.source='collection';}
- if(route==='choose'&&params.get('source')==='photo')state.source='photo';
+ if(route==='choose'&&params.get('source')==='photo'){
+  if(params.get('fresh')==='1'){
+   photoBusy=true;
+   try{await clearPhotoDraft();state.editOrderId=null;}
+   catch(error){notify(error.message||'Your design could not be saved. Please try again.');return;}
+   finally{photoBusy=false;}
+   params.delete('fresh');history.replaceState(null,'',`#choose?${params}`);
+  }
+  state.source='photo';save();
+ }
+ if(route==='choose'&&params.get('studio')==='1')effectPanelOpen=true;
  if(route==='kiosk'&&code){try{scannedPass=await resolvePass(code);const order=orderForCode(orderBook,scannedPass.code);state.job=order?.stationId&&['printing','ready','collected'].includes(order.status)?{pass:order.pass,stationId:order.stationId,status:order.status,orderId:order.id}:null;save();}catch(error){scannedPass=null;notify(error.message);}history.replaceState(null,'','#kiosk');}
  render();document.querySelector('#main')?.focus({preventScroll:true});
+ if(route==='choose'&&params.get('studio')==='1')openAIStudio();
 }
 window.addEventListener('hashchange',navigate);
 window.addEventListener('resize',()=>{if(!artworkDrag)highlightArtwork();});
 app.addEventListener('load',event=>{if(!artworkDrag&&event.target.closest?.('.artwork-canvas'))highlightArtwork();},true);
+for(const type of ['load','error'])app.addEventListener(type,event=>{if(event.target.matches?.('.look-comparison img'))updateLookImageState(document.querySelector('.look-browser'));},true);
 await navigate();
 
 async function loadAssetPhoto(url){
  const response=await fetch(url);if(!response.ok)throw Error('The style sample could not be loaded. Please try again.');
  const blob=await response.blob();return importPhoto(new File([blob],'sample.png',{type:blob.type}));
 }
-async function changeMembership(transform){
- if(aiBusy)return;aiBusy=true;
- try{membership=await updateDesign('ai-membership-v1',transform,freshMembership());if(aiJob)aiJob=membership.jobs[aiJob.id];save();}
- catch(error){notify(error.message||'Your AI plan could not be saved.');}
- finally{aiBusy=false;render(true);}
+async function mergeAIAccount(data){
+ membership=await updateDesign('ai-membership-v1',a=>({...a,...data,jobs:a.jobs||{}}),freshMembership());
+}
+async function syncAIAccount(){await mergeAIAccount(await getAIAccount());}
+async function rememberLiveJob(job){
+ membership=await updateDesign('ai-membership-v1',a=>({...a,jobs:{...a.jobs,[job.id]:job}}),freshMembership());
+ aiJob=job;state.aiJobId=job.id;save();
+}
+async function confirmAI(generation,accepted){
+ if(aiBusy)return;aiBusy=true;aiUi.error='';aiUi.accepted=accepted;render(true);
+ try{
+  if(generation){
+   if(aiJob?.mode!=='live')throw Error('Choose your photo and start a new AI render.');
+   await rememberLiveJob(await submitLiveRender(aiJob,accepted));
+   await syncAIAccount();
+  }else await mergeAIAccount(await changeAIAccount('subscribe',accepted));
+ }catch(error){aiUi.error=error.message||'The AI service could not be reached. Please try again.';notify(aiUi.error);}
+ finally{aiBusy=false;render(true);if(location.hash==='#ai')document.querySelector('#main')?.focus({preventScroll:true});}
 }
 async function newAI(input){
- let result;membership=await updateDesign('ai-membership-v1',a=>{result=addRender(a,input);return result.account;},freshMembership());aiJob=result.job;state.aiJobId=aiJob.id;save();go('ai');
+ if(!AI_GENERATION_CONNECTED)throw Error('AI generation is not configured. Please contact the store.');
+ const job=createLiveRender({...input,model:input.model||state.model});
+ if(aiJob?.mode==='live'&&aiJob.status==='awaiting_confirmation'&&!aiJob.remoteId)await rememberLiveJob({...aiJob,status:'cancelled'});
+ Object.assign(aiUi,{mode:'pair',compare:50,accepted:false,error:''});
+ await rememberLiveJob(job);go('ai');
 }
 async function handleAI(action){
- if(action==='upload'){document.querySelector('#photo-file').click();return;}
- if(['cancel','fail'].includes(action)){await changeMembership(a=>updateRender(a,aiJob.id,action));return;}
- if(action==='stop-renewal'||action==='resume-renewal'){await changeMembership(a=>action==='stop-renewal'?stopRenewal(a):subscribe(a,{accepted:true}));return;}
- aiBusy=true;
+ if(action==='upload'){openPhotoPicker();return;}
+ aiBusy=true;aiUi.error='';aiUi.busyAction=action;render(true);
  try{
+  if(action==='cancel'){
+   const unsubmitted=aiJob?.status==='awaiting_confirmation';
+   if(aiJob?.mode==='live')await rememberLiveJob(await cancelLiveRender(aiJob));
+   await syncAIAccount();
+   if(unsubmitted)go('choose');
+  }
+  if(action==='stop-renewal'||action==='resume-renewal')await mergeAIAccount(await changeAIAccount(action,true));
   if(action==='sample'){
    const example=exampleFor(state.aiExample);const photo=await loadAssetPhoto(example.original);await writeDesign('draft-photo',photo);
    Object.assign(state,{photo,source:'photo',photoOrigin:example.origin,ai:null,effect:'original',intensity:65,zoom:100,x:50,y:50});clearPreviousPhotoArtwork();effectPanelOpen=true;save();render(true);
   }
   if(action==='create'){
-   if(aiJob&&['awaiting_confirmation','awaiting_payment','payment_failed','queued','generating'].includes(aiJob.status)){go('ai');notify('Finish or cancel your current render before starting another.');}
+   if(aiJob?.mode==='live'&&['queued','generating'].includes(aiJob.status)){go('ai');notify('Finish or cancel your current render before starting another.');}
    else await newAI({photo:state.photo,sourceKind:state.photoOrigin===exampleFor(state.aiExample).origin?'sample':'upload',styleId:state.aiStyle,exampleId:state.aiExample});
   }
-  if(action==='retry')await newAI({photo:aiJob.photo,sourceKind:aiJob.sourceKind,styleId:aiJob.styleId,exampleId:aiJob.exampleId});
+  if(action==='retry')await newAI({photo:aiJob.photo,sourceKind:aiJob.sourceKind,styleId:aiJob.styleId,exampleId:aiJob.exampleId,model:state.model||aiJob.model});
+  if(action==='refresh')await rememberLiveJob(await refreshLiveRender(aiJob));
   if(action==='apply'){
-   membership=await updateDesign('ai-membership-v1',a=>updateRender(a,aiJob.id));aiJob=membership.jobs[aiJob.id];
+   if(aiJob?.mode!=='live')throw Error('Choose your photo and start a new AI render.');
+   await rememberLiveJob(await refreshLiveRender(aiJob));
    if(!canApplyAIOrder(aiJob))throw Error('Wait until the render is ready before using its result.');
-   const photo=await loadAssetPhoto(aiJob.result);await writeDesign('draft-photo',photo);
-   Object.assign(state,{photo,source:'photo',photoOrigin:'upload',effect:'original',zoom:100,x:50,y:50,photoPlacement:null,ai:{styleId:aiJob.styleId,jobId:aiJob.id,mode:'demo'}});
-   save();go('choose');notify('AI sample applied. Adjust your crop, then review your print order.');
+   const photo=aiJob.resultPhoto;await writeDesign('draft-photo',photo);
+   Object.assign(state,{photo,source:'photo',photoOrigin:'upload',effect:'original',zoom:100,x:50,y:50,photoPlacement:null,ai:{styleId:aiJob.styleId,jobId:aiJob.id,mode:'live'}});
+   save();go('choose');notify('AI image applied. Adjust your crop, then review your print order.');
   }
- }catch(error){notify(error.message||'The AI demo could not be saved. Please try again.');}
+ }catch(error){aiUi.error=error.message||'The AI service could not be reached. Please try again.';notify(aiUi.error);}
  finally{aiBusy=false;render(true);}
 }
-let pollBusy=false;
+let pollBusy=false,pollErrors=0;
 setInterval(async()=>{
- if(!aiJob||aiBusy||pollBusy||!['queued','generating'].includes(aiJob.status))return;
+ if(!aiJob||aiJob.mode!=='live'||aiBusy||pollBusy||!(['queued','generating'].includes(aiJob.status)||aiJob.status==='ready'&&!aiJob.resultPhoto))return;
  pollBusy=true;
  try{
-  const previous=aiJob.status;membership=await updateDesign('ai-membership-v1',a=>updateRender(a,aiJob.id));aiJob=membership.jobs[aiJob.id];
-  if(previous!==aiJob.status){if(location.hash==='#ai')render(true);else{const banner=document.querySelector('.ai-resume a');if(banner)banner.innerHTML=`✦ AI studio · ${aiJob.status==='ready'?'Your example is ready':aiJob.status==='queued'?'Waiting in queue':'Rendering'} <span>View render →</span>`;}if(aiJob.status==='ready')notify('Your AI style example is ready. Open AI studio to use it.');}
-  const countdown=document.querySelector('.ai-countdown');
-  if(countdown&&['queued','generating'].includes(aiJob.status)){
-   const remaining=Math.max(0,Math.ceil((aiJob.paidAt+DEMO_QUEUE_MS+DEMO_RENDER_MS-Date.now())/1000));
-   countdown.textContent=`${aiJob.status==='queued'?'Waiting for a render slot':'Rendering'} · About ${remaining}s left in this demo`;
+  const pollingJob=aiJob,previous=aiJob.status,hadImage=Boolean(aiJob.resultPhoto);
+  const updated=await refreshLiveRender(pollingJob);
+  if(aiJob?.id!==pollingJob.id)return;
+  await rememberLiveJob(updated);pollErrors=0;
+  if(previous!==aiJob.status||hadImage!==Boolean(aiJob.resultPhoto)){
+   if(['ready','failed','cancelled'].includes(aiJob.status))await syncAIAccount();
+   render(true);
+   if(aiJob.status==='ready')notify('Your AI image is ready. Open AI studio to use it.');
   }
- }catch{notify('We could not update your render. Reload to try again.');}
+ }catch{if(++pollErrors===1)notify('We could not update your render. Reconnecting…');}
  finally{pollBusy=false;}
-},1000);
+},3000);

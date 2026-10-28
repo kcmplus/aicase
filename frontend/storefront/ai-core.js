@@ -16,7 +16,7 @@ export function createAIOrder({photo,sourceKind='upload',styleId,exampleId='port
  if(!aiStyles.some(s=>s.id===styleId))throw Error('Choose an available AI style.');
  if(!['sample','upload'].includes(sourceKind))throw Error('Unknown photo source.');
  const example=aiExamples.find(e=>e.id===exampleId),style=aiStyles.find(s=>s.id===styleId);
- const sample={name:example.name,original:example.original,result:example.results[styleId],styleName:style.name,styleTag:style.tag};
+ const sample={name:example.name,name_zh:example.name_zh||'',styleName_zh:style.name_zh||'',original:example.original,result:example.results[styleId],styleName:style.name,styleTag:style.tag};
  return {id:'AI-'+crypto.randomUUID(),version:1,mode:'demo',photo,sourceKind,styleId,exampleId,sample,priceCents:AI_PRICE_CENTS,currency:'USD',status:'awaiting_payment',payment:'unpaid',createdAt:now,paidAt:null,startedAt:null,completedAt:null,result:null,refundedCents:0};
 }
 export function jobSample(job){
@@ -32,6 +32,7 @@ export function payAIOrder(job,{accepted=false,fail=false,now=Date.now()}={}){
  return {...copy(job),status:'queued',payment:'paid',paidAt:now,startedAt:now+DEMO_QUEUE_MS,completedAt:null};
 }
 export function refreshAIOrder(job,now=Date.now()){
+ if(job.mode==='live')return copy(job); // Live jobs advance only from the server.
  if(!active.includes(job.status))return copy(job);
  if(!['paid','credit_reserved'].includes(job.payment))throw Error('A render cannot start before payment.');
  const finish=job.paidAt+DEMO_QUEUE_MS+DEMO_RENDER_MS;
@@ -49,4 +50,8 @@ export function failAIOrder(job,now=Date.now()){
  if(!active.includes(current.status))throw Error('Only an active render can fail.');
  return {...current,status:'failed',payment:'refunded',refundedCents:current.priceCents,result:null};
 }
-export function canApplyAIOrder(job){return job.status==='ready'&&['paid','credit_reserved'].includes(job.payment)&&safeAssetPath(jobSample(job).result)&&jobSample(job).result===job.result;}
+export function canApplyAIOrder(job){
+ if(job.mode==='live')return job.status==='ready'&&job.payment==='credit_reserved'&&
+  job.result===`/api/v1/store/ai-renders/${job.remoteId}/image/`&&/^data:image\/(jpeg|png|webp);base64,/.test(job.resultPhoto||'');
+ return job.status==='ready'&&['paid','credit_reserved'].includes(job.payment)&&safeAssetPath(jobSample(job).result)&&jobSample(job).result===job.result;
+}

@@ -1,3 +1,4 @@
+import {phoneTemplates,phoneTemplate} from './phone-templates.js';
 import {validatePersonalPass} from './simple-personalize.js';
 // A code identifies a versioned preset or locally saved custom design, not payment.
 export const designs = [
@@ -8,7 +9,11 @@ export const designs = [
   {id:'minimal-heart', name:'Simply Yours', category:'Less, with a little love.', color:'#eeeae5'},
   {id:'citrus', name:'Sunday Club', category:'Keep the good days close.', color:'#e9ecdf'},
 ];
-export const phoneModels = ['iPhone 16 Pro', 'iPhone 16', 'iPhone 15 Pro', 'iPhone 15', 'Samsung S24'];
+export const legacyPhoneModels = ['iPhone 16 Pro', 'iPhone 16', 'iPhone 15 Pro', 'iPhone 15', 'Samsung S24'];
+// New selections show only the supplied templates. Keep historical identifiers
+// separate so opening an existing design never substitutes another case shape.
+export const selectablePhoneModels = [...new Set(phoneTemplates.map(t=>t.model))];
+export const phoneModels = [...new Set([...legacyPhoneModels,...selectablePhoneModels])];
 export const stations = [
   {id:'DEMO-01',name:'Demo station 01',online:true,models:phoneModels},
   {id:'DEMO-02',name:'Demo station 02 · limited stock',online:true,models:['iPhone 16 Pro','iPhone 16']},
@@ -16,7 +21,7 @@ export const stations = [
 ];
 export function createPass(designId, model) {
   const d = designs.findIndex(item => item.id === designId);
-  const m = phoneModels.indexOf(model);
+  const m = legacyPhoneModels.indexOf(model);
   if (d < 0) throw Error('Choose a design from the collection.');
   if (m < 0) throw Error('Choose your phone model first.');
   const body = `1${d + 1}${m + 1}`;
@@ -27,7 +32,8 @@ export function createPersonalPass(selection) {
   if(!phoneModels.includes(selection.model))throw Error('Choose your phone model first.');
   if(selection.source!=='photo'&&!designs.some(d=>d.id===selection.designId))throw Error('Choose a design from the collection.');
   const code='POP-C-'+crypto.randomUUID().replaceAll('-','').slice(0,16).toUpperCase();
-  return validatePersonalPass({...selection,version:2,code});
+  const template=phoneTemplate(selection.model,selection.phoneTemplateId);
+  return validatePersonalPass({...selection,...(template?{phoneTemplateId:template.id}:{}),version:2,code});
 }
 export function readPass(input, personalPass) {
   const code = String(input || '').trim().toUpperCase();
@@ -38,7 +44,7 @@ export function readPass(input, personalPass) {
   }
   const match = /^POP-1([1-6])([1-5])([0-9])$/.exec(code);
   if (!match) throw Error('That code isn’t recognized. Use the POP- code on your design pass.');
-  const pass = createPass(designs[Number(match[1])-1].id, phoneModels[Number(match[2])-1]);
+  const pass = createPass(designs[Number(match[1])-1].id, legacyPhoneModels[Number(match[2])-1]);
   if (pass.code !== code) throw Error('Check the last digit of your design code and try again.');
   return pass;
 }

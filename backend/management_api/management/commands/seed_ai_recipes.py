@@ -21,7 +21,7 @@ class Command(BaseCommand):
             model = PhoneModel.objects.filter(code=item["phone_model_code"], name="iPhone 15 Pro").first()
             if not model:
                 raise CommandError("The iPhone 15 Pro model must exist before importing these composition studies.")
-            example, added = AIExample.objects.get_or_create(code=item["code"], defaults={key:item[key] for key in ("name", "subject", "sort_order", "original_path")})
+            example, added = AIExample.objects.get_or_create(code=item["code"], defaults={key:item[key] for key in ("name", "name_zh", "subject", "subject_zh", "sort_order", "original_path")})
             if added:
                 AIExampleResult.objects.create(example=example, style=AIStyle.objects.get(code=item["style"]), phone_model=model, image_path=item["image_path"], prompt=item["prompt"])
                 AuditLog.objects.create(actor_name="system:seed_ai_recipes", action="create", resource="management_api.aiexample", object_id=str(example.pk), summary="新增示例图片及对应提示词：" + example.name)

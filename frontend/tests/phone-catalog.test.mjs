@@ -1,14 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {phoneBrands,findPhoneModels} from '../storefront/phone-catalog.js';
-import {phoneModels} from '../storefront/simple-core.js';
+import {selectablePhoneModels as phoneModels} from '../storefront/simple-core.js';
 
-test('phone brands and searches preserve model identifiers and QR catalog order',()=>{
+test('the storefront offers only the two supplied case templates',()=>{
  const before=[...phoneModels];
- assert.deepEqual(phoneBrands(phoneModels),['Apple','Samsung']);
- assert.deepEqual(findPhoneModels(phoneModels,'Apple','iphone16'),['iPhone 16 Pro','iPhone 16']);
- assert.deepEqual(findPhoneModels(phoneModels,'Apple','APPLE 16 pro'),['iPhone 16 Pro']);
- assert.deepEqual(findPhoneModels(phoneModels,'Samsung','s24'),['Samsung S24']);
+ assert.deepEqual(phoneModels,['iPhone 17','iPhone 16e']);
+ assert.deepEqual(phoneBrands(phoneModels),['Apple']);
+ assert.deepEqual(findPhoneModels(phoneModels,'Apple','iphone16'),['iPhone 16e']);
+ assert.deepEqual(findPhoneModels(phoneModels,'Apple','APPLE 17'),['iPhone 17']);
+ assert.deepEqual(findPhoneModels(phoneModels,'Apple','APPLE 16 pro'),[]);
+ assert.deepEqual(findPhoneModels(phoneModels,'Samsung','s24'),[]);
  assert.deepEqual(findPhoneModels(phoneModels,'Apple','S24'),[]);
  assert.deepEqual(phoneModels,before);
 });

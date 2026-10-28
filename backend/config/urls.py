@@ -6,12 +6,17 @@ from rest_framework.routers import DefaultRouter
 from management_api import views
 from management_api.orders import StoreOrders, StoreOrder, StoreOrderAction
 from management_api.ai_service import AIServiceSettingsView, AIServiceCheckView
+from management_api.ai_generation import AIAccountView, AIRenders, AIRenderDetail, AIRenderImage
 
 router = DefaultRouter()
 router.register("ai-examples", views.AIExampleViewSet)
 for name, view in [("brands", views.BrandViewSet), ("phone-models", views.PhoneModelViewSet), ("graphics", views.GraphicViewSet), ("designs", views.DesignTemplateViewSet), ("ai-styles", views.AIStyleViewSet), ("plans", views.PricingPlanViewSet), ("orders", views.OrderViewSet), ("users", views.UserViewSet), ("roles", views.RoleViewSet), ("audit-logs", views.AuditViewSet)]:
     router.register(name, view)
 urlpatterns = [
+    path("api/v1/store/ai-account/", AIAccountView.as_view()),
+    path("api/v1/store/ai-renders/", AIRenders.as_view()),
+    path("api/v1/store/ai-renders/<uuid:reference>/", AIRenderDetail.as_view()),
+    path("api/v1/store/ai-renders/<uuid:reference>/image/", AIRenderImage.as_view()),
     path("api/v1/store/orders/", StoreOrders.as_view()),
     path("api/v1/store/orders/<uuid:reference>/", StoreOrder.as_view()),
     path("api/v1/store/orders/<uuid:reference>/actions/", StoreOrderAction.as_view()),

@@ -1,32 +1,34 @@
-// These are editable starting points, never automatically applied to saved records.
+// Template labels are for Chinese-speaking operators; generation instructions stay in English.
+import stylePack from '../../../backend/management_api/seed/ai-style-pack.json' with {type:'json'};
 export const promptTemplates = [
-  {id:'hand-painted',kind:'style',name:'温暖手绘插画',text:`将输入照片转换为适合手机壳印花的温暖手绘插画。
-内容：以输入照片为唯一主体依据，保留主体数量、外貌、表情、姿态、衣着及重要配饰。不要替换人物或动物品种。
-风格：水粉与蜡笔质感，柔和纸张颗粒，不规则深色轮廓，清晰的大色块和少量手绘细节。背景适度简化，保留照片中主要场景特征。
-构图：遵循目标机型的实际印刷模板和机型适配要求，必要时调整主体大小、位置，并自然延展背景。完整保留脸、耳朵和重要配饰，避免主体落入镜头开孔或边缘裁切区。不要直接拉伸或裁断主体。
-输出：仅生成连续、铺满画布的平面图案，不绘制手机、手机壳、镜头、开孔、边框、辅助线、文字、标识或水印。`},
-  {id:'memo-collage',kind:'style',name:'便利贴照片拼贴',text:`将输入照片转换为适合手机壳印花的旅行手账照片拼贴。
-内容：保留原照片中的主要景物、主体及空间关系，不替换地标。各照片块内部保留真实照片质感。
-风格：暖白纸张底色，将同一幅连续场景拆分为约 4 列 × 5 行的照片纸块，保持山脊、岸线等主要线条相互连贯。纸块带窄白边、轻微错位、卷边和柔和阴影。添加少量空白奶油色便利贴和胶带，避开关键主体。
-构图：按目标机型的实际印刷模板重新组织拼贴。镜头区域只安排可舍弃的背景或空白纸张，主要主体位于安全区内；画面边缘延展背景，允许出血裁切。
-输出：仅生成平面印花图，不画手机、壳体、镜头、开孔或桌面。不添加文字、乱码、商标、水印或尺寸线。`},
-  {id:'camera-aware',kind:'model',name:'通用机型适配规则',text:`使用此机型对应的实际手机壳打印模板确定画布比例、可打印轮廓、镜头开孔、边缘出血与主体安全区。
-将人物、宠物的脸、耳朵、重要配饰及主要景物完整放入主体安全区。镜头开孔及外扩避让区只放可舍弃的背景，不放主体或文字。
-必要时缩小、平移主体并自然延展背景，不拉伸主体，不以简单居中裁切代替构图。
-背景连续覆盖画布并延展到出血边缘；输出中不要绘制镜头、开孔、手机边框或模板辅助线。
-如果缺少实际壳型模板，本次结果仅用于构图预览，不能视为已校准的打印文件。`},
-  {id:'iphone15pro-study',kind:'model',name:'iPhone 15 Pro 构图示例（未校准）',text:`本规则仅用于 iPhone 15 Pro 构图试验，不是实测打印刀模。
-画布宽高比参考 70.6:146.6。坐标以左上角为原点、按画布百分比计算。
-左上方 x=0–68%、y=0–35% 仅放天空、远景或其他可舍弃背景，用于保守避让镜头区域；不放脸、耳朵、文字或主要主体。
-将主要主体整体安排在 x=12–90%、y=39–92% 范围内，完整保留脸、耳朵、配饰及四肢等重要细节，主体距离边缘至少约 8%。必要时缩小、平移主体并延展背景，不变形拉伸。
-输出连续平面图案，不绘制镜头、开孔、手机框或辅助线。正式打印时必须用厂家实际壳型的轮廓、开孔和出血尺寸替换本示例参数。`},
+  {id:'hand-painted',kind:'style',name:'温暖手绘插画（英文）',text:`Transform the input photo into a warm hand-painted illustration for a phone-case print.
+Subject: Use the input photo as the sole reference. Preserve the number, identity, appearance, expression, pose, clothing and important accessories of all subjects. Do not replace people or change animal breeds.
+Style: Gouache and crayon texture, soft paper grain, irregular dark outlines, clear color blocks and a few hand-drawn details. Simplify the background while retaining the recognizable setting.
+Composition: Follow the target model's actual print template and adaptation requirements. Resize or reposition the whole subject and naturally extend the background as needed. Keep faces, ears and accessories complete and outside camera cutouts and trim areas. Do not stretch or crop through the subject.
+Output: One continuous full-bleed flat artwork only. No phone, case body, lenses, holes, frame, guides, text, logos or watermark.`},
+  {id:'memo-collage',kind:'style',name:'便利贴照片拼贴（英文）',text:`Transform the input photo into a travel-scrapbook photo collage for a phone-case print.
+Subject: Preserve the main scenery, subjects, landmarks and spatial relationships. Keep a photographic texture within each paper fragment.
+Style: Warm ivory paper, approximately 4 columns by 5 rows of photo fragments from the same continuous scene. Align the main ridgelines and shorelines across the fragments. Add narrow white borders, slight offsets, curled paper edges and soft shadows, with a few blank cream notes and pieces of tape away from key subjects.
+Composition: Arrange the collage using the target model's actual print template. Keep key subjects in the safe area, with expendable background or blank paper in the camera region. Extend the backdrop through the bleed area.
+Output: Flat artwork only. No phone, case body, camera, holes, tabletop, text, gibberish, trademarks, watermark or measurement lines.`},
+  {id:'camera-aware',kind:'model',name:'通用机型适配规则（英文）',text:`Use this phone model's actual case-print template to determine the canvas aspect ratio, printable outline, camera cutout, bleed and subject-safe area.
+Keep faces, ears, important accessories and main scenery fully within the safe area. Place only expendable background in the camera cutout and its clearance region; no subjects or text.
+Resize or move the whole subject and naturally extend the background when needed. Do not stretch the subject or substitute a simple center crop for recomposition.
+Extend a continuous background to the bleed edges. Do not draw camera lenses, cutouts, phone borders or template guides in the output.
+If the actual case template is unavailable, treat the result as a composition preview only, not a calibrated print file.`},
+  {id:'iphone15pro-study',kind:'model',name:'iPhone 15 Pro 构图示例（英文 · 未校准）',text:`This is an iPhone 15 Pro composition study, not a measured manufacturing dieline.
+Reference canvas width:height is 70.6:146.6. Coordinates are percentages from the top-left corner.
+Keep x=0–68%, y=0–35% limited to sky, distant scenery or other expendable background for conservative camera clearance. Do not place faces, ears, text or main subjects there.
+Place the whole main subject within x=12–90%, y=39–92%. Preserve faces, ears, accessories and limbs, keeping important details about 8% from the edges. Resize or reposition the subject and extend the background without distortion.
+Output continuous flat artwork without camera lenses, holes, phone borders or guides. Replace these study parameters with the manufacturer's actual case outline, cutout and bleed measurements before production printing.`},
+ ...stylePack.styles.map(style=>({id:style.code,kind:'style',name:style.name_zh+'（英文）',text:style.prompt})),
 ];
 
 export function composePrompt(style,model){
   const parts=[];
-  if(style?.name)parts.push(`目标风格：${style.name}`);
-  if(model?.name)parts.push(`目标机型：${model.name}`);
-  if(style?.prompt?.trim())parts.push(`【风格要求】\n${style.prompt.trim()}`);
-  if(model?.adaptation_prompt?.trim())parts.push(`【机型适配要求】\n${model.adaptation_prompt.trim()}`);
+  if(style?.name)parts.push(`Target style: ${style.name}`);
+  if(model?.name)parts.push(`Target phone model: ${model.name}`);
+  if(style?.prompt?.trim())parts.push(`Style requirements:\n${style.prompt.trim()}`);
+  if(model?.adaptation_prompt?.trim())parts.push(`Phone-model composition requirements:\n${model.adaptation_prompt.trim()}`);
   return parts.join('\n\n');
 }

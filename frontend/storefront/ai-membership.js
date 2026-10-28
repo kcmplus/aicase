@@ -8,6 +8,7 @@ export const freshMembership=()=>({trialUsed:false,subscription:null,jobs:{}});
 function boundary(start,months){const d=new Date(start),day=d.getUTCDate();d.setUTCDate(1);d.setUTCMonth(d.getUTCMonth()+months);const last=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0)).getUTCDate();d.setUTCDate(Math.min(day,last));return +d;}
 export function refreshMembership(value,now=Date.now()){
  const a=structuredClone(value||freshMembership()),s=a.subscription;
+ if(a.server)return a; // Quotas and renewal periods are authoritative on the server.
  if(s&&now>=s.endsAt&&s.renew&&AI_AVAILABLE){let cycle=s.cycle+1;while(now>=boundary(s.anchor,cycle+1))cycle++;s.cycle=cycle;s.startsAt=boundary(s.anchor,cycle);s.endsAt=boundary(s.anchor,cycle+1);s.used=0;s.monthlyLimit=AI_MONTHLY_LIMIT;s.priceCents=AI_MONTHLY_CENTS;}
  for(const j of Object.values(a.jobs))if(['queued','generating'].includes(j.status))a.jobs[j.id]=refreshAIOrder(j,now);
  return a;

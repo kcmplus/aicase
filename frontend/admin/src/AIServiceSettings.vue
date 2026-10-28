@@ -8,6 +8,8 @@ const config=ref(null),model=ref(''),keyInput=ref(''),loading=ref(false),saving=
 const busy=computed(()=>loading.value||saving.value||checking.value);
 const dirty=computed(()=>Boolean(config.value)&&(model.value!==config.value.model_name||Boolean(keyInput.value)));
 const checkLabels={untested:'尚未检查',ok:'连接检查通过',error:'连接检查未通过'};
+const renderLabels={queued:'排队中',generating:'生成中',ready:'生成成功',failed:'生成未完成',cancelled:'已取消'};
+const renderErrors={credit_balance_exhausted:'OpenAI API 预付余额已用完，请检查 API 平台的计费设置。',project_spend_limit_exceeded:'此 OpenAI API 项目已达到支出上限。',organization_spend_limit_exceeded:'OpenAI API 企业组织已达到支出上限。',organization_usage_limit_exceeded:'OpenAI API 企业组织已达到获批的使用额度上限。',rate_limit_exceeded:'该模型的请求速率已达到限制，请查看 API 项目的模型限额。',slow_down:'OpenAI 暂时限制新请求，请等待后再试。',rate_limit:'OpenAI 返回 429：生图请求受到用量或计费限制，请检查该 API 项目的余额、账单及模型限额。',quota:'OpenAI API 余额不足或已达到计费上限。',credentials:'OpenAI 拒绝了当前密钥，请检查已保存的配置。',permission:'该 API 项目缺少图片生成或模型访问权限。',model:'该 API 项目无法使用此模型。',network:'连接图片服务超时或网络不可达。',content_policy:'该图片未通过生图服务的内容审核。',interrupted:'任务中断，生成次数已返还。'};
 function accept(data){config.value=data;model.value=data.model_name;keyInput.value='';}
 const formatDate=value=>value?new Date(value).toLocaleString('zh-CN'):'尚无记录';
 async function confirmDiscard(){
@@ -76,10 +78,11 @@ onBeforeRouteLeave(()=>confirmDiscard());
           <p>{{config.last_check_message||'填写并保存 API Key 后，可检查服务器与 OpenAI 的连接。'}}</p>
           <dl><dt>密钥更新时间</dt><dd>{{formatDate(config.key_updated_at)}}</dd><dt>上次检查</dt><dd>{{formatDate(config.last_check_at)}}</dd></dl>
           <p class="check-note">检查只读取模型信息，不生成图片；通过检查不代表已验证图片生成权限或账户余额。</p>
+          <template v-if="config.last_generation"><h2>最近一次真实生图</h2><el-tag :type="config.last_generation.status==='ready'?'success':config.last_generation.status==='failed'?'warning':'info'">{{renderLabels[config.last_generation.status]||config.last_generation.status}}</el-tag><p>{{config.last_generation.model}} · {{formatDate(config.last_generation.created_at)}}</p><p v-if="config.last_generation.error_message">{{renderErrors[config.last_generation.error_code]||config.last_generation.error_message}}</p></template>
         </aside>
       </div>
-      <el-alert title="本页用于保存服务配置。前台真实生图流程尚未接入，保存 Key 不会立即生成图片或改变现有案例。" type="info" :closable="false" show-icon/>
-      <router-link to="/ai-prompts" class="prompt-link">管理 AI 案例与提示词 →</router-link>
+      <el-alert title="前台已接入真实生图：顾客确认后，服务器使用此配置处理上传照片。保存 Key 不会自动生成图片；模型读取检查不代表图片生成权限或余额已验证。" type="info" :closable="false" show-icon/>
+      <router-link to="/ai-prompts" class="prompt-link">打开 AI 管理 →</router-link>
     </template>
   </section>
 </template>

@@ -238,16 +238,18 @@ class UploadView(APIView):
 @authentication_classes([])
 def public_catalog(request):
     from .images import image_variants
+    from .ai_generation import generation_available
     # Stable legacy indexes are never reassigned. This is an integration API, not a payment API.
     data = {
         "version": 2,
+        "ai_generation_connected": generation_available(),
         "brands": s.BrandSerializer(m.Brand.objects.filter(active=True), many=True).data,
         "phone_models": s.PublicPhoneModelSerializer(m.PhoneModel.objects.filter(active=True, brand__active=True), many=True).data,
         "designs": s.DesignTemplateSerializer(m.DesignTemplate.objects.filter(active=True), many=True).data,
         "graphics": s.GraphicSerializer(m.Graphic.objects.filter(active=True), many=True).data,
-        "ai_styles": list(m.AIStyle.objects.filter(active=True).values("code", "name", "description", "image_path")),
+        "ai_styles": list(m.AIStyle.objects.filter(active=True).values("code", "name", "name_zh", "description", "description_zh", "image_path")),
         "ai_examples": [
-            {"code": example.code, "name": example.name, "subject": example.subject, "original_path": example.original_path,
+            {"code": example.code, "name": example.name, "name_zh": example.name_zh, "subject": example.subject, "subject_zh": example.subject_zh, "original_path": example.original_path,
              "results": [{"style_code": result.style.code, "image_path": result.image_path} for result in example.results.all() if result.style.active]}
             for example in m.AIExample.objects.filter(active=True, results__style__active=True).distinct().prefetch_related("results__style")
         ],

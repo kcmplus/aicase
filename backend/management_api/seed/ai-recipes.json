@@ -2,62 +2,74 @@
   "styles": [
     {
       "code": "gouache",
-      "name": "温暖水粉手绘",
-      "description": "保留宠物特征的水粉与蜡笔插画。",
-      "prompt": "将输入照片转换成温暖的水粉与蜡笔插画，保留主体身份、数量、表情、姿态和重要配饰。使用不规则轮廓、柔和大色块、纸张颗粒和少量手绘细节。根据目标机型缩小、平移主体并延展背景，让脸、耳朵、四肢避开镜头和裁切区。仅输出连续的平面印花，不画手机、镜头、边框、文字或水印。",
+      "name": "Warm gouache",
+      "description": "A warm gouache and crayon illustration that keeps your pet’s unique features.",
+      "prompt": "Transform the input photo into a warm gouache and crayon illustration. Preserve each subject’s identity, number, expression, pose and important accessories. Use irregular outlines, soft color blocks, paper grain and a few hand-drawn details. Resize or reposition the whole subject and extend the background for the target phone model, keeping faces, ears and limbs clear of camera and trim areas. Output continuous flat artwork only: no phone, lenses, borders, text or watermark.",
       "image_path": "/assets/ai-recipes/pet-gouache.png",
-      "sort_order": 3
+      "sort_order": 3,
+      "name_zh": "温暖水粉手绘",
+      "description_zh": "保留宠物特征的水粉与蜡笔插画。"
     },
     {
       "code": "scrapbook",
-      "name": "旅行照片拼贴",
-      "description": "保留人物的真实照片，搭配海岸碎片和纸张肌理。",
-      "prompt": "将输入照片制作成旅行手账照片拼贴。保留人物身份、数量、发型、衣着和表情，人物照片保持完整，不把拼贴接缝放在脸上。用同一场景的海景、天空或景物作为周围纸片，暖白纸张、窄纸边和少量胶带。按目标机型安排主体和镜头避让，连续铺满画布。只输出平面印花，不画手机、镜头、孔洞、文字或水印。",
+      "name": "Travel scrapbook",
+      "description": "Real photo memories surrounded by coastal fragments and tactile paper.",
+      "prompt": "Turn the input photo into a travel-scrapbook photo collage. Preserve the identities, number, hairstyles, clothing and expressions of all people. Keep the main photo intact and do not place collage seams across faces. Surround it with paper fragments from the same sea, sky or scenery, warm ivory paper, narrow paper borders and a little tape. Compose for the target phone model with camera clearance and a continuous full-bleed backdrop. Output flat artwork only: no phone, camera, holes, text or watermark.",
       "image_path": "/assets/ai-recipes/couple-scrapbook.png",
-      "sort_order": 4
+      "sort_order": 4,
+      "name_zh": "旅行照片拼贴",
+      "description_zh": "保留人物的真实照片，搭配海岸碎片和纸张肌理。"
     },
     {
       "code": "watercolor",
-      "name": "清透山湖水彩",
-      "description": "把旅行风景转换成透亮水彩和细腻彩铅。",
-      "prompt": "将输入风景照片转换成清透的水彩与彩铅插画，保留主要山形、建筑、船只及其左右关系。使用透明水彩叠色、细腻纸纹、轻柔彩铅线条和自然明亮的色彩。按目标机型重组构图，让重要景物避开镜头与边缘，必要时自然扩展天空和背景。只输出连续平面印花，不画手机、镜头、孔洞、文字、尺寸线或水印。",
+      "name": "Alpine watercolor",
+      "description": "Luminous watercolor and delicate colored pencil for your travel memories.",
+      "prompt": "Transform the input landscape photo into luminous watercolor and colored-pencil artwork. Preserve the main mountain shapes, buildings, boats and their left-to-right relationships. Use transparent washes, subtle paper grain, delicate pencil lines and bright natural colors. Recompose for the target phone model, keeping key scenery clear of the camera and edges. Naturally extend the sky and background where needed. Output continuous flat artwork only: no phone, camera, holes, text, measurement lines or watermark.",
       "image_path": "/assets/ai-recipes/lake-watercolor.png",
-      "sort_order": 5
+      "sort_order": 5,
+      "name_zh": "清透山湖水彩",
+      "description_zh": "把旅行风景转换成透亮水彩和细腻彩铅。"
     }
   ],
   "cases": [
     {
       "code": "pet-gouache",
-      "name": "宠物手绘 · 镜头避让",
-      "subject": "金毛与红领巾的水粉手绘；iPhone 15 Pro 构图预览。",
+      "name": "Painted best friend",
+      "subject": "A golden retriever in warm gouache, with room for an iPhone 15 Pro camera.",
       "original_path": "/assets/ai-styles/pets-original.png",
       "style": "gouache",
       "phone_model_code": "model-3",
       "image_path": "/assets/ai-recipes/pet-gouache.png",
       "prompt": "Use case: style-transfer. Input image 1 is the edit target: the golden retriever photograph. Create ONE flat full-bleed phone-case artwork, narrow portrait width:height 70.6:146.6 (approximately 1:2.0765). Transform the same golden retriever into a warm whimsical gouache and crayon illustration, expressive irregular dark outlines, bold soft color blocks, paper grain and tiny meadow flowers. Preserve one dog, golden floppy ears, smiling face, seated pose, both front paws and the red patterned triangular bandana. Recompose the WHOLE dog down and slightly right: its entire head starts below y=40%, face near x=55%, y=50%, full dog inside x=14–88%, y=40–91%. Fill the upper-left x=0–68%, y=0–35% with low-detail pale blue sky and cream clouds only, reserved for an iPhone 15 Pro camera region. Keep alpine mountains, meadow and lake recognizable but simplified, and naturally extend the scenery around the smaller dog. Keep all essential details at least 8% from the edges. No stretching or simple center cropping. Continuous artwork to all four edges. Output flat art only: no phone, camera lenses, camera holes, outline, rounded corners, guides, labels, text, logos, watermark, panels or padding. This composition is a visual study, not a certified manufacturing dieline.",
-      "sort_order": 0
+      "sort_order": 0,
+      "name_zh": "宠物手绘 · 镜头避让",
+      "subject_zh": "金毛与红领巾的水粉手绘；iPhone 15 Pro 构图预览。"
     },
     {
       "code": "couple-scrapbook",
-      "name": "情侣拼贴 · 海岸记忆",
-      "subject": "保留两人合照的旅行手账拼贴；iPhone 15 Pro 构图预览。",
+      "name": "Coastal memories",
+      "subject": "A travel-scrapbook collage of two people by the sea, composed for iPhone 15 Pro.",
       "original_path": "/assets/ai-styles/couples-original.png",
       "style": "scrapbook",
       "phone_model_code": "model-3",
       "image_path": "/assets/ai-recipes/couple-scrapbook.png",
       "prompt": "Use case: style-transfer and compositing. Input image 1 is the edit target: the photograph of two fictional adults on the coast. Create ONE premium travel-scrapbook phone-case flat artwork, narrow portrait width:height 70.6:146.6 (about 1:2.0765). Preserve both adult identities, smiles, black bob haircut and rust sweater on woman, short brown hair and sage shirt on man, shoulder-to-shoulder pose. Retain real photographic texture inside a main gently tilted paper photo print placed in the LOWER TWO THIRDS: both heads entirely below y=42%, both faces near x=40–62%, y=54%, all important portrait details inside x=14–87%, y=42–88%. Surround this main intact couple photo with 4 to 6 small paper snippets using only the same blue sea, coastal cliffs and sky, warm ivory textured paper and a little translucent beige tape. Do not split or cut through faces, do not duplicate either person in the snippets. Upper-left x=0–68%, y=0–35% must be quiet warm ivory paper with faint pale-blue seaside texture and NO people or important details, reserved for an iPhone 15 Pro camera area. Subtle tactile paper shadows, airy cream and coastal blue palette, tasteful editorial balance. Keep continuous background to all four edges; essential details at least 8% from edges. No added people, writing, letters, logos, stickers with text, watermarks, phone body, camera, holes, border, guides or device mockup. Flat art only. This is a camera-aware visual study, not a calibrated printing template.",
-      "sort_order": 1
+      "sort_order": 1,
+      "name_zh": "情侣拼贴 · 海岸记忆",
+      "subject_zh": "保留两人合照的旅行手账拼贴；iPhone 15 Pro 构图预览。"
     },
     {
       "code": "lake-watercolor",
-      "name": "山湖水彩 · 旅行留白",
-      "subject": "山湖、小屋与木船的清透水彩；iPhone 15 Pro 构图预览。",
+      "name": "Alpine escape",
+      "subject": "A luminous watercolor lake, cabin and rowboat, composed for iPhone 15 Pro.",
       "original_path": "/assets/ai-styles/travel-original.png",
       "style": "watercolor",
       "phone_model_code": "model-3",
       "image_path": "/assets/ai-recipes/lake-watercolor.png",
-      "prompt": "【第一步：以案例原图为输入】\nUse case: style-transfer. Input image 1 is the edit target: the alpine lake photograph. Create ONE luminous watercolor and fine colored-pencil phone-case flat artwork. Narrow portrait width:height 70.6:146.6 (approximately 1:2.0765). Preserve the recognizable mountain silhouettes, blue alpine lake, evergreen forest, one small RED cabin on the RIGHT shore and one red wooden rowboat on the LOWER LEFT. Transparent watercolor washes, subtle paper grain, delicate pencil edges, luminous turquoise reflections, dusty sage trees and clear soft blue sky. Recompose for iPhone 15 Pro: main mountain peaks below y=38%, cabin around x=72%, y=58%, boat around x=32%, y=79%; all key objects inside x=12–88%, y=38–90%. Upper-left x=0–68%, y=0–35% must contain only airy low-detail pale sky and faint clouds, no key mountain peak or cabin, reserved for camera clearance. Naturally extend the scenery, do not stretch or merely center-crop. Full-bleed continuous painted backdrop to every edge, no opaque border. No people, extra boats, extra buildings, text, letters, logos, watermark, phone, camera lenses or holes, guides, measurements, device mockup or split panels. Output only the flat artwork. This is a composition study, not a certified manufacturing dieline.\n\n【第二步：以第一步结果为输入，调整构图】\nUse case: precise-object-edit. Edit target is the supplied completed watercolor alpine lake artwork. Keep the same narrow 70.6:146.6 aspect ratio, watercolor texture, blue and sage colors, one red cabin on the right and one red wooden rowboat at lower left. Change ONLY the vertical composition: lower and slightly reduce the entire mountain/forest/lake scene so that the HIGHEST MOUNTAIN PEAK begins at y=40% of the image height, never above y=38%. The entire top 38% must be uninterrupted pale blue sky with delicate clouds, especially the upper left 68% width; no mountains or trees may enter that upper band. Cabin around x=74%, y=62%, boat x=32%, y=81%, key details inside the inner 10% margin. Preserve natural landscape perspective and continuous background. Do not add new buildings, boats, text, phone, device borders, camera lenses, holes, watermark, guides or empty bands. Output one flat full-bleed phone-case composition study, not a device mockup or calibrated dieline.",
-      "sort_order": 2
+      "prompt": "STEP 1: Use the original case photo as input.\nUse case: style-transfer. Input image 1 is the edit target: the alpine lake photograph. Create ONE luminous watercolor and fine colored-pencil phone-case flat artwork. Narrow portrait width:height 70.6:146.6 (approximately 1:2.0765). Preserve the recognizable mountain silhouettes, blue alpine lake, evergreen forest, one small RED cabin on the RIGHT shore and one red wooden rowboat on the LOWER LEFT. Transparent watercolor washes, subtle paper grain, delicate pencil edges, luminous turquoise reflections, dusty sage trees and clear soft blue sky. Recompose for iPhone 15 Pro: main mountain peaks below y=38%, cabin around x=72%, y=58%, boat around x=32%, y=79%; all key objects inside x=12–88%, y=38–90%. Upper-left x=0–68%, y=0–35% must contain only airy low-detail pale sky and faint clouds, no key mountain peak or cabin, reserved for camera clearance. Naturally extend the scenery, do not stretch or merely center-crop. Full-bleed continuous painted backdrop to every edge, no opaque border. No people, extra boats, extra buildings, text, letters, logos, watermark, phone, camera lenses or holes, guides, measurements, device mockup or split panels. Output only the flat artwork. This is a composition study, not a certified manufacturing dieline.\n\nSTEP 2: Use the step 1 result as input and refine the composition.\nUse case: precise-object-edit. Edit target is the supplied completed watercolor alpine lake artwork. Keep the same narrow 70.6:146.6 aspect ratio, watercolor texture, blue and sage colors, one red cabin on the right and one red wooden rowboat at lower left. Change ONLY the vertical composition: lower and slightly reduce the entire mountain/forest/lake scene so that the HIGHEST MOUNTAIN PEAK begins at y=40% of the image height, never above y=38%. The entire top 38% must be uninterrupted pale blue sky with delicate clouds, especially the upper left 68% width; no mountains or trees may enter that upper band. Cabin around x=74%, y=62%, boat x=32%, y=81%, key details inside the inner 10% margin. Preserve natural landscape perspective and continuous background. Do not add new buildings, boats, text, phone, device borders, camera lenses, holes, watermark, guides or empty bands. Output one flat full-bleed phone-case composition study, not a device mockup or calibrated dieline.",
+      "sort_order": 2,
+      "name_zh": "山湖水彩 · 旅行留白",
+      "subject_zh": "山湖、小屋与木船的清透水彩；iPhone 15 Pro 构图预览。"
     }
   ],
   "legacy_prompts": [

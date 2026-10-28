@@ -1,7 +1,9 @@
 <script setup>
+import PhoneTemplateInfo from './PhoneTemplateInfo.vue';
 import {computed,onMounted,onBeforeUnmount,ref} from 'vue';
 import {onBeforeRouteLeave,useRoute} from 'vue-router';
 import AIExampleWorkbench from './AIExampleWorkbench.vue';
+import ResourcePage from './ResourcePage.vue';
 import {ElMessage,ElMessageBox} from 'element-plus';
 import {api,allRecords,can,session} from './api.js';
 import {composePrompt,promptTemplates} from './prompt-templates.js';
@@ -14,9 +16,9 @@ const visible=key=>can(`management_api.view_${definitions[key].model}`);
 const route=useRoute();
 const tabs=[...(can('management_api.view_aiexample')?['examples']:[]),...Object.keys(definitions).filter(visible)];
 const kind=ref(tabs.includes(route.query.tab)?route.query.tab:tabs[0]);
-const exampleWorkbench=ref(null);
-async function beforeTabChange(){if(!await confirmDiscard())return false;if(exampleWorkbench.value&&!await exampleWorkbench.value.canLeave())return false;open.value=false;return true;}
-function refreshAll(){load();exampleWorkbench.value?.load();}
+const exampleWorkbench=ref(null),styleWorkbench=ref(null);
+async function beforeTabChange(){if(!await confirmDiscard())return false;if(exampleWorkbench.value&&!await exampleWorkbench.value.canLeave())return false;if(styleWorkbench.value&&!await styleWorkbench.value.canLeave())return false;open.value=false;load();return true;}
+function refreshAll(){load();exampleWorkbench.value?.load();styleWorkbench.value?.load();}
 const styles=ref([]),models=ref([]),loading=ref(false),error=ref(''),query=ref('');
 const open=ref(false),record=ref(null),editorKind=ref('style'),draft=ref(''),saving=ref(false),reading=ref(false),formError=ref(''),preset=ref(''),partner=ref(null);
 const definition=computed(()=>definitions[editorKind.value]);
@@ -88,13 +90,15 @@ onBeforeRouteLeave(()=>confirmDiscard());
 
 <template>
   <section class="prompt-page">
-    <div class="page-heading"><div><p class="eyebrow">AI CONFIGURATION</p><h1>AI 案例与提示词<span class="greeting-dot">.</span></h1><p class="muted">对照原图与效果图，管理案例提示词、通用风格及机型适配规则。</p></div><div><router-link v-if="session.user?.is_superuser" to="/ai-service" style="font-size:13px;color:#196967;margin-right:15px">生图服务配置</router-link><el-button :loading="loading" @click="refreshAll">刷新</el-button></div></div>
-    <el-alert title="案例图片与提示词在同一处管理。修改提示词不会自动重新生成效果图；真实生图服务尚未接入。" type="info" :closable="false" show-icon/>
-    <el-tabs v-model="kind" class="workspace-tabs" :before-leave="beforeTabChange"><el-tab-pane v-if="can('management_api.view_aiexample')" label="案例与提示词" name="examples"/><el-tab-pane v-if="visible('style')" label="通用风格提示词" name="style"/><el-tab-pane v-if="visible('model')" label="机型适配提示词" name="model"/></el-tabs>
+    <div class="page-heading"><div><p class="eyebrow">AI STUDIO</p><h1>AI 管理<span class="greeting-dot">.</span></h1><p class="muted">统一管理用户端的 AI 效果、风格与英文提示词。</p></div><div><router-link v-if="session.user?.is_superuser" to="/ai-service" style="font-size:13px;color:#196967;margin-right:15px">生图服务配置</router-link><el-button :loading="loading" @click="refreshAll">刷新</el-button></div></div>
+    <el-alert title="用户端与后台均按原图分组展示多种 AI 效果。提示词请使用英文，仅在后台保存；修改提示词不会自动重新生成效果图，真实生图使用后台风格提示词与机型构图要求，顾客确认后才发起请求。" type="info" :closable="false" show-icon/>
+    <el-tabs v-model="kind" class="workspace-tabs" :before-leave="beforeTabChange"><el-tab-pane v-if="can('management_api.view_aiexample')" label="案例" name="examples"/><el-tab-pane v-if="visible('style')" label="风格与提示词" name="style"/><el-tab-pane v-if="visible('model')" label="机型适配" name="model"/></el-tabs>
     <AIExampleWorkbench v-if="kind==='examples'" ref="exampleWorkbench"/>
+    <ResourcePage v-else-if="kind==='style'" ref="styleWorkbench" resource="ai-styles" embedded/>
     <div v-else class="panel prompt-panel">
+      <PhoneTemplateInfo/>
       <div class="prompt-toolbar"><el-input v-model="query" aria-label="搜索提示词" placeholder="搜索名称、标识或提示词内容" clearable/><span class="muted">{{rows.length}} 条配置</span></div>
-      <p class="muted prompt-help">{{kind==='style'?'每个 AI 风格保存一份提示词，描述画风、主体保留要求和输出效果。新增风格请到「AI 风格」管理。':'每个机型单独保存构图要求，例如主体位置、镜头避让与边缘裁切。文字规则不能替代实测打印模板。'}}</p>
+      <p class="muted prompt-help">用英文保存各机型的构图要求，例如主体位置、镜头避让与边缘裁切。文字规则不能替代实测打印模板。</p>
       <el-alert v-if="error" :title="error" type="error" :closable="false"/>
       <el-table v-loading="loading" :data="rows" empty-text="暂无匹配配置">
         <el-table-column :label="kind==='style'?'风格':'机型'" min-width="155"><template #default="{row}"><strong class="cell-name">{{row.name}}</strong><div class="prompt-code">{{row.code}}{{row.active?'':' · 已停用'}}</div></template></el-table-column>
