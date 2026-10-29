@@ -126,8 +126,61 @@ class AuditLog(models.Model):
         default_permissions = ("view",)
 
 
+class Customer(Timestamped):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    email = models.EmailField(unique=True)
+    active = models.BooleanField(default=True)
+    verified_at = models.DateTimeField()
+
+    class Meta:
+        default_permissions = ()
+
+
+class EmailChallenge(models.Model):
+    email = models.EmailField(primary_key=True)
+    nonce = models.UUIDField(default=uuid.uuid4)
+    code_hash = models.CharField(max_length=64)
+    expires_at = models.DateTimeField()
+    sent_at = models.DateTimeField()
+    window_at = models.DateTimeField()
+    sent_count = models.PositiveIntegerField(default=0)
+    attempts = models.PositiveIntegerField(default=0)
+    delivered = models.BooleanField(default=False)
+
+    class Meta:
+        default_permissions = ()
+
+
+class CustomerAuthLimit(models.Model):
+    key = models.CharField(primary_key=True, max_length=64)
+    window_at = models.DateTimeField()
+    count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        default_permissions = ()
+
+
+class SMTPConfig(Timestamped):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    enabled = models.BooleanField(default=False)
+    host = models.CharField(max_length=253, blank=True)
+    port = models.PositiveIntegerField(default=587)
+    security = models.CharField(max_length=10, default='starttls')
+    username = models.CharField(max_length=254, blank=True)
+    password_ciphertext = models.TextField(blank=True, editable=False)
+    from_email = models.EmailField(blank=True)
+    from_name = models.CharField(max_length=100, default='POPOMO')
+    revision = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        default_permissions = ()
+        constraints = [models.CheckConstraint(condition=models.Q(id=1), name='single_smtp_config')]
+
+
 class AIAccount(Timestamped):
     owner_hash = models.CharField(primary_key=True, max_length=64, editable=False)
+    customer = models.OneToOneField(Customer, null=True, blank=True, on_delete=models.PROTECT)
+    trial_granted = models.PositiveIntegerField(default=0)
     trial_used = models.PositiveIntegerField(default=0)
     subscription = models.JSONField(null=True, blank=True)
 
