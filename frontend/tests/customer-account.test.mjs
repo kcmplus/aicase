@@ -21,3 +21,9 @@ test('expired codes show server feedback and email values remain escaped',async(
  const page=customerPage({authenticated:true,customer:{email:'<b>@example.com'},trialRemaining:2},{next:'choose'});
  assert.match(page,/&lt;b&gt;@example.com/);assert.match(page,/Sign out/);assert.doesNotMatch(page,/customer-email-form/);
 });
+
+test('signed-in profile shows server balances and escapes names without exposing staff fields',()=>{
+ const page=customerPage({server:true,authenticated:true,customer:{email:'hello@example.com',displayName:'<script>bad()</script>',joinedAt:'2026-10-29T01:00:00Z'},trialRemaining:7,subscription:{endsAt:Date.now()+3600000,used:2,monthlyLimit:10}},{});
+ assert.match(page,/customer-profile-form/);assert.match(page,/Gift generations remaining/);assert.match(page,/>7<\/strong>/);assert.match(page,/>8<\/strong>/);
+ assert.match(page,/Member since/);assert.doesNotMatch(page,/<script>/);assert.doesNotMatch(page,/name="(?:email|active|notes)"/);
+});

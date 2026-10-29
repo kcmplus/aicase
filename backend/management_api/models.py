@@ -127,13 +127,18 @@ class AuditLog(models.Model):
 
 
 class Customer(Timestamped):
+    display_name = models.CharField(max_length=60, blank=True)
+    notes = models.CharField(max_length=1000, blank=True)
+    last_login_at = models.DateTimeField(null=True, blank=True)
+    revision = models.PositiveIntegerField(default=0)
+    session_version = models.PositiveIntegerField(default=0)
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True)
     active = models.BooleanField(default=True)
     verified_at = models.DateTimeField()
 
     class Meta:
-        default_permissions = ()
+        default_permissions = ("view", "change")
 
 
 class EmailChallenge(models.Model):
@@ -182,6 +187,7 @@ class AIAccount(Timestamped):
     owner_hash = models.CharField(primary_key=True, max_length=64, editable=False)
     customer = models.OneToOneField(Customer, null=True, blank=True, on_delete=models.PROTECT)
     trial_granted = models.PositiveIntegerField(default=0)
+    bonus_granted = models.PositiveIntegerField(default=0)
     trial_used = models.PositiveIntegerField(default=0)
     subscription = models.JSONField(null=True, blank=True)
 

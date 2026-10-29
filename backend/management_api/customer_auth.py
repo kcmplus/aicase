@@ -29,7 +29,7 @@ def customer_for(request):
     customer_id = request.session.get(SESSION_KEY)
     if not customer_id:
         return None
-    return Customer.objects.filter(pk=customer_id, active=True).first()
+    return Customer.objects.filter(pk=customer_id, active=True, session_version=request.session.get('store_customer_version', 0)).first()
 
 
 def customer_owner(request):
@@ -45,7 +45,9 @@ def signup_credits():
 
 
 def public_customer(customer):
-    return {'id': str(customer.pk), 'email': customer.email} if customer else None
+    return {'id': str(customer.pk), 'email': customer.email, 'displayName': customer.display_name,
+            'joinedAt': customer.created_at.isoformat(),
+            'lastLoginAt': customer.last_login_at.isoformat() if customer.last_login_at else None} if customer else None
 
 
 def code_digest(email, nonce, code):
@@ -99,8 +101,20 @@ class CustomerView(APIView):
                          'signupCredits': signup_credits(), 'emailEnabled': mail_available(),
                          'csrfToken': get_token(request)})
 
+    def patch(self, request):
+        customer = customer_for(request)
+        if not customer:
+            raise PermissionDenied('Sign in with your email to use AI generations.')
+        if set(request.data) != {'displayName'}:
+            raise serializers.ValidationError('Only your display name can be changed here.')
+        name = serializers.CharField(max_length=60, allow_blank=True).run_validation(request.data['displayName'])
+        Customer.objects.filter(pk=customer.pk).update(display_name=name, revision=F('revision') + 1)
+        customer.refresh_from_db()
+        return Response({'customer': public_customer(customer)})
+
     def delete(self, request):
         request.session.pop(SESSION_KEY, None)
+        request.session.pop('store_customer_version', None)
         request.session.cycle_key()
         return Response({'customer': None, 'csrfToken': get_token(request)})
 
@@ -166,7 +180,10 @@ class VerifyCode(CustomerView):
                 challenge.delivered, challenge.code_hash = False, ''
                 challenge.save(update_fields=['delivered', 'code_hash'])
                 customer, created = Customer.objects.get_or_create(email=email, defaults={'verified_at': timezone.now()})
+                customer = Customer.objects.select_for_update().get(pk=customer.pk)
                 if customer.active:
+                    customer.last_login_at = timezone.now()
+                    customer.save(update_fields=['last_login_at', 'updated_at'])
                     key = hashlib.sha256(('customer:' + str(customer.pk)).encode()).hexdigest()
                     AIAccount.objects.get_or_create(owner_hash=key, defaults={
                         'customer': customer, 'trial_granted': signup_credits()})
@@ -177,5 +194,6 @@ class VerifyCode(CustomerView):
         request.session.cycle_key()
         rotate_token(request)
         request.session[SESSION_KEY] = str(customer.pk)
+        request.session['store_customer_version'] = customer.session_version
         request.session.set_expiry(30*24*60*60)
         return Response({'customer': public_customer(customer), 'created': created, 'csrfToken': get_token(request)})

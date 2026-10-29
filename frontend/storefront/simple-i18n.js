@@ -11,6 +11,16 @@ export function setLocale(value){
 }
 export const localized=(record,field='name')=>current==='zh-CN'?(record?.[field+'_zh']||t(record?.[field]||'')):(record?.[field]||'');
 const entries=[
+ ['Email verified','邮箱已验证'],
+ ['Gift generations remaining','剩余赠送次数'],
+ ['Monthly generations remaining','剩余月度次数'],
+ ['Signup gifts and extra credits share one balance. Failed renders return your generation.','注册赠送和后台补发合并使用，生成失败会退还次数。'],
+ ['Display name','昵称'],
+ ['What should we call you?','希望我们怎么称呼你？'],
+ ['Save profile','保存个人信息'],
+ ['Member since','注册于'],
+ ['Your profile has been saved.','个人信息已保存。'],
+ ['Only your display name can be changed here.','这里只能修改昵称。'],
  ['AI generation','次 AI 生成'],
  ['Verify your email to receive {0} welcome generations','验证邮箱即可领取 {0} 次注册赠送'],
  ['Verify your email to receive {0} welcome generation','验证邮箱即可领取 {0} 次注册赠送'],

@@ -198,7 +198,7 @@ class PermissionsView(APIView):
 class DashboardView(APIView):
     permission_classes = [IsAdminUser]
     def get(self, request):
-        models = [("brands", m.Brand), ("phone_models", m.PhoneModel), ("designs", m.DesignTemplate), ("graphics", m.Graphic), ("ai_styles", m.AIStyle), ("ai_examples", m.AIExample), ("plans", m.PricingPlan), ("orders", m.PrintOrder)]
+        models = [("brands", m.Brand), ("phone_models", m.PhoneModel), ("designs", m.DesignTemplate), ("graphics", m.Graphic), ("ai_styles", m.AIStyle), ("ai_examples", m.AIExample), ("plans", m.PricingPlan), ("orders", m.PrintOrder), ("customers", m.Customer)]
         counts = {key: model.objects.count() for key, model in models if request.user.has_perm(f"management_api.view_{model._meta.model_name}")}
         logs = m.AuditLog.objects.all()[:6] if request.user.has_perm("management_api.view_auditlog") else []
         return Response({"counts": counts, "activity": s.AuditLogSerializer(logs, many=True).data, "storefront_connected": True, "connected_resources": ["plans", "ai_styles", "ai_examples", "orders"], "payments_connected": False, "ai_connected": False})

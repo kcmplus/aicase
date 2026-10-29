@@ -10,7 +10,10 @@ from management_api.ai_generation import AIAccountView, AIRenders, AIRenderDetai
 from management_api.customer_auth import CustomerView, SendCode, VerifyCode
 from management_api.mail_service import MailSettings, MailTest, RegistrationSettings
 
+from management_api.customers import CustomerViewSet
+
 router = DefaultRouter()
+router.register("customers", CustomerViewSet)
 router.register("ai-examples", views.AIExampleViewSet)
 for name, view in [("brands", views.BrandViewSet), ("phone-models", views.PhoneModelViewSet), ("graphics", views.GraphicViewSet), ("designs", views.DesignTemplateViewSet), ("ai-styles", views.AIStyleViewSet), ("plans", views.PricingPlanViewSet), ("orders", views.OrderViewSet), ("users", views.UserViewSet), ("roles", views.RoleViewSet), ("audit-logs", views.AuditViewSet)]:
     router.register(name, view)

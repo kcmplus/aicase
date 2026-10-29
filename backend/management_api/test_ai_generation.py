@@ -122,6 +122,15 @@ class LiveGenerationTests(TestCase):
         self.assertEqual(self.create()[0].status_code,409)
         self.assertEqual(AIRender.objects.count(),1)
 
+    def test_bonus_credits_can_be_used_and_refunded_without_resetting_usage(self):
+        AIAccount.objects.update(trial_used=1, bonus_granted=2)
+        response=self.create()[0];self.assertEqual(response.status_code,202,response.data)
+        self.assertEqual(AIAccount.objects.get().trial_used,2)
+        self.assertEqual(self.client.get('/api/v1/store/ai-account/').data['trialRemaining'],1)
+        self.assertEqual(self.client.post('/api/v1/store/ai-renders/'+response.data['id']+'/',{'action':'cancel'},format='json').status_code,200)
+        self.assertEqual(AIAccount.objects.get().trial_used,1)
+        self.assertEqual(self.client.get('/api/v1/store/ai-account/').data['trialRemaining'],2)
+
     @override_settings(AI_DAILY_RENDER_LIMIT=0)
     def test_global_daily_limit_reserves_nothing(self):
         self.assertEqual(self.create()[0].status_code,429);self.assertFalse(AIRender.objects.exists())

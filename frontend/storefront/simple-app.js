@@ -21,7 +21,7 @@ import {activeLook,lookBrowserContent,setLookMode,setLookComparison,updateLookIm
 import {aiStyles,refreshAIOrder,canApplyAIOrder} from './ai-core.js';
 import {createLiveRender,getAIAccount,changeAIAccount,submitLiveRender,refreshLiveRender,cancelLiveRender} from './ai-service.js';
 import {importPhoto} from './simple-upload.js';
-import {customerPage,sendEmailCode,verifyEmailCode,signOutCustomer} from './customer-account.js';
+import {customerPage,sendEmailCode,verifyEmailCode,signOutCustomer,updateCustomerName} from './customer-account.js';
 import {create as createQR} from './vendor/qr.js';
 
 const KEY = 'popomo-simple-v1';
@@ -33,7 +33,7 @@ let storageWarning = false;
 let aiJob=null,aiBusy=false;
 const aiUi={mode:'pair',compare:50,lookMode:'effect',lookCompare:50,accepted:false,error:''};
 let cleanupAIStudio=()=>{};
-const customerUI={email:'',codeSent:false,busy:false,error:'',resendAt:0,next:'choose'};
+const customerUI={email:'',codeSent:false,busy:false,error:'',success:'',resendAt:0,next:'choose'};
 let resendTimer;
 let membership=await updateDesign('ai-membership-v1',a=>({...refreshMembership(a),server:true,authenticated:false,customer:null,trialRemaining:0,subscription:null}),freshMembership());
 let orderBook=await updateDesign('print-orders-v1',v=>v,freshOrders());
@@ -595,6 +595,7 @@ app.addEventListener('input',event=>{
   if(event.target.id==='design-code'){event.target.removeAttribute('aria-invalid');document.getElementById('scan-error').textContent='';}
 });
 app.addEventListener('submit',async event=>{
+  if(event.target.id==='customer-profile-form'){event.preventDefault();await handleCustomer('profile',new FormData(event.target));return;}
   if(event.target.id==='customer-email-form'){event.preventDefault();const fields=new FormData(event.target);await handleCustomer(customerUI.codeSent?'verify':'send',fields);return;}
   if(event.target.id==='ai-credit-form'||event.target.id==='ai-subscription-form'){
     event.preventDefault();if(aiBusy)return;const accepted=new FormData(event.target).has('accepted');
@@ -854,12 +855,14 @@ app.addEventListener('click',async event=>{
 async function handleCustomer(action,fields){
  if(customerUI.busy)return;
  if(action==='change-email'){customerUI.codeSent=false;customerUI.error='';render(true);return;}
- customerUI.busy=true;customerUI.error='';
+ customerUI.busy=true;customerUI.error='';customerUI.success='';
  if(action==='send')customerUI.email=String(fields.get('email')||'').trim();
  const code=String(fields?.get('code')||'').trim();
  render(true);
  try{
-  if(action==='send'||action==='resend'){
+  if(action==='profile'){
+   await updateCustomerName(String(fields.get('displayName')||'').trim());await syncAIAccount();customerUI.success='Your profile has been saved.';
+  }else if(action==='send'||action==='resend'){
    await sendEmailCode(customerUI.email);customerUI.codeSent=true;customerUI.resendAt=Date.now()+60000;
    clearTimeout(resendTimer);resendTimer=setTimeout(()=>{const button=app.querySelector('[data-customer-action="resend"]');if(button&&!customerUI.busy)button.disabled=false;},60000);
   }else if(action==='verify'){

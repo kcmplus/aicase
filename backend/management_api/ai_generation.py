@@ -87,7 +87,9 @@ def refresh_account(account, plan):
 
 def account_data(account):
     return {'server': True, 'authenticated': True, 'customer': public_customer(account.customer),
-            'trialGranted': account.trial_granted, 'trialRemaining': max(0, account.trial_granted-account.trial_used),
+            'trialGranted': account.trial_granted + account.bonus_granted,
+            'welcomeGranted': account.trial_granted, 'bonusGranted': account.bonus_granted,
+            'trialRemaining': max(0, account.trial_granted + account.bonus_granted-account.trial_used),
             'trialCount': account.trial_used, 'trialUsed': account.trial_used > 0,
             'subscription': account.subscription, 'billingMode': 'demo',
             'demoSubscriptionsAvailable': settings.DEBUG}
@@ -262,7 +264,7 @@ class AIRenders(AIPrivateView):
             if AIRender.objects.filter(status__in=['queued','generating']).count()>=settings.AI_CONCURRENT_RENDER_LIMIT:
                 return Response({'detail':'All AI render slots are busy. Please try again shortly.'},status=429)
             account,_=AIAccount.objects.select_for_update().get_or_create(owner_hash=key);refresh_account(account,plan)
-            if account.trial_used<account.trial_granted:
+            if account.trial_used<account.trial_granted + account.bonus_granted:
                 account.trial_used+=1;allocation={'type':'trial'}
             elif account.subscription and int(timezone.now().timestamp()*1000)<account.subscription['endsAt'] and account.subscription['used']<account.subscription['monthlyLimit']:
                 account.subscription={**account.subscription,'used':account.subscription['used']+1}
