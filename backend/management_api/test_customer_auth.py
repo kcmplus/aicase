@@ -11,7 +11,7 @@ from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
-from .models import AIAccount, Customer, EmailChallenge, SMTPConfig, PricingPlan
+from .models import AIAccount, Customer, EmailChallenge, SMTPConfig, PricingPlan, CreditEntry
 from .ai_service import cipher
 
 
@@ -58,6 +58,8 @@ class CustomerAccountTests(TestCase):
         data=other.get('/api/v1/store/ai-account/').data
         self.assertEqual(data['trialRemaining'],1);self.assertEqual(data['trialGranted'],3)
         self.assertEqual(Customer.objects.count(),1);self.assertEqual(AIAccount.objects.count(),1)
+        self.assertEqual(CreditEntry.objects.filter(kind='signup').count(),1)
+        self.assertEqual(CreditEntry.objects.get(kind='signup').amount,3)
         self.assertEqual(self.verify(code).status_code,400)  # replay
 
     def test_signup_offer_independent_from_plan_and_zero_is_respected(self):

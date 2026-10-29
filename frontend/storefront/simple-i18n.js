@@ -11,6 +11,8 @@ export function setLocale(value){
 }
 export const localized=(record,field='name')=>current==='zh-CN'?(record?.[field+'_zh']||t(record?.[field]||'')):(record?.[field]||'');
 const entries=[
+ ['Your credit period has ended.','原积分周期已结束。'],['Credit period ended','积分周期已结束'],['The original credit period has expired. Your current balance is unchanged.','原月度积分已到期，本次未改变当前余额。'],
+ ['Credit activity','积分变动'],['Opening balance','期初余额'],['Signup gift','注册赠送'],['Extra credits','后台补发'],['Generation charge','AI 生成扣减'],['Cancellation refund','取消退还'],['Generation refund','失败退还'],['Original period expired · No balance change','原周期已到期 · 余额不变'],['Plan credits','套餐额度发放'],['Monthly credits renewed','月度额度更新'],['Monthly credits expired','月度额度到期'],['Credit adjustment','积分调整'],['Gift credits','赠送额度'],['Monthly credits','月度额度'],['Balance','余额'],['Render','生成任务'],['Refresh activity','刷新明细'],['No credit activity yet.','暂无积分变动。'],['Loading activity…','正在加载明细…'],['Load earlier activity','加载更早记录'],['Older balances appear as an opening balance.','上线前的可用次数以期初余额记入。'],['1 credit = 1 AI generation. Balances are shown separately for gifts and monthly credits.','1 积分用于 1 次 AI 生成，赠送额度和月度额度分别记账。'],
  ['Email verified','邮箱已验证'],
  ['Gift generations remaining','剩余赠送次数'],
  ['Monthly generations remaining','剩余月度次数'],
@@ -613,7 +615,7 @@ const entries=[
  ['STYLE EXAMPLE','风格示例'],
  ['Free','免费'],
  ['1 credit','1 次额度'],
- ['AI generation','AI 生成'],
+ ['Generation charge','AI 生成扣减'],
  ['Your photo is saved for this demo.','照片已为本次演示保存。'],
  ['This demo shows sample results, not a transformation of your upload.','此演示展示固定样片，不会转换你上传的照片。'],
  ['No real charge. Sample artwork was made with AI. Live photo generation is not connected.','不会实际扣款。样片由 AI 制作，实时照片生成尚未接通。'],

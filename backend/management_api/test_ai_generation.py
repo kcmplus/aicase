@@ -17,7 +17,7 @@ from rest_framework.test import APIClient
 
 from .ai_generation import edit_image, GenerationError, run_render, restore_credit
 from .ai_service import encrypt_api_key
-from .models import AIAccount, AIRender, AIServiceConfig, AIStyle, Customer
+from .models import AIAccount, AIRender, AIServiceConfig, AIStyle, Customer, CreditEntry
 
 
 def png():
@@ -65,6 +65,7 @@ class LiveGenerationTests(TestCase):
         self.assertEqual(AIAccount.objects.get().trial_used,1)
         response,dispatch=self.create();self.assertEqual(response.status_code,200);self.assertFalse(dispatch.called)
         self.assertEqual(AIRender.objects.count(),1);self.assertEqual(AIAccount.objects.get().trial_used,1)
+        entry=CreditEntry.objects.get(kind='generation');self.assertEqual(entry.amount,-1);self.assertEqual(entry.balance_after,0)
         self.assertNotIn('Private English style prompt',str(response.data));self.assertNotIn('api_key',str(response.data))
         conflict,_=self.create(model='iPhone 16e');self.assertEqual(conflict.status_code,409)
 
@@ -101,6 +102,8 @@ class LiveGenerationTests(TestCase):
         with patch('management_api.ai_generation.edit_image',side_effect=GenerationError('quota','No API credit.')) as provider:
             run_render(job.id);run_render(job.id)
         restore_credit(job,'failed');self.assertEqual(provider.call_count,1)
+        self.assertEqual(CreditEntry.objects.filter(kind='failure_refund').count(),1)
+        self.assertEqual(CreditEntry.objects.get(kind='failure_refund').amount,1)
         job.refresh_from_db();self.assertEqual(job.status,'failed');self.assertTrue(job.credit_restored)
         self.assertEqual(AIAccount.objects.get().trial_used,0);self.assertEqual(bytes(job.input_image),b'')
 

@@ -221,3 +221,24 @@ class AIRender(Timestamped):
     class Meta:
         ordering = ['-created_at']
         default_permissions = ()
+
+
+class CreditEntry(models.Model):
+    account = models.ForeignKey(AIAccount, on_delete=models.PROTECT, related_name='credit_entries')
+    event_key = models.CharField(max_length=150)
+    kind = models.CharField(max_length=30)
+    pool = models.CharField(max_length=10, choices=[('gift', '赠送额度'), ('monthly', '月度额度')])
+    amount = models.IntegerField()
+    balance_before = models.PositiveIntegerField()
+    balance_after = models.PositiveIntegerField()
+    period = models.BigIntegerField(null=True, blank=True)
+    render_id = models.UUIDField(null=True, blank=True)
+    reason = models.CharField(max_length=200, blank=True)
+    actor_name = models.CharField(max_length=150, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-id']
+        default_permissions = ()
+        constraints = [models.UniqueConstraint(fields=['account', 'event_key'], name='unique_credit_event'),
+                       models.CheckConstraint(condition=models.Q(balance_after=models.F('balance_before') + models.F('amount')), name='credit_balance_matches_delta')]

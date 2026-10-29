@@ -21,7 +21,7 @@ import {activeLook,lookBrowserContent,setLookMode,setLookComparison,updateLookIm
 import {aiStyles,refreshAIOrder,canApplyAIOrder} from './ai-core.js';
 import {createLiveRender,getAIAccount,changeAIAccount,submitLiveRender,refreshLiveRender,cancelLiveRender} from './ai-service.js';
 import {importPhoto} from './simple-upload.js';
-import {customerPage,sendEmailCode,verifyEmailCode,signOutCustomer,updateCustomerName} from './customer-account.js';
+import {customerPage,sendEmailCode,verifyEmailCode,signOutCustomer,updateCustomerName,getCustomerCredits} from './customer-account.js';
 import {create as createQR} from './vendor/qr.js';
 
 const KEY = 'popomo-simple-v1';
@@ -33,7 +33,7 @@ let storageWarning = false;
 let aiJob=null,aiBusy=false;
 const aiUi={mode:'pair',compare:50,lookMode:'effect',lookCompare:50,accepted:false,error:''};
 let cleanupAIStudio=()=>{};
-const customerUI={email:'',codeSent:false,busy:false,error:'',success:'',resendAt:0,next:'choose'};
+const customerUI={email:'',codeSent:false,busy:false,error:'',success:'',ledger:[],ledgerNext:null,ledgerOpen:false,ledgerBusy:false,ledgerError:'',resendAt:0,next:'choose'};
 let resendTimer;
 let membership=await updateDesign('ai-membership-v1',a=>({...refreshMembership(a),server:true,authenticated:false,customer:null,trialRemaining:0,subscription:null}),freshMembership());
 let orderBook=await updateDesign('print-orders-v1',v=>v,freshOrders());
@@ -735,7 +735,7 @@ if(selectedArtwork==='all'){const layout=artworkLayout();layout.zoom=100;layout.
 document.querySelector('.skip-link').addEventListener('click',event=>{event.preventDefault();document.querySelector('#main')?.focus();});
 async function navigate(){
  const [route,query='']=location.hash.slice(1).split('?');const params=new URLSearchParams(query),code=params.get('code');
- if(route==='account'||route==='membership')try{await syncAIAccount();}catch(error){customerUI.error=error.message;}
+ if(route==='account'||route==='membership')try{await syncAIAccount();if(route==='account'&&membership.authenticated)await loadCustomerCredits(true);}catch(error){customerUI.error=error.message;}
  if(route==='pass'||route==='kiosk'){
    orderBook=await readDesign('print-orders-v1')||freshOrders();const order=state.pass&&orderForCode(orderBook,state.pass.code);
    if(order?.server)try{const latest=await refreshOrder(order.id);state.pass=latest.pass;if(state.job?.orderId===latest.id)state.job={...state.job,status:latest.status,pass:latest.pass};}catch(e){notify(e.message);}
@@ -768,6 +768,7 @@ async function loadAssetPhoto(url){
  const blob=await response.blob();return importPhoto(new File([blob],'sample.png',{type:blob.type}));
 }
 async function mergeAIAccount(data){
+ if(membership.customer?.id!==data.customer?.id)Object.assign(customerUI,{ledger:[],ledgerNext:null,ledgerError:'',ledgerBusy:false,ledgerOpen:false});
  if(aiJob&&(aiJob.customerId&&aiJob.customerId!==data.customer?.id||aiJob.remoteId&&!aiJob.customerId)){aiJob=null;state.aiJobId=null;save();}
  membership=await updateDesign('ai-membership-v1',a=>({...a,...data,jobs:a.customer?.id===data.customer?.id?a.jobs||{}:{}}),freshMembership());
 }
@@ -852,7 +853,16 @@ app.addEventListener('click',async event=>{
  const button=event.target.closest('[data-customer-action]');
  if(!button)return;event.preventDefault();await handleCustomer(button.dataset.customerAction);
 });
+async function loadCustomerCredits(reset=false){
+ if(!membership.authenticated||customerUI.ledgerBusy)return;
+ const id=membership.customer.id;customerUI.ledgerBusy=true;customerUI.ledgerError='';
+ try{const data=await getCustomerCredits(reset?null:customerUI.ledgerNext);if(membership.customer?.id===id){customerUI.ledger=reset?data.results:[...customerUI.ledger,...data.results];customerUI.ledgerNext=data.nextCursor;}}
+ catch(error){if(membership.customer?.id===id)customerUI.ledgerError=error.message;}
+ finally{if(membership.customer?.id===id)customerUI.ledgerBusy=false;}
+}
 async function handleCustomer(action,fields){
+ if(action==='credits-toggle'){customerUI.ledgerOpen=!customerUI.ledgerOpen;render(true);return;}
+ if(action==='credits-more'||action==='credits-refresh'){const loading=loadCustomerCredits(action==='credits-refresh');render(true);await loading;render(true);return;}
  if(customerUI.busy)return;
  if(action==='change-email'){customerUI.codeSent=false;customerUI.error='';render(true);return;}
  customerUI.busy=true;customerUI.error='';customerUI.success='';

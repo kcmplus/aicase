@@ -1,13 +1,13 @@
 """Staff customer directory. Customer accounts never grant staff access."""
 import hashlib
 from django.db import transaction
-from django.db.models import F
 from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import BasePermission, IsAdminUser
 from rest_framework.response import Response
 from .models import Customer, AIAccount, AIRender, AuditLog
 from .audit import audit
+from .credit_ledger import balance, ensure_opening, record, entries_page
 
 
 class CustomerPermissions(BasePermission):
@@ -79,6 +79,17 @@ class CustomerViewSet(viewsets.GenericViewSet):
                                   if account and account.subscription else None)
         return Response(result)
 
+    @action(detail=True, methods=['get'])
+    def credits(self, request, pk=None):
+        customer = self.get_object()
+        from .models import PricingPlan
+        from .ai_generation import refresh_account, expire_stale_jobs
+        account = getattr(customer, 'aiaccount', None)
+        if account:
+            expire_stale_jobs(account.pk)
+            refresh_account(account, PricingPlan.objects.filter(kind='ai_monthly', active=True).first())
+        return Response(entries_page(account, request, admin=True))
+
     @transaction.atomic
     def partial_update(self, request, pk=None):
         if set(request.data) - set(CustomerUpdate().fields):
@@ -113,7 +124,13 @@ class CustomerViewSet(viewsets.GenericViewSet):
             raise serializers.ValidationError('请先启用账号，再补发次数。')
         account, _ = AIAccount.objects.get_or_create(customer=customer, defaults={
             'owner_hash': hashlib.sha256(('customer:' + str(customer.pk)).encode()).hexdigest()})
-        AIAccount.objects.filter(pk=account.pk).update(bonus_granted=F('bonus_granted') + data.validated_data['amount'])
+        account = AIAccount.objects.select_for_update().get(pk=account.pk)
+        ensure_opening(account, 'gift')
+        before = balance(account, 'gift')
+        account.bonus_granted += data.validated_data['amount']
+        account.save(update_fields=['bonus_granted', 'updated_at'])
+        record(account, f'grant:{customer.revision}', 'grant', 'gift', before, balance(account, 'gift'),
+               actor_name=request.user.username, reason=data.validated_data['reason'])
         customer.revision += 1
         customer.save(update_fields=['revision', 'updated_at'])
         audit(request, 'update', 'management_api.customer', customer,

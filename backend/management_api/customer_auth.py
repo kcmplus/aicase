@@ -185,8 +185,11 @@ class VerifyCode(CustomerView):
                     customer.last_login_at = timezone.now()
                     customer.save(update_fields=['last_login_at', 'updated_at'])
                     key = hashlib.sha256(('customer:' + str(customer.pk)).encode()).hexdigest()
-                    AIAccount.objects.get_or_create(owner_hash=key, defaults={
+                    account, account_created = AIAccount.objects.get_or_create(owner_hash=key, defaults={
                         'customer': customer, 'trial_granted': signup_credits()})
+                    if account_created:
+                        from .credit_ledger import record
+                        record(account, 'signup', 'signup', 'gift', 0, account.trial_granted)
         if not valid:
             return Response({'detail': 'This code is invalid or expired. Request a new code.'}, status=400)
         if not customer.active:
@@ -197,3 +200,20 @@ class VerifyCode(CustomerView):
         request.session['store_customer_version'] = customer.session_version
         request.session.set_expiry(30*24*60*60)
         return Response({'customer': public_customer(customer), 'created': created, 'csrfToken': get_token(request)})
+
+
+class CustomerCredits(CustomerView):
+    http_method_names = ['get', 'options']
+
+    def get(self, request):
+        customer = customer_for(request)
+        if not customer:
+            raise PermissionDenied('Sign in with your email to use AI generations.')
+        from .models import PricingPlan
+        from .ai_generation import refresh_account, expire_stale_jobs
+        from .credit_ledger import entries_page
+        account = AIAccount.objects.filter(customer=customer).first()
+        if account:
+            expire_stale_jobs(account.pk)
+            refresh_account(account, PricingPlan.objects.filter(kind='ai_monthly', active=True).first())
+        return Response(entries_page(account, request))
