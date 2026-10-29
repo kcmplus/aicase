@@ -31,7 +31,7 @@ if DEBUG and not AI_CONFIG_ENCRYPTION_KEY:
         except FileExistsError:
             pass
     AI_CONFIG_ENCRYPTION_KEY = ai_key_file.read_text().strip()
-CSRF_TRUSTED_ORIGINS = [v for v in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "http://127.0.0.1:5173,http://localhost:5173").split(",") if v]
+CSRF_TRUSTED_ORIGINS = [v for v in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:4175,http://localhost:4175,http://127.0.0.1:4173,http://localhost:4173").split(",") if v]
 INSTALLED_APPS = ["django.contrib.auth", "django.contrib.contenttypes", "django.contrib.sessions", "django.contrib.staticfiles", "rest_framework", "management_api"]
 MIDDLEWARE = ["django.middleware.security.SecurityMiddleware", "django.contrib.sessions.middleware.SessionMiddleware", "django.middleware.common.CommonMiddleware", "django.middleware.csrf.CsrfViewMiddleware", "django.contrib.auth.middleware.AuthenticationMiddleware", "django.middleware.clickjacking.XFrameOptionsMiddleware"]
 ROOT_URLCONF = "config.urls"
@@ -62,6 +62,7 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_AGE = 8 * 60 * 60
+CUSTOMER_TRUST_PROXY_IP = os.environ.get('CUSTOMER_TRUST_PROXY_IP', os.environ.get('DJANGO_TRUST_PROXY', '0')) == '1'
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 SECURE_SSL_REDIRECT = not DEBUG
