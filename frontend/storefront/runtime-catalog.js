@@ -31,6 +31,8 @@ function plan(data,kind){
 export function applyCatalog(data){
  if(data?.version!==2||!['plans','ai_styles','ai_examples'].every(key=>Array.isArray(data[key])))throw Error('Invalid catalog');
  const print=plan(data.plans,'print'),ai=plan(data.plans,'ai_monthly');
+ const signupCredits=data.signupCredits??ai?.trial_credits??0;
+ if(!quota(signupCredits))throw Error('Invalid signup credits');
  const styles=data.ai_styles.map(s=>{
   if(!code(s.code)||!label(s.name)||!safeAssetPath(s.image_path))throw Error('Invalid AI style');
   return {id:s.code,name:s.name,name_zh:typeof s.name_zh==='string'?s.name_zh:'',description:s.description||'',description_zh:typeof s.description_zh==='string'?s.description_zh:'',image:s.image_path,tag:'AI style'};
@@ -49,7 +51,7 @@ export function applyCatalog(data){
  registerImageVariants(data.image_variants);
  AI_GENERATION_CONNECTED=data.ai_generation_connected===true;
  PRINT_AVAILABLE=!!print;PRINT_PRICE_CENTS=print?.cents??0;PRINT_PRICE=print?money(print.cents):'Unavailable';
- AI_AVAILABLE=!!ai;AI_MONTHLY_CENTS=ai?.cents??0;AI_MONTHLY_PRICE=ai?money(ai.cents):'Unavailable';AI_MONTHLY_LIMIT=ai?.monthly_credits??0;AI_TRIAL_LIMIT=ai?.trial_credits??0;
+ AI_AVAILABLE=!!ai;AI_MONTHLY_CENTS=ai?.cents??0;AI_MONTHLY_PRICE=ai?money(ai.cents):'Unavailable';AI_MONTHLY_LIMIT=ai?.monthly_credits??0;AI_TRIAL_LIMIT=signupCredits;
  aiStyles.splice(0,aiStyles.length,...styles);aiExamples.splice(0,aiExamples.length,...examples);catalogStatus='ready';
 }
 export function unavailableCatalog(){

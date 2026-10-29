@@ -19,8 +19,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Customer, EmailChallenge, CustomerAuthLimit, AIAccount, PricingPlan
-from .mail_service import send_transactional_mail, mail_available
+from .models import Customer, EmailChallenge, CustomerAuthLimit, AIAccount
+from .mail_service import send_transactional_mail, mail_available, mail_config
 
 SESSION_KEY = 'store_customer_id'
 
@@ -41,7 +41,7 @@ def customer_owner(request):
 
 
 def signup_credits():
-    return PricingPlan.objects.filter(kind='ai_monthly', active=True).values_list('trial_credits', flat=True).first() or 0
+    return mail_config().signup_credits
 
 
 def public_customer(customer):
@@ -135,12 +135,10 @@ class SendCode(CustomerView):
             challenge.sent_count += 1
             challenge.attempts, challenge.delivered = 0, False
             challenge.save()
-        subject = 'POPOMO 登录验证码' if language == 'zh-CN' else 'Your POPOMO sign-in code'
-        body = (f'你的验证码是 {code}，10 分钟内有效。\n首次验证邮箱后将自动注册，并一次性领取注册赠送的 AI 次数。\n如果不是你本人操作，请忽略此邮件，请勿分享验证码。'
-                if language == 'zh-CN' else
-                f'Your sign-in code is {code}. It expires in 10 minutes.\nYour first verified sign-in creates an account and grants your one-time welcome AI generations.\nIf you did not request this email, you can ignore it. Never share this code.')
+        from .email_content import verification_email
+        subject, body, html = verification_email(code, language)
         try:
-            send_transactional_mail(email, subject, body)
+            send_transactional_mail(email, subject, body, html_body=html)
         except Exception:
             # Never echo SMTP credentials, verification codes or provider replies.
             return Response({'detail': 'We could not send your code. Please try again later.'}, status=503)

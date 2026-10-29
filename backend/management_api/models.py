@@ -161,6 +161,7 @@ class CustomerAuthLimit(models.Model):
 
 
 class SMTPConfig(Timestamped):
+    signup_credits = models.PositiveIntegerField(default=1)
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     enabled = models.BooleanField(default=False)
     host = models.CharField(max_length=253, blank=True)

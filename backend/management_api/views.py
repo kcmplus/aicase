@@ -239,9 +239,11 @@ class UploadView(APIView):
 def public_catalog(request):
     from .images import image_variants
     from .ai_generation import generation_available
+    from .customer_auth import signup_credits
     # Stable legacy indexes are never reassigned. This is an integration API, not a payment API.
     data = {
         "version": 2,
+        "signupCredits": signup_credits(),
         "ai_generation_connected": generation_available(),
         "brands": s.BrandSerializer(m.Brand.objects.filter(active=True), many=True).data,
         "phone_models": s.PublicPhoneModelSerializer(m.PhoneModel.objects.filter(active=True, brand__active=True), many=True).data,

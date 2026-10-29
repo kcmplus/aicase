@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="{{ language }}">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{ title }}</title></head>
+<body style="margin:0;padding:0;background:#f3f4ef;color:#24372f;font-family:Arial,'Helvetica Neue','Microsoft YaHei',sans-serif;-webkit-text-size-adjust:100%;">
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">{{ intro }} {{ expiry }}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4ef;">
+<tr><td align="center" style="padding:32px 16px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
+<tr><td style="padding:0 8px 24px;text-align:center;"><span style="font-size:26px;font-weight:800;letter-spacing:1px;color:#245444;">POPOMO<span style="color:#df5c9c;">.</span></span></td></tr>
+<tr><td style="background:#ffffff;border:1px solid #e0e6dd;border-top:4px solid #285441;border-radius:16px;padding:32px 24px;">
+<p style="margin:0 0 16px;font-size:10px;line-height:16px;font-weight:700;letter-spacing:2px;color:#6b7b6d;">{{ eyebrow }}</p>
+<h1 style="margin:0 0 16px;font-size:28px;line-height:1.3;letter-spacing:-0.6px;font-weight:700;">{{ title }}</h1>
+<p style="margin:0 0 28px;color:#627268;font-size:15px;line-height:1.75;">{{ intro }}</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0f5ec;border:1px solid #dce7d5;border-radius:12px;">
+<tr><td align="center" style="padding:24px 12px;">
+<p style="margin:0 0 14px;font-size:11px;font-weight:700;letter-spacing:1.5px;color:#537046;">{{ label }}</p>
+{% if code %}<p dir="ltr" style="margin:0;font-family:'Courier New',monospace;font-size:36px;line-height:1.25;font-weight:700;letter-spacing:6px;color:#245444;white-space:nowrap;">{{ code }}</p>{% else %}<p style="margin:0;font-size:28px;line-height:1.4;font-weight:700;color:#245444;">{{ status }}</p>{% endif %}
+<p style="margin:16px 0 0;font-size:12px;line-height:1.6;color:#627268;">{{ expiry }}</p>
+</td></tr></table>
+<p style="margin:24px 0;font-size:13px;line-height:1.8;color:#627268;">{{ note }}</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="border-top:1px solid #edf0e9;padding-top:20px;font-size:12px;line-height:1.8;color:#7b817a;">{{ safety }}</td></tr></table>
+</td></tr>
+<tr><td align="center" style="padding:24px 12px 8px;"><p style="margin:0 0 8px;font-size:13px;color:#526655;">{{ tagline }}</p><p style="margin:0;font-size:11px;line-height:1.8;color:#889087;">{{ footer }}</p></td></tr>
+</table>
+</td></tr></table>
+</body></html>

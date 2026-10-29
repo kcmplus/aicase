@@ -8,7 +8,7 @@ from management_api.orders import StoreOrders, StoreOrder, StoreOrderAction
 from management_api.ai_service import AIServiceSettingsView, AIServiceCheckView
 from management_api.ai_generation import AIAccountView, AIRenders, AIRenderDetail, AIRenderImage
 from management_api.customer_auth import CustomerView, SendCode, VerifyCode
-from management_api.mail_service import MailSettings, MailTest
+from management_api.mail_service import MailSettings, MailTest, RegistrationSettings
 
 router = DefaultRouter()
 router.register("ai-examples", views.AIExampleViewSet)
@@ -18,6 +18,7 @@ urlpatterns = [
     path("api/v1/store/customer/", CustomerView.as_view()),
     path("api/v1/store/customer/send-code/", SendCode.as_view()),
     path("api/v1/store/customer/verify/", VerifyCode.as_view()),
+    path("api/v1/admin/registration/", RegistrationSettings.as_view()),
     path("api/v1/admin/mail/", MailSettings.as_view()),
     path("api/v1/admin/mail/test/", MailTest.as_view()),
     path("api/v1/store/ai-account/", AIAccountView.as_view()),
