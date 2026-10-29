@@ -36,7 +36,8 @@ from rest_framework.views import APIView
 
 from .ai_service import API_BASE, NoRedirect, current_config, decrypt_api_key, encryption_ready
 from .models import AIAccount, AIRender, AIServiceConfig, AIStyle, PhoneModel, PricingPlan
-from .orders import owner, StrictSerializer
+from .orders import StrictSerializer
+from .customer_auth import customer_owner as owner, customer_for, public_customer, signup_credits
 from .phone_templates import template_for
 
 
@@ -85,7 +86,9 @@ def refresh_account(account, plan):
 
 
 def account_data(account):
-    return {'server': True, 'trialCount': account.trial_used, 'trialUsed': account.trial_used > 0,
+    return {'server': True, 'authenticated': True, 'customer': public_customer(account.customer),
+            'trialGranted': account.trial_granted, 'trialRemaining': max(0, account.trial_granted-account.trial_used),
+            'trialCount': account.trial_used, 'trialUsed': account.trial_used > 0,
             'subscription': account.subscription, 'billingMode': 'demo',
             'demoSubscriptionsAvailable': settings.DEBUG}
 
@@ -191,9 +194,15 @@ class AIPrivateView(APIView):
 
 class AIAccountView(AIPrivateView):
     def get(self, request):
+        if not customer_for(request):
+            return Response({'server': True, 'authenticated': False, 'customer': None,
+                             'trialGranted': 0, 'trialRemaining': 0, 'trialCount': 0,
+                             'trialUsed': False, 'subscription': None, 'signupCredits': signup_credits(),
+                             'demoSubscriptionsAvailable': False})
         key=owner(request); expire_stale_jobs(key)
-        account,_=AIAccount.objects.get_or_create(owner_hash=key)
-        return Response(account_data(refresh_account(account, ai_plan())))
+        account=AIAccount.objects.get(owner_hash=key)
+        plan=PricingPlan.objects.filter(kind='ai_monthly',active=True).first()
+        return Response(account_data(refresh_account(account, plan) if plan else account))
 
     @transaction.atomic
     def post(self, request):
@@ -253,7 +262,7 @@ class AIRenders(AIPrivateView):
             if AIRender.objects.filter(status__in=['queued','generating']).count()>=settings.AI_CONCURRENT_RENDER_LIMIT:
                 return Response({'detail':'All AI render slots are busy. Please try again shortly.'},status=429)
             account,_=AIAccount.objects.select_for_update().get_or_create(owner_hash=key);refresh_account(account,plan)
-            if account.trial_used<plan.trial_credits:
+            if account.trial_used<account.trial_granted:
                 account.trial_used+=1;allocation={'type':'trial'}
             elif account.subscription and int(timezone.now().timestamp()*1000)<account.subscription['endsAt'] and account.subscription['used']<account.subscription['monthlyLimit']:
                 account.subscription={**account.subscription,'used':account.subscription['used']+1}

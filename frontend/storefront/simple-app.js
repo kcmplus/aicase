@@ -21,6 +21,7 @@ import {activeLook,lookBrowserContent,setLookMode,setLookComparison,updateLookIm
 import {aiStyles,refreshAIOrder,canApplyAIOrder} from './ai-core.js';
 import {createLiveRender,getAIAccount,changeAIAccount,submitLiveRender,refreshLiveRender,cancelLiveRender} from './ai-service.js';
 import {importPhoto} from './simple-upload.js';
+import {customerPage,sendEmailCode,verifyEmailCode,signOutCustomer} from './customer-account.js';
 import {create as createQR} from './vendor/qr.js';
 
 const KEY = 'popomo-simple-v1';
@@ -32,7 +33,9 @@ let storageWarning = false;
 let aiJob=null,aiBusy=false;
 const aiUi={mode:'pair',compare:50,lookMode:'effect',lookCompare:50,accepted:false,error:''};
 let cleanupAIStudio=()=>{};
-let membership=await updateDesign('ai-membership-v1',refreshMembership,freshMembership());
+const customerUI={email:'',codeSent:false,busy:false,error:'',resendAt:0,next:'choose'};
+let resendTimer;
+let membership=await updateDesign('ai-membership-v1',a=>({...refreshMembership(a),server:true,authenticated:false,customer:null,trialRemaining:0,subscription:null}),freshMembership());
 let orderBook=await updateDesign('print-orders-v1',v=>v,freshOrders());
 let checkoutDraft=await readDesign('checkout-draft');
 let orderRows=[],orderPage=1,orderHasMore=false,orderError='';
@@ -69,6 +72,7 @@ state.aiExample=exampleFor(state.aiExample).id;
 if(!exampleFor(state.aiExample).results[state.aiStyle])state.aiStyle=Object.keys(exampleFor(state.aiExample).results)[0]||'';
 membership=await updateDesign('ai-membership-v1',a=>migrateRender(a,aiJob),freshMembership());
 if(aiJob)aiJob=membership.jobs[aiJob.id];
+if(aiJob?.status==='awaiting_confirmation')customerUI.next='ai';
 try{await syncAIAccount();if(aiJob?.mode==='live')await rememberLiveJob(await refreshLiveRender(aiJob));}catch{/* A saved job can be resumed when the service returns. */}
 let scannedPass = null;
 let noticeTimer;
@@ -292,7 +296,7 @@ function notify(message) {
 }
 function go(route) {if(location.hash==='#'+route)render();else location.hash=route;}
 function header() {
-  return `<header class="header wrap"><a class="wordmark" href="#home" aria-label="POPOMO home">${brandLogo()}</a><nav aria-label="Main navigation"><a href="#designs">The designs</a><a href="#orders">My orders</a></nav><a class="saved-link" href="#pass">${icon('scan',18)}<span>My design</span>${state.pass?'<i aria-label="Design saved"></i>':''}</a>${languageControl()}</header>${aiJob&&['queued','generating','ready'].includes(aiJob.status)&&state.ai?.jobId!==aiJob.id?`<div class="ai-resume wrap"><a href="#ai">✦ AI studio · ${aiJob.status==='ready'?'Your AI image is ready':aiJob.status==='queued'?'Waiting in queue':'Rendering'} <span>View render →</span></a></div>`:''}`;
+  return `<header class="header wrap"><a class="wordmark" href="#home" aria-label="POPOMO home">${brandLogo()}</a><nav aria-label="Main navigation"><a href="#designs">The designs</a><a href="#orders">My orders</a></nav><a class="account-link" href="#account" aria-label="${membership.authenticated?'My account':'Sign in'}">${icon('user',18)}<span>${membership.authenticated?'My account':'Sign in'}</span></a><a class="saved-link" href="#pass">${icon('scan',18)}<span>My design</span>${state.pass?'<i aria-label="Design saved"></i>':''}</a>${languageControl()}</header>${aiJob&&['queued','generating','ready'].includes(aiJob.status)&&state.ai?.jobId!==aiJob.id?`<div class="ai-resume wrap"><a href="#ai">✦ AI studio · ${aiJob.status==='ready'?'Your AI image is ready':aiJob.status==='queued'?'Waiting in queue':'Rendering'} <span>View render →</span></a></div>`:''}`;
 }
 function footer() {
   return `<footer class="footer wrap"><a href="#home" class="footer-wordmark">POPOMO<span> A little more you.</span></a><p>Prototype · Scanning & printing are simulated.</p><a href="#kiosk">Station demo ${arrow()}</a></footer>`;
@@ -455,12 +459,12 @@ function render(preserveScroll=false) {
   if(route!=='choose')canvasExpanded=false;
   if(route!=='choose')effectPanelOpen=false;
   document.body.classList.toggle('canvas-editor-open',canvasExpanded);
-  const pages={choose,pass:passPage,kiosk:kioskPage,ai:()=>aiPage(aiJob,membership,aiBusy,aiUi),membership:()=>membershipPage(membership),checkout:checkoutPage,orders:ordersPage};
+  const pages={account:()=>customerPage(membership,customerUI),choose,pass:passPage,kiosk:kioskPage,ai:()=>aiPage(aiJob,membership,aiBusy,aiUi),membership:()=>membershipPage(membership),checkout:checkoutPage,orders:ordersPage};
   app.classList.toggle('is-ai-studio',route==='ai'&&aiJob?.mode==='live');
   app.classList.toggle('is-editor',route==='choose');
   app.innerHTML=header()+`<main id="main" tabindex="-1">${catalogStatus==='unavailable'?'<div class="catalog-warning" role="status">Prices and AI previews could not be loaded. Your saved designs are still available. <button class="text-button" data-action="reload-catalog">Try again</button></div>':''}${(Object.hasOwn(pages,route)?pages[route]:home)()}</main>`+footer();
   if(aiBusy)document.querySelectorAll('[data-ai-action],#ai-credit-form button,#ai-subscription-form button').forEach(el=>el.disabled=true);
-  const title=({choose:'Choose your case',pass:'Your design pass',kiosk:'Station demo',ai:'Your AI render',membership:'AI membership',checkout:'Review print order',orders:'My orders'})[route];
+  const title=({account:'My account',choose:'Choose your case',pass:'Your design pass',kiosk:'Station demo',ai:'Your AI render',membership:'AI membership',checkout:'Review print order',orders:'My orders'})[route];
   document.title=title?`${t(title)} · POPOMO`:t('POPOMO — A little more you.');
   localize(app);document.querySelector('.skip-link').textContent=t('Skip to content');
   cleanupAIStudio=mountAIStudio(app);
@@ -591,6 +595,7 @@ app.addEventListener('input',event=>{
   if(event.target.id==='design-code'){event.target.removeAttribute('aria-invalid');document.getElementById('scan-error').textContent='';}
 });
 app.addEventListener('submit',async event=>{
+  if(event.target.id==='customer-email-form'){event.preventDefault();const fields=new FormData(event.target);await handleCustomer(customerUI.codeSent?'verify':'send',fields);return;}
   if(event.target.id==='ai-credit-form'||event.target.id==='ai-subscription-form'){
     event.preventDefault();if(aiBusy)return;const accepted=new FormData(event.target).has('accepted');
     await confirmAI(event.target.id==='ai-credit-form',accepted);return;
@@ -729,6 +734,7 @@ if(selectedArtwork==='all'){const layout=artworkLayout();layout.zoom=100;layout.
 document.querySelector('.skip-link').addEventListener('click',event=>{event.preventDefault();document.querySelector('#main')?.focus();});
 async function navigate(){
  const [route,query='']=location.hash.slice(1).split('?');const params=new URLSearchParams(query),code=params.get('code');
+ if(route==='account'||route==='membership')try{await syncAIAccount();}catch(error){customerUI.error=error.message;}
  if(route==='pass'||route==='kiosk'){
    orderBook=await readDesign('print-orders-v1')||freshOrders();const order=state.pass&&orderForCode(orderBook,state.pass.code);
    if(order?.server)try{const latest=await refreshOrder(order.id);state.pass=latest.pass;if(state.job?.orderId===latest.id)state.job={...state.job,status:latest.status,pass:latest.pass};}catch(e){notify(e.message);}
@@ -761,15 +767,19 @@ async function loadAssetPhoto(url){
  const blob=await response.blob();return importPhoto(new File([blob],'sample.png',{type:blob.type}));
 }
 async function mergeAIAccount(data){
- membership=await updateDesign('ai-membership-v1',a=>({...a,...data,jobs:a.jobs||{}}),freshMembership());
+ if(aiJob&&(aiJob.customerId&&aiJob.customerId!==data.customer?.id||aiJob.remoteId&&!aiJob.customerId)){aiJob=null;state.aiJobId=null;save();}
+ membership=await updateDesign('ai-membership-v1',a=>({...a,...data,jobs:a.customer?.id===data.customer?.id?a.jobs||{}:{}}),freshMembership());
 }
 async function syncAIAccount(){await mergeAIAccount(await getAIAccount());}
 async function rememberLiveJob(job){
+ job={...job,customerId:job.customerId||membership.customer?.id||null};
  membership=await updateDesign('ai-membership-v1',a=>({...a,jobs:{...a.jobs,[job.id]:job}}),freshMembership());
  aiJob=job;state.aiJobId=job.id;save();
 }
 async function confirmAI(generation,accepted){
- if(aiBusy)return;aiBusy=true;aiUi.error='';aiUi.accepted=accepted;render(true);
+ if(aiBusy)return;
+ if(!membership.authenticated){customerUI.next='ai';go('account');return;}
+ aiBusy=true;aiUi.error='';aiUi.accepted=accepted;render(true);
  try{
   if(generation){
    if(aiJob?.mode!=='live')throw Error('Choose your photo and start a new AI render.');
@@ -784,7 +794,8 @@ async function newAI(input){
  const job=createLiveRender({...input,model:input.model||state.model});
  if(aiJob?.mode==='live'&&aiJob.status==='awaiting_confirmation'&&!aiJob.remoteId)await rememberLiveJob({...aiJob,status:'cancelled'});
  Object.assign(aiUi,{mode:'pair',compare:50,accepted:false,error:''});
- await rememberLiveJob(job);go('ai');
+ await rememberLiveJob(job);
+ if(!membership.authenticated){customerUI.next='ai';go('account');}else go('ai');
 }
 async function handleAI(action){
  if(action==='upload'){openPhotoPicker();return;}
@@ -835,3 +846,30 @@ setInterval(async()=>{
  }catch{if(++pollErrors===1)notify('We could not update your render. Reconnecting…');}
  finally{pollBusy=false;}
 },3000);
+
+app.addEventListener('click',async event=>{
+ const button=event.target.closest('[data-customer-action]');
+ if(!button)return;event.preventDefault();await handleCustomer(button.dataset.customerAction);
+});
+async function handleCustomer(action,fields){
+ if(customerUI.busy)return;
+ if(action==='change-email'){customerUI.codeSent=false;customerUI.error='';render(true);return;}
+ customerUI.busy=true;customerUI.error='';
+ if(action==='send')customerUI.email=String(fields.get('email')||'').trim();
+ const code=String(fields?.get('code')||'').trim();
+ render(true);
+ try{
+  if(action==='send'||action==='resend'){
+   await sendEmailCode(customerUI.email);customerUI.codeSent=true;customerUI.resendAt=Date.now()+60000;
+   clearTimeout(resendTimer);resendTimer=setTimeout(()=>{const button=app.querySelector('[data-customer-action="resend"]');if(button&&!customerUI.busy)button.disabled=false;},60000);
+  }else if(action==='verify'){
+   await verifyEmailCode(customerUI.email,code);await syncAIAccount();customerUI.codeSent=false;
+   customerUI.busy=false;go(customerUI.next==='ai'&&aiJob?'ai':'choose');
+  }else if(action==='logout'){
+   await signOutCustomer();
+   await mergeAIAccount({server:true,authenticated:false,customer:null,trialRemaining:0,trialGranted:0,subscription:null,demoSubscriptionsAvailable:false});
+   customerUI.email='';customerUI.codeSent=false;await syncAIAccount();
+  }
+ }catch(error){customerUI.error=error.message;}
+ finally{customerUI.busy=false;render(true);if(customerUI.codeSent)document.getElementById('customer-code')?.focus({preventScroll:true});}
+}

@@ -17,7 +17,7 @@ from rest_framework.test import APIClient
 
 from .ai_generation import edit_image, GenerationError, run_render, restore_credit
 from .ai_service import encrypt_api_key
-from .models import AIAccount, AIRender, AIServiceConfig, AIStyle
+from .models import AIAccount, AIRender, AIServiceConfig, AIStyle, Customer
 
 
 def png():
@@ -36,7 +36,17 @@ class LiveGenerationTests(TestCase):
 
     def setUp(self):
         cache.clear(); self.client=APIClient(); self.client.credentials(HTTP_X_ORDER_KEY='a'*64)
+        self.customer=Customer.objects.create(email='ai@example.com',verified_at=timezone.now())
+        self.login_customer(self.customer)
+        key=hashlib.sha256(('customer:'+str(self.customer.pk)).encode()).hexdigest()
+        AIAccount.objects.create(owner_hash=key,customer=self.customer,trial_granted=1)
         self.body={'request_key':str(uuid.uuid4()),'accepted':True,'photo':'data:image/png;base64,'+base64.b64encode(png()).decode(),'style_id':'anime','model':'iPhone 17'}
+
+    def login_customer(self,customer):
+        session=self.client.session
+        if customer:session['store_customer_id']=str(customer.pk)
+        else:session.pop('store_customer_id',None)
+        session.save()
 
     def create(self, **changes):
         with patch('management_api.ai_generation.dispatch_render') as dispatch, self.captureOnCommitCallbacks(execute=True):
@@ -61,18 +71,18 @@ class LiveGenerationTests(TestCase):
     def test_rejects_missing_owner_consent_unknown_fields_and_invalid_images(self):
         for changes in ({'accepted':False},{'photo':'data:image/png;base64,AQID'},{'style_id':'missing'}, {'model':'Unknown'}, {'prompt':'override'}, {'api_key':'override'}):
             response,dispatch=self.create(**changes);self.assertEqual(response.status_code,400,changes);self.assertFalse(dispatch.called)
-        self.client.credentials();response,_=self.create();self.assertEqual(response.status_code,403)
+        self.login_customer(None);response,_=self.create();self.assertEqual(response.status_code,403)
         self.assertFalse(AIRender.objects.exists())
 
     def test_owner_controls_status_image_and_cancel(self):
         job=self.job();base=f'/api/v1/store/ai-renders/{job.id}/'
-        self.client.credentials(HTTP_X_ORDER_KEY='b'*64)
+        self.login_customer(Customer.objects.create(email='other@example.com',verified_at=timezone.now()))
         self.assertEqual(self.client.get(base).status_code,404)
         self.assertEqual(self.client.post(base,{'action':'cancel'},format='json').status_code,404)
         with patch('management_api.ai_generation.edit_image',return_value=(png(),'test-request')):
             run_render(job.id)
         self.assertEqual(self.client.get(base+'image/').status_code,404)
-        self.client.credentials(HTTP_X_ORDER_KEY='a'*64)
+        self.login_customer(self.customer)
         response=self.client.get(base+'image/');self.assertEqual(response.content,png());self.assertIn('no-store',response['Cache-Control'])
         self.assertNotIn('input_image',self.client.get(base).data)
 

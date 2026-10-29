@@ -1,11 +1,16 @@
-import {orderAccessKey} from './order-service.js';
 import {createAIOrder} from './ai-core.js';
 import {importPhoto} from './simple-upload.js';
 
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-export async function aiRequest(path,{method='GET',body,fetcher=fetch,key=orderAccessKey(),image=false}={}){
- const response=await fetcher('/api/v1/store/'+path,{method,credentials:'omit',cache:'no-store',
-  headers:{'Content-Type':'application/json','X-Order-Key':key},signal:AbortSignal.timeout(25000),
+export async function aiRequest(path,{method='GET',body,fetcher=fetch,image=false}={}){
+ const headers={'Content-Type':'application/json'};
+ if(!['GET','HEAD'].includes(method)){
+  const csrf=await fetcher('/api/v1/auth/csrf/',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(25000)});
+  if(!csrf.ok)throw Error('Sign-in could not be reached. Please try again.');
+  headers['X-CSRFToken']=(await csrf.json()).csrfToken;
+ }
+ const response=await fetcher('/api/v1/store/'+path,{method,credentials:'same-origin',cache:'no-store',
+  headers,signal:AbortSignal.timeout(25000),
   ...(body===undefined?{}:{body:JSON.stringify(body)})});
  if(response.ok&&image)return response.blob();
  let data;try{data=await response.json();}catch{throw Error('The AI service could not be reached. Please try again.');}

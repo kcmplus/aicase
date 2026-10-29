@@ -37,9 +37,9 @@ test('server allowances are never refreshed from local clocks',()=>{
  const a={...freshMembership(),server:true,subscription:{anchor:1,endsAt:10,renew:true,cycle:0,used:15,monthlyLimit:15}};
  assert.deepEqual(refreshMembership(a,Date.now()),a);
 });
-test('requests use owner access and do not carry browser login cookies',async()=>{
+test('AI requests carry customer session cookies',async()=>{
  const result=await aiRequest('ai-account/',{key:'a'.repeat(64),fetcher:async(url,options)=>{
-  assert.equal(url,'/api/v1/store/ai-account/');assert.equal(options.credentials,'omit');assert.equal(options.cache,'no-store');assert.equal(options.headers['X-Order-Key'],'a'.repeat(64));return {ok:true,json:async()=>({server:true})};
+  assert.equal(url,'/api/v1/store/ai-account/');assert.equal(options.credentials,'same-origin');assert.equal(options.cache,'no-store');assert.equal(options.headers['X-Order-Key'],undefined);return {ok:true,json:async()=>({server:true})};
  }});assert.equal(result.server,true);
  await assert.rejects(()=>aiRequest('ai-account/',{key:'a'.repeat(64),fetcher:async()=>({ok:false,status:503,json:async()=>({detail:'Service unavailable'})})}),/Service unavailable/);
 });
