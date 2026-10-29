@@ -1,7 +1,7 @@
 """Encrypted SMTP settings and transactional email delivery."""
 import re
 from email.utils import formataddr
-from django.core.mail import EmailMessage
+from django.core.mail import EmailMultiAlternatives
 from django.core.mail.backends.smtp import EmailBackend
 from django.db import transaction
 from django.utils.decorators import method_decorator
@@ -27,12 +27,12 @@ def mail_available():
 
 
 def safe_config(c):
-    return {**{name: getattr(c, name) for name in ('enabled', 'host', 'port', 'security', 'username', 'from_email', 'from_name', 'revision')},
+    return {**{name: getattr(c, name) for name in ('enabled', 'host', 'port', 'security', 'username', 'from_email', 'from_name', 'revision', 'signup_credits')},
             'has_password': bool(c.password_ciphertext), 'encryption_ready': encryption_ready()}
 
 
 @sensitive_variables()
-def send_transactional_mail(recipient, subject, body, config=None):
+def send_transactional_mail(recipient, subject, body, config=None, *, html_body=None):
     c = config or mail_config()
     if not c.host or not c.from_email:
         raise ValueError('SMTP is not configured')
@@ -43,7 +43,9 @@ def send_transactional_mail(recipient, subject, body, config=None):
     connection = EmailBackend(host=c.host, port=c.port, username=c.username, password=password,
                               use_tls=c.security=='starttls', use_ssl=c.security=='ssl', timeout=15)
     with connection:
-        message = EmailMessage(subject, body, formataddr((c.from_name, c.from_email)), [recipient], connection=connection)
+        message = EmailMultiAlternatives(subject, body, formataddr((c.from_name, c.from_email)), [recipient], connection=connection)
+        if html_body:
+            message.attach_alternative(html_body, 'text/html')
         if message.send() != 1:
             raise OSError('Email delivery failed')
 
@@ -115,8 +117,32 @@ class MailTest(APIView):
         if request.data.get('revision') != c.revision:
             return Response({'detail': '请先保存并刷新邮件配置。'}, status=409)
         try:
-            send_transactional_mail(recipient, 'POPOMO 邮件配置测试 / Email test',
-                                    '这是一封 SMTP 测试邮件。\nYour POPOMO SMTP settings are working.', c)
+            from .email_content import test_email
+            subject, body, html = test_email()
+            send_transactional_mail(recipient, subject, body, c, html_body=html)
         except Exception:
             return Response({'detail': '发送失败，请检查主机、端口、加密方式、授权码及发件人权限。'}, status=503)
         return Response({'detail': 'SMTP 服务已接受测试邮件，请检查收件箱和垃圾邮件。'})
+
+
+class RegistrationInput(serializers.Serializer):
+    revision = serializers.IntegerField(min_value=0)
+    signup_credits = serializers.IntegerField(min_value=0, max_value=1000)
+
+
+@method_decorator(never_cache, name='dispatch')
+class RegistrationSettings(APIView):
+    permission_classes = [SuperuserOnly]
+
+    @transaction.atomic
+    def patch(self, request):
+        data = RegistrationInput(data=request.data)
+        data.is_valid(raise_exception=True)
+        c, _ = SMTPConfig.objects.select_for_update().get_or_create(pk=1)
+        if c.revision != data.validated_data['revision']:
+            return Response({'detail': '配置已更新，请刷新后重试。'}, status=409)
+        c.signup_credits = data.validated_data['signup_credits']
+        c.revision += 1
+        c.save(update_fields=['signup_credits', 'revision', 'updated_at'])
+        audit(request, 'update', 'management_api.smtpconfig', c, '更新注册赠送次数')
+        return Response(safe_config(c))

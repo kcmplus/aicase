@@ -21,3 +21,14 @@ test('expired codes show server feedback and email values remain escaped',async(
  const page=customerPage({authenticated:true,customer:{email:'<b>@example.com'},trialRemaining:2},{next:'choose'});
  assert.match(page,/&lt;b&gt;@example.com/);assert.match(page,/Sign out/);assert.doesNotMatch(page,/customer-email-form/);
 });
+
+test('signed-in profile shows server balances and escapes names without exposing staff fields',()=>{
+ const page=customerPage({server:true,authenticated:true,customer:{email:'hello@example.com',displayName:'<script>bad()</script>',joinedAt:'2026-10-29T01:00:00Z'},trialRemaining:7,subscription:{endsAt:Date.now()+3600000,used:2,monthlyLimit:10}},{});
+ assert.match(page,/customer-profile-form/);assert.match(page,/Gift generations remaining/);assert.match(page,/>7<\/strong>/);assert.match(page,/>8<\/strong>/);
+ assert.match(page,/Member since/);assert.doesNotMatch(page,/<script>/);assert.doesNotMatch(page,/name="(?:email|active|notes)"/);
+});
+
+test('credit activity shows pool, signed changes and balance without rendering private reasons',()=>{
+ const page=customerPage({authenticated:true,customer:{email:'test@example.com'},trialRemaining:2},{ledgerOpen:true,ledger:[{id:1,kind:'grant',pool:'gift',amount:3,balanceAfter:4,createdAt:'2026-10-29T08:00:00Z',reason:'PRIVATE STAFF NOTE',actorName:'private-admin',renderId:'<script>bad()</script>'}],ledgerNext:1});
+ assert.match(page,/Credit activity/);assert.match(page,/Extra credits/);assert.match(page,/>\+3</);assert.match(page,/>Balance<\/span> 4/);assert.match(page,/Load earlier activity/);assert.doesNotMatch(page,/PRIVATE STAFF NOTE|private-admin|<script>/);
+});

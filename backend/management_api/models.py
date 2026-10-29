@@ -127,13 +127,18 @@ class AuditLog(models.Model):
 
 
 class Customer(Timestamped):
+    display_name = models.CharField(max_length=60, blank=True)
+    notes = models.CharField(max_length=1000, blank=True)
+    last_login_at = models.DateTimeField(null=True, blank=True)
+    revision = models.PositiveIntegerField(default=0)
+    session_version = models.PositiveIntegerField(default=0)
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True)
     active = models.BooleanField(default=True)
     verified_at = models.DateTimeField()
 
     class Meta:
-        default_permissions = ()
+        default_permissions = ("view", "change")
 
 
 class EmailChallenge(models.Model):
@@ -161,6 +166,7 @@ class CustomerAuthLimit(models.Model):
 
 
 class SMTPConfig(Timestamped):
+    signup_credits = models.PositiveIntegerField(default=1)
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     enabled = models.BooleanField(default=False)
     host = models.CharField(max_length=253, blank=True)
@@ -181,6 +187,7 @@ class AIAccount(Timestamped):
     owner_hash = models.CharField(primary_key=True, max_length=64, editable=False)
     customer = models.OneToOneField(Customer, null=True, blank=True, on_delete=models.PROTECT)
     trial_granted = models.PositiveIntegerField(default=0)
+    bonus_granted = models.PositiveIntegerField(default=0)
     trial_used = models.PositiveIntegerField(default=0)
     subscription = models.JSONField(null=True, blank=True)
 
@@ -214,3 +221,24 @@ class AIRender(Timestamped):
     class Meta:
         ordering = ['-created_at']
         default_permissions = ()
+
+
+class CreditEntry(models.Model):
+    account = models.ForeignKey(AIAccount, on_delete=models.PROTECT, related_name='credit_entries')
+    event_key = models.CharField(max_length=150)
+    kind = models.CharField(max_length=30)
+    pool = models.CharField(max_length=10, choices=[('gift', '赠送额度'), ('monthly', '月度额度')])
+    amount = models.IntegerField()
+    balance_before = models.PositiveIntegerField()
+    balance_after = models.PositiveIntegerField()
+    period = models.BigIntegerField(null=True, blank=True)
+    render_id = models.UUIDField(null=True, blank=True)
+    reason = models.CharField(max_length=200, blank=True)
+    actor_name = models.CharField(max_length=150, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-id']
+        default_permissions = ()
+        constraints = [models.UniqueConstraint(fields=['account', 'event_key'], name='unique_credit_event'),
+                       models.CheckConstraint(condition=models.Q(balance_after=models.F('balance_before') + models.F('amount')), name='credit_balance_matches_delta')]

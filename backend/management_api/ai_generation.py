@@ -17,6 +17,7 @@ import warnings
 from datetime import datetime, timedelta, timezone as datetime_timezone
 from io import BytesIO
 
+from .credit_ledger import balance, ensure_opening, record, expire_monthly
 from django.conf import settings
 from django.db import transaction
 from django.db.models import F
@@ -71,23 +72,30 @@ def period_boundary(anchor, months):
     return int(start.replace(year=year, month=month+1, day=day).timestamp()*1000)
 
 
+@transaction.atomic
 def refresh_account(account, plan):
+    AIAccount.objects.select_for_update().get(pk=account.pk)
+    account.refresh_from_db()
+    expire_monthly(account)
     s = account.subscription
     now = int(timezone.now().timestamp()*1000)
-    if s and s.get('renew') and now >= s['endsAt']:
+    if s and plan and s.get('renew') and now >= s['endsAt']:
         cycle = s['cycle']+1
         while now >= period_boundary(s['anchor'], cycle+1):
             cycle += 1
         account.subscription = {**s, 'cycle': cycle, 'startsAt': period_boundary(s['anchor'], cycle),
                                 'endsAt': period_boundary(s['anchor'], cycle+1), 'used': 0,
-                                'monthlyLimit': plan.monthly_credits, 'priceCents': int(plan.price*100)}
+                                'monthlyLimit': plan.monthly_credits, 'priceCents': int(plan.price*100), 'ledger_expired': False}
         account.save(update_fields=['subscription', 'updated_at'])
+        record(account, f"renew:{account.subscription['startsAt']}", 'renewal', 'monthly', 0, balance(account, 'monthly'), period=account.subscription['startsAt'])
     return account
 
 
 def account_data(account):
     return {'server': True, 'authenticated': True, 'customer': public_customer(account.customer),
-            'trialGranted': account.trial_granted, 'trialRemaining': max(0, account.trial_granted-account.trial_used),
+            'trialGranted': account.trial_granted + account.bonus_granted,
+            'welcomeGranted': account.trial_granted, 'bonusGranted': account.bonus_granted,
+            'trialRemaining': max(0, account.trial_granted + account.bonus_granted-account.trial_used),
             'trialCount': account.trial_used, 'trialUsed': account.trial_used > 0,
             'subscription': account.subscription, 'billingMode': 'demo',
             'demoSubscriptionsAvailable': settings.DEBUG}
@@ -100,7 +108,7 @@ def render_data(job):
             'createdAt': int(job.created_at.timestamp()*1000),
             'startedAt': int(job.started_at.timestamp()*1000) if job.started_at else None,
             'completedAt': int(job.completed_at.timestamp()*1000) if job.completed_at else None,
-            'payment': 'credit_restored' if job.credit_restored else 'credit_reserved',
+            'payment': 'credit_restored' if job.credit_restored else 'credit_expired' if job.error_code=='credit_period_expired' else 'credit_reserved',
             'errorCode': job.error_code, 'errorMessage': job.error_message,
             'result': f'/api/v1/store/ai-renders/{job.id}/image/' if job.status == 'ready' else None}
 
@@ -155,15 +163,26 @@ def restore_credit(job, status, code='', message=''):
         if locked.status not in ('queued','generating'):
             return locked
         account = AIAccount.objects.select_for_update().get(pk=locked.owner_hash)
+        expired = False
         if not locked.credit_restored:
             allocation = locked.allocation
-            if allocation.get('type') == 'trial':
+            pool = 'gift' if allocation.get('type') == 'trial' else 'monthly'
+            expire_monthly(account)
+            ensure_opening(account, pool)
+            before = balance(account, pool)
+            expired = pool == 'monthly' and (not account.subscription or account.subscription['startsAt'] != allocation.get('period') or account.subscription.get('ledger_expired'))
+            if pool == 'gift':
                 account.trial_used = max(0, account.trial_used-1)
-            elif account.subscription and account.subscription['startsAt'] == allocation.get('period'):
+            elif not expired:
                 account.subscription = {**account.subscription, 'used': max(0,account.subscription['used']-1)}
             account.save(update_fields=['trial_used','subscription','updated_at'])
+            record(account, 'refund:'+str(locked.pk), 'refund_expired' if expired else 'cancel_refund' if status=='cancelled' else 'failure_refund',
+                   pool, before, balance(account, pool), render_id=locked.pk, period=allocation.get('period'))
+        if expired:
+            code='credit_period_expired'
+            message='The original credit period has expired. Your current balance is unchanged.'
         locked.status=status; locked.error_code=code; locked.error_message=message
-        locked.credit_restored=True; locked.completed_at=timezone.now(); locked.input_image=b''
+        locked.credit_restored=not expired; locked.completed_at=timezone.now(); locked.input_image=b''
         locked.save(update_fields=['status','error_code','error_message','credit_restored','completed_at','input_image','updated_at'])
         return locked
 
@@ -202,7 +221,7 @@ class AIAccountView(AIPrivateView):
         key=owner(request); expire_stale_jobs(key)
         account=AIAccount.objects.get(owner_hash=key)
         plan=PricingPlan.objects.filter(kind='ai_monthly',active=True).first()
-        return Response(account_data(refresh_account(account, plan) if plan else account))
+        return Response(account_data(refresh_account(account, plan)))
 
     @transaction.atomic
     def post(self, request):
@@ -224,6 +243,7 @@ class AIAccountView(AIPrivateView):
         else:
             account.subscription={'anchor':now,'cycle':0,'startsAt':now,'endsAt':period_boundary(now,1),
                                   'used':0,'renew':True,'monthlyLimit':plan.monthly_credits,'priceCents':int(plan.price*100)}
+            record(account, f'subscribe:{now}', 'subscription', 'monthly', 0, balance(account, 'monthly'), period=now)
         account.save(update_fields=['subscription','updated_at'])
         return Response(account_data(account))
 
@@ -262,9 +282,12 @@ class AIRenders(AIPrivateView):
             if AIRender.objects.filter(status__in=['queued','generating']).count()>=settings.AI_CONCURRENT_RENDER_LIMIT:
                 return Response({'detail':'All AI render slots are busy. Please try again shortly.'},status=429)
             account,_=AIAccount.objects.select_for_update().get_or_create(owner_hash=key);refresh_account(account,plan)
-            if account.trial_used<account.trial_granted:
+            gift_before = balance(account, 'gift'); monthly_before = balance(account, 'monthly')
+            if account.trial_used<account.trial_granted + account.bonus_granted:
+                ensure_opening(account, 'gift')
                 account.trial_used+=1;allocation={'type':'trial'}
             elif account.subscription and int(timezone.now().timestamp()*1000)<account.subscription['endsAt'] and account.subscription['used']<account.subscription['monthlyLimit']:
+                ensure_opening(account, 'monthly')
                 account.subscription={**account.subscription,'used':account.subscription['used']+1}
                 allocation={'type':'monthly','period':account.subscription['startsAt']}
             else:
@@ -273,6 +296,8 @@ class AIRenders(AIPrivateView):
             job=AIRender.objects.create(request_key=data['request_key'],owner_hash=key,style_code=style.code,
                 style_name=style.name,model_name=config.model_name,phone_model=model.name,phone_template_id=template['id'],
                 prompt=build_prompt(style,model,template),input_image=raw,input_mime=mime,input_hash=digest,allocation=allocation)
+            pool = 'gift' if allocation['type']=='trial' else 'monthly'
+            record(account, 'render:'+str(job.pk), 'generation', pool, gift_before if pool=='gift' else monthly_before, balance(account,pool), render_id=job.pk, period=allocation.get('period'))
             transaction.on_commit(lambda:dispatch_render(job.id))
         return Response(render_data(job),status=202)
 

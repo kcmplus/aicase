@@ -11,7 +11,7 @@ from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
-from .models import AIAccount, Customer, EmailChallenge, SMTPConfig, PricingPlan
+from .models import AIAccount, Customer, EmailChallenge, SMTPConfig, PricingPlan, CreditEntry
 from .ai_service import cipher
 
 
@@ -21,7 +21,7 @@ class CustomerAccountTests(TestCase):
     def setUpTestData(cls):
         call_command('seed_catalog',stdout=StringIO())
         PricingPlan.objects.filter(kind='ai_monthly').update(trial_credits=3)
-        SMTPConfig.objects.create(enabled=True,host='smtp.example.com',from_email='hello@example.com')
+        SMTPConfig.objects.create(signup_credits=3,enabled=True,host='smtp.example.com',from_email='hello@example.com')
 
     def setUp(self):
         cache.clear()
@@ -33,6 +33,8 @@ class CustomerAccountTests(TestCase):
         self.assertEqual(result.status_code,200,result.data)
         code=re.search(r'\b\d{6}\b',mail.call_args.args[2])[0]
         self.assertNotIn(code,str(result.data))
+        self.assertIn(code,mail.call_args.kwargs['html_body'])
+        self.assertIn('Expires in 10 minutes',mail.call_args.kwargs['html_body'])
         return code
 
     def verify(self,code,email='person@example.com',client=None):
@@ -49,14 +51,26 @@ class CustomerAccountTests(TestCase):
         self.assertEqual(Customer.objects.get().email,'person@example.com')
         self.assertEqual(AIAccount.objects.get().trial_granted,3)
         AIAccount.objects.update(trial_used=2)
-        PricingPlan.objects.filter(kind='ai_monthly').update(trial_credits=10)
+        SMTPConfig.objects.update(signup_credits=10)
         EmailChallenge.objects.update(sent_at=timezone.now()-timedelta(minutes=2))
         other=APIClient();code=self.send(client=other)
         second=self.verify(code,client=other);self.assertFalse(second.data['created'])
         data=other.get('/api/v1/store/ai-account/').data
         self.assertEqual(data['trialRemaining'],1);self.assertEqual(data['trialGranted'],3)
         self.assertEqual(Customer.objects.count(),1);self.assertEqual(AIAccount.objects.count(),1)
+        self.assertEqual(CreditEntry.objects.filter(kind='signup').count(),1)
+        self.assertEqual(CreditEntry.objects.get(kind='signup').amount,3)
         self.assertEqual(self.verify(code).status_code,400)  # replay
+
+    def test_signup_offer_independent_from_plan_and_zero_is_respected(self):
+        PricingPlan.objects.filter(kind='ai_monthly').update(trial_credits=99)
+        self.assertEqual(self.client.get('/api/v1/store/customer/').data['signupCredits'], 3)
+        self.assertEqual(self.client.get('/api/v1/catalog/').data['signupCredits'], 3)
+        self.verify(self.send())
+        SMTPConfig.objects.update(signup_credits=0)
+        self.verify(self.send('second@example.com'), 'second@example.com')
+        self.assertEqual(AIAccount.objects.get(customer__email='second@example.com').trial_granted, 0)
+        self.assertEqual(AIAccount.objects.get(customer__email='person@example.com').trial_granted, 3)
 
     def test_code_expiry_attempt_limit_and_resend_invalidation(self):
         code=self.send()
@@ -160,3 +174,40 @@ class MailConfigurationTests(TestCase):
         self.client.force_authenticate(self.admin)
         for field,value in [('from_name','Store\r\nBcc: another@example.com'),('security','none'),('port',0),('host','https://smtp.example.com')]:
             self.assertEqual(self.client.patch('/api/v1/admin/mail/',{**self.body,field:value},format='json').status_code,400)
+
+    def test_registration_settings_save_independently_with_permissions_and_revision(self):
+        body = {'signup_credits': 7, 'revision': 0}
+        self.assertEqual(self.client.patch('/api/v1/admin/registration/', body, format='json').status_code, 403)
+        self.client.force_authenticate(self.admin)
+        self.client.patch('/api/v1/admin/mail/', self.body, format='json')
+        old_password = SMTPConfig.objects.get().password_ciphertext
+        self.assertEqual(self.client.patch('/api/v1/admin/registration/', body, format='json').status_code, 409)
+        response = self.client.patch('/api/v1/admin/registration/', {**body, 'revision': 1}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['signup_credits'], 7)
+        self.assertEqual(SMTPConfig.objects.get().password_ciphertext, old_password)
+        for count in [-1, 1001, 1.5, None]:
+            self.assertEqual(self.client.patch('/api/v1/admin/registration/', {'revision': 2, 'signup_credits': count}, format='json').status_code, 400)
+        # A subsequent SMTP edit must not replace the independently saved gift.
+        self.assertEqual(self.client.patch('/api/v1/admin/mail/', {**self.body, 'revision': 2}, format='json').data['signup_credits'], 7)
+
+    def test_bilingual_email_and_multipart_delivery(self):
+        from django.core import mail
+        from django.core.mail.backends.locmem import EmailBackend
+        from .email_content import verification_email, test_email
+        from .mail_service import send_transactional_mail
+        config = SMTPConfig(host='smtp.example.com', from_email='hello@example.com')
+        for language, expiry in [('en-US', 'Expires in 10 minutes'), ('zh-CN', '10 分钟内有效')]:
+            subject, plain, html = verification_email('012345', language)
+            self.assertIn('012345', plain)
+            self.assertIn('012345', html)
+            self.assertIn(expiry, html)
+            with patch('management_api.mail_service.EmailBackend', return_value=EmailBackend()):
+                send_transactional_mail('recipient@example.com', subject, plain, config, html_body=html)
+            message = mail.outbox[-1]
+            self.assertEqual(message.body, plain)
+            self.assertEqual(message.alternatives[0].mimetype, 'text/html')
+            self.assertEqual(message.alternatives[0].content, html)
+        subject, plain, html = test_email()
+        self.assertNotIn('012345', html)
+        self.assertIn('发送成功', html)
