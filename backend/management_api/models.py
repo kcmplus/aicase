@@ -59,6 +59,7 @@ class AIServiceConfig(Timestamped):
     # Inactive provider profiles contain encrypted keys only. Never serialize this field.
     provider_profiles = models.JSONField(default=dict, editable=False)
     model_name = models.CharField(max_length=100, default="gpt-image-2")
+    image_retention_days = models.PositiveSmallIntegerField(default=30)
     api_key_ciphertext = models.TextField(blank=True, editable=False)
     key_last_four = models.CharField(max_length=4, blank=True, editable=False)
     key_updated_at = models.DateTimeField(null=True, blank=True, editable=False)
@@ -234,6 +235,8 @@ class AIRender(Timestamped):
     input_mime = models.CharField(max_length=20)
     input_hash = models.CharField(max_length=64, editable=False)
     result_image = models.BinaryField(null=True, editable=False)
+    image_expires_at = models.DateTimeField(null=True, editable=False, db_index=True)
+    image_deleted_at = models.DateTimeField(null=True, editable=False)
     allocation = models.JSONField(default=dict)
     credit_restored = models.BooleanField(default=False)
     started_at = models.DateTimeField(null=True)

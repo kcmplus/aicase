@@ -21,7 +21,6 @@ from .credit_ledger import balance, ensure_opening, record, expire_monthly
 from django.conf import settings
 from django.db import transaction
 from django.db.models import F
-from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -37,6 +36,7 @@ from rest_framework.views import APIView
 
 from .ai_service import PROVIDERS, NoRedirect, current_config, decrypt_api_key, encryption_ready, provider_profile
 from .ai_costs import CallTelemetry, safe_request_id, sync_relay_cost
+from .ai_images import image_expired, image_response, maybe_cleanup_images
 from .models import AIAccount, AIRender, AIServiceConfig, AIStyle, PhoneModel, PricingPlan
 from .orders import StrictSerializer
 from .customer_auth import customer_owner as owner, customer_for, public_customer, signup_credits
@@ -111,6 +111,8 @@ def render_data(job):
             'completedAt': int(job.completed_at.timestamp()*1000) if job.completed_at else None,
             'payment': 'credit_restored' if job.credit_restored else 'credit_expired' if job.error_code=='credit_period_expired' else 'credit_reserved',
             'errorCode': job.error_code, 'errorMessage': job.error_message,
+            'imageExpired': image_expired(job),
+            'imageExpiresAt': int(job.image_expires_at.timestamp()*1000) if job.image_expires_at else None,
             'result': f'/api/v1/store/ai-renders/{job.id}/image/' if job.status == 'ready' else None}
 
 
@@ -309,6 +311,7 @@ class AIRenders(AIPrivateView):
 class AIRenderDetail(AIPrivateView):
     def get(self, request, reference):
         key=owner(request);expire_stale_jobs(key)
+        maybe_cleanup_images()
         return Response(render_data(get_object_or_404(AIRender.objects.defer('input_image','result_image'),pk=reference,owner_hash=key)))
 
     def post(self, request, reference):
@@ -325,11 +328,9 @@ class AIRenderDetail(AIPrivateView):
 
 class AIRenderImage(AIPrivateView):
     def get(self, request, reference):
-        job=get_object_or_404(AIRender,pk=reference,owner_hash=owner(request),status='ready')
-        response=HttpResponse(bytes(job.result_image),content_type='image/png')
-        response['Content-Disposition']=f'inline; filename="ai-{job.id}.png"'
-        response['Cache-Control']='private, no-store';response['X-Content-Type-Options']='nosniff'
-        return response
+        job=get_object_or_404(AIRender.objects.only('result_image','image_expires_at','image_deleted_at'),
+                             pk=reference,owner_hash=owner(request),status='ready')
+        return image_response(job)
 
 
 @sensitive_variables()
@@ -423,8 +424,10 @@ def run_render(job_id):
             raise GenerationError('credentials','AI generation is not configured. Please contact the store.')
         api_key = decrypt_api_key(config)
         result,request_id=edit_image(api_key,job)
+        completed = timezone.now()
+        expires = completed + timedelta(days=current_config().image_retention_days)
         AIRender.objects.filter(pk=job_id,status='generating').update(status='ready',result_image=result,
-            input_image=b'',completed_at=timezone.now(),provider_request_id=request_id)
+            input_image=b'',completed_at=completed,provider_request_id=request_id,image_expires_at=expires)
     except GenerationError as error:
         restore_credit(job,'failed',error.code,error.message)
     except Exception:

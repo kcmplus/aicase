@@ -19,6 +19,7 @@ class ReleaseBoundaryTests(unittest.TestCase):
 
     def test_runtime_and_seed_assets_are_kept(self):
         for name in ['backend/manage.py', 'backend/requirements.txt',
+                     'deploy/dev/aicase-dev-ai-cleanup.service', 'deploy/dev/aicase-dev-ai-cleanup.timer',
                      'backend/management_api/migrations/0008_ai_render.py',
                      'backend/management_api/seed/catalog.json',
                      'frontend/storefront/device.html',

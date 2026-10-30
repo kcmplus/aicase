@@ -18,6 +18,7 @@ from rest_framework.views import APIView
 
 from .ai_service import PROVIDERS, SuperuserOnly, current_config, provider_profile, decrypt_api_key
 from .ai_costs import sync_relay_cost
+from .ai_images import image_metadata, image_response, maybe_cleanup_images, with_image_size
 from .audit import audit
 from .models import AIRender
 
@@ -26,7 +27,8 @@ LOG_FIELDS = ('id', 'request_key', 'provider', 'model_name', 'style_name', 'phon
               'status', 'created_at', 'started_at', 'completed_at', 'api_started_at',
               'api_finished_at', 'api_duration_ms', 'http_status', 'provider_request_id',
               'request_params', 'usage', 'cost_amount', 'cost_currency', 'cost_source',
-              'cost_details', 'cost_recorded_at', 'error_code', 'error_message', 'credit_restored')
+              'cost_details', 'cost_recorded_at', 'error_code', 'error_message', 'credit_restored',
+              'image_expires_at', 'image_deleted_at', 'image_size_bytes')
 
 
 class ReportFilter(serializers.Serializer):
@@ -93,6 +95,7 @@ def measures():
 
 
 def safe_log(row):
+    row['image'] = image_metadata(row)
     row['cost_amount'] = amount(row['cost_amount'])
     row['provider_label'] = PROVIDERS.get(row['provider'], {}).get('label', row['provider'])
     row['endpoint'] = PROVIDERS.get(row['provider'], {}).get('base_url', '') + '/images/edits'
@@ -104,6 +107,7 @@ class AIUsageView(APIView):
     permission_classes = [SuperuserOnly]
 
     def get(self, request):
+        maybe_cleanup_images()
         qs, params = filtered(request)
         summary = qs.aggregate(**measures())
         finished = summary['ready'] + summary['failed']
@@ -126,6 +130,7 @@ class AIUsageView(APIView):
         for row in models:
             row['costs'] = model_costs.get((row['provider'], row['model_name']), [])
         return Response({'summary': summary, 'daily': trend, 'models': models,
+            'image_retention_days': current_config().image_retention_days,
             'timezone': str(timezone.get_current_timezone()), 'start': params['start'], 'end': params['end'],
             'providers': [{'id': key, 'label': info['label'], 'models': info['models']} for key, info in PROVIDERS.items()]})
 
@@ -136,7 +141,7 @@ class AICallLogsView(APIView):
 
     def get(self, request):
         qs, params = filtered(request)
-        page = Paginator(qs.values(*LOG_FIELDS).order_by('-created_at', '-id'), params['page_size']).get_page(params['page'])
+        page = Paginator(with_image_size(qs).values(*LOG_FIELDS).order_by('-created_at', '-id'), params['page_size']).get_page(params['page'])
         return Response({'count': page.paginator.count, 'page': page.number,
                          'results': [safe_log(row) for row in page.object_list]})
 
@@ -158,4 +163,14 @@ class AIRenderCostView(APIView):
                 raise serializers.ValidationError('请先在生图配置中保存七七八 API Key。')
             sync_relay_cost(job, decrypt_api_key(profile))
             audit(request, 'update', 'management_api.airender', job, '补查七七八生图费用')
-        return Response(safe_log(AIRender.objects.values(*LOG_FIELDS).get(pk=job.pk)))
+        return Response(safe_log(with_image_size(AIRender.objects.all()).values(*LOG_FIELDS).get(pk=job.pk)))
+
+
+@method_decorator(never_cache, name='dispatch')
+class AIAdminImageView(APIView):
+    permission_classes = [SuperuserOnly]
+
+    def get(self, request, reference):
+        job = get_object_or_404(AIRender.objects.only('result_image', 'image_expires_at', 'image_deleted_at'),
+                                pk=reference, status='ready')
+        return image_response(job, download=request.query_params.get('download') == '1')

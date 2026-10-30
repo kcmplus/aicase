@@ -1,0 +1,19 @@
+[Unit]
+Description=Clear expired AI images, keeping call records and costs
+After=postgresql.service
+ConditionPathExists=/opt/aicase-dev/current/backend/management_api/management/commands/cleanup_ai_images.py
+ConditionPathExists=!/var/lib/aicase-dev/deploying
+
+[Service]
+Type=oneshot
+User=aicase-dev
+Group=aicase-dev
+WorkingDirectory=/opt/aicase-dev/current/backend
+EnvironmentFile=/etc/aicase-dev/backend.env
+ExecStart=/opt/aicase-dev/current/.venv/bin/python manage.py cleanup_ai_images
+TimeoutStartSec=300
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+UMask=0027

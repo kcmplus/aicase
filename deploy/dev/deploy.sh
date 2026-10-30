@@ -10,6 +10,7 @@ base=/opt/aicase-dev
 state=/var/lib/aicase-dev
 env_file=/etc/aicase-dev/backend.env
 service=aicase-dev
+unit_dir=/etc/systemd/system
 domain=aicase.chunpat.cc
 release="$base/releases/$release_id"
 archive="$PWD/release.tar.gz"
@@ -124,5 +125,9 @@ mv -Tf "$base/current.next" "$base/current"
 switched=1
 systemctl start "$service"
 wait_healthy || { echo 'New release failed health checks.' >&2; exit 1; }
+install -m 644 "$release/deploy/dev/aicase-dev-ai-cleanup.service" "$unit_dir/"
+install -m 644 "$release/deploy/dev/aicase-dev-ai-cleanup.timer" "$unit_dir/"
+systemctl daemon-reload
+systemctl enable --now aicase-dev-ai-cleanup.timer
 rm -f "$state/deploying"
 printf 'Deployed %s to https://%s\n' "$release_id" "$domain"
