@@ -7,6 +7,7 @@ import ResourcePage from './ResourcePage.vue';
 import {ElMessage,ElMessageBox} from 'element-plus';
 import {api,allRecords,can,session} from './api.js';
 import {composePrompt,promptTemplates} from './prompt-templates.js';
+defineProps({embedded:Boolean});
 
 const definitions={
   style:{resource:'ai-styles',field:'prompt',model:'aistyle',label:'风格提示词'},
@@ -90,7 +91,7 @@ onBeforeRouteLeave(()=>confirmDiscard());
 
 <template>
   <section class="prompt-page">
-    <div class="page-heading"><div><p class="eyebrow">AI STUDIO</p><h1>AI 管理<span class="greeting-dot">.</span></h1><p class="muted">统一管理用户端的 AI 效果、风格与英文提示词。</p></div><div><router-link v-if="session.user?.is_superuser" to="/ai-service" style="font-size:13px;color:#196967;margin-right:15px">生图服务配置</router-link><el-button :loading="loading" @click="refreshAll">刷新</el-button></div></div>
+    <div class="page-heading" :class="{'ai-section-heading':embedded}"><div><p v-if="!embedded" class="eyebrow">AI STUDIO</p><component :is="embedded?'h2':'h1'">{{embedded?'内容管理':'AI 管理'}}<span v-if="!embedded" class="greeting-dot">.</span></component><p class="muted">统一管理用户端的 AI 效果、风格与英文提示词。</p></div><div><router-link v-if="!embedded&&session.user?.is_superuser" to="/ai/service" style="font-size:13px;color:#196967;margin-right:15px">生图服务配置</router-link><el-button :loading="loading" @click="refreshAll">刷新</el-button></div></div>
     <el-alert title="用户端与后台均按原图分组展示多种 AI 效果。提示词请使用英文，仅在后台保存；修改提示词不会自动重新生成效果图，真实生图使用后台风格提示词与机型构图要求，顾客确认后才发起请求。" type="info" :closable="false" show-icon/>
     <el-tabs v-model="kind" class="workspace-tabs" :before-leave="beforeTabChange"><el-tab-pane v-if="can('management_api.view_aiexample')" label="案例" name="examples"/><el-tab-pane v-if="visible('style')" label="风格与提示词" name="style"/><el-tab-pane v-if="visible('model')" label="机型适配" name="model"/></el-tabs>
     <AIExampleWorkbench v-if="kind==='examples'" ref="exampleWorkbench"/>

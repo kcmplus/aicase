@@ -2,6 +2,7 @@
 import {computed,onMounted,onBeforeUnmount,reactive,ref} from 'vue';
 import {ElMessage} from 'element-plus';
 import {api} from './api.js';
+defineProps({embedded:Boolean});
 
 const report=ref(null),rows=ref([]),total=ref(0),page=ref(1),loading=ref(false),error=ref(''),selected=ref(null),syncing=ref('');
 const dateKey=date=>`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
@@ -57,7 +58,7 @@ onMounted(()=>load());onBeforeUnmount(()=>sequence++);
 
 <template>
  <section class="ai-usage-page">
-  <div class="page-heading"><div><p class="eyebrow">AI USAGE & COST</p><h1>生图统计与日志<span class="greeting-dot">.</span></h1><p class="muted">每张图片的用量、耗时与成本，一处查看。</p></div><router-link to="/ai-service"><el-button>生图配置</el-button></router-link></div>
+  <div class="page-heading" :class="{'ai-section-heading':embedded}"><div><p v-if="!embedded" class="eyebrow">AI USAGE & COST</p><component :is="embedded?'h2':'h1'">生图统计与日志<span v-if="!embedded" class="greeting-dot">.</span></component><p class="muted">每张图片的用量、耗时与成本，一处查看。</p></div><router-link v-if="!embedded" to="/ai/service"><el-button>生图配置</el-button></router-link></div>
   <section class="panel usage-filters">
    <div class="date-filters"><el-date-picker v-model="dates" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" :clearable="false" :disabled="loading" aria-label="统计日期范围"/><div class="quick-ranges"><el-button v-for="days in [7,30,90]" :key="days" :disabled="loading" @click="recent(days)">近 {{days}} 天</el-button></div></div>
    <div class="filter-fields"><el-select v-model="filters.provider" aria-label="服务商筛选" placeholder="全部服务商" clearable :disabled="loading" @change="filters.model=''"><el-option v-for="item in providers" :key="item.id" :label="item.label" :value="item.id"/></el-select><el-select v-model="filters.model" aria-label="模型筛选" placeholder="全部模型" clearable :disabled="loading"><el-option v-for="item in models" :key="item" :value="item" :label="item"/></el-select><el-select v-model="filters.status" aria-label="状态筛选" placeholder="全部状态" clearable :disabled="loading"><el-option v-for="(label,key) in statuses" :key="key" :value="key" :label="label"/></el-select><el-input v-model="filters.search" aria-label="搜索调用记录" placeholder="任务号 / 风格 / 机型" clearable :disabled="loading" maxlength="150" @keyup.enter="load()"/><el-button type="primary" :loading="loading" @click="load()">查询 / 刷新</el-button></div>

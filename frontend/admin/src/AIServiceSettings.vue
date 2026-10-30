@@ -3,6 +3,7 @@ import {computed,onMounted,onBeforeUnmount,ref} from 'vue';
 import {onBeforeRouteLeave} from 'vue-router';
 import {ElMessage,ElMessageBox} from 'element-plus';
 import {api} from './api.js';
+defineProps({embedded:Boolean});
 
 const config=ref(null),provider=ref('openai'),model=ref(''),keyInput=ref(''),loading=ref(false),saving=ref(false),checking=ref(false),error=ref('');
 const busy=computed(()=>loading.value||saving.value||checking.value);
@@ -55,7 +56,7 @@ onBeforeRouteLeave(()=>confirmDiscard());
 
 <template>
   <section class="ai-service-page">
-    <div class="page-heading"><div><p class="eyebrow">AI CONNECTION</p><h1>AI 生图配置<span class="greeting-dot">.</span></h1><p class="muted">统一管理生图服务商、API Key 与图像模型。仅超级管理员可以管理。</p></div><el-button :disabled="busy" @click="refresh">刷新配置</el-button></div>
+    <div class="page-heading" :class="{'ai-section-heading':embedded}"><div><p v-if="!embedded" class="eyebrow">AI CONNECTION</p><component :is="embedded?'h2':'h1'">AI 生图配置<span v-if="!embedded" class="greeting-dot">.</span></component><p class="muted">统一管理生图服务商、API Key 与图像模型。仅超级管理员可以管理。</p></div><el-button :disabled="busy" @click="refresh">刷新配置</el-button></div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="form-alert"/>
     <el-skeleton v-if="loading&&!config" :rows="7" animated/>
     <template v-if="config">
@@ -85,8 +86,8 @@ onBeforeRouteLeave(()=>confirmDiscard());
         </aside>
       </div>
       <el-alert title="前台已接入真实生图：顾客确认后，服务器使用此配置处理上传照片。保存 Key 不会自动生成图片；模型读取检查不代表图片生成权限或余额已验证。" type="info" :closable="false" show-icon/>
-      <router-link to="/ai-prompts" class="prompt-link">打开 AI 管理 →</router-link>
-      <router-link to="/ai-usage" class="prompt-link" style="margin-left:24px">查看生图统计与调用日志 →</router-link>
+      <router-link v-if="!embedded" to="/ai/prompts" class="prompt-link">打开 AI 管理 →</router-link>
+      <router-link v-if="!embedded" to="/ai/usage" class="prompt-link" style="margin-left:24px">查看生图统计与调用日志 →</router-link>
     </template>
   </section>
 </template>
