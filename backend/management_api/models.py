@@ -114,6 +114,8 @@ class PrintOrder(Timestamped):
     revision = models.PositiveIntegerField(default=1)
     station_id = models.CharField(max_length=30, blank=True)
     customer_email = models.EmailField(blank=True)
+    customer = models.ForeignKey('Customer', null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name='print_orders', editable=False)
     model_name = models.CharField(max_length=120)
     status = models.CharField(max_length=30, default="pending", choices=[("pending", "待付款"), ("paid", "已确认"), ("printing", "打印中"), ("ready", "待取货"), ("completed", "已完成"), ("cancelled", "已取消")])
     amount = models.DecimalField(max_digits=8, decimal_places=2, validators=[MinValueValidator(0)])
