@@ -55,7 +55,7 @@ test('active previews never substitute a sample or offer cancellation after gene
  assert.doesNotMatch(running,/data-ai-action="cancel"/);
  for(const html of [queued,running]){
   assert.doesNotMatch(html,/STYLE REFERENCE|data-ai-action="apply"|About \d+s|\d+%/);
-  assert.match(html,/A little magic in progress/);assert.match(html,/This can take a few minutes|Waiting for an available slot/);
+  assert.match(html,/A little magic in progress/);assert.match(html,/Usually takes around 10–20 seconds/);
  }
 });
 test('ready previews retain slider endpoints and use each supplied phone mask',()=>{
