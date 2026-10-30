@@ -2,13 +2,14 @@ import copy
 import uuid
 from io import StringIO, BytesIO
 import base64
-from django.contrib.auth.models import User, Group
+from django.contrib.auth.models import User, Group, Permission
 from django.core.cache import cache
 from django.core.management import call_command
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 from PIL import Image
-from .models import PrintOrder, PricingPlan, PhoneModel, AuditLog
+from .models import PrintOrder, PricingPlan, PhoneModel, AuditLog, Customer
 
 class StoreOrderTests(TestCase):
     @classmethod
@@ -29,6 +30,75 @@ class StoreOrderTests(TestCase):
         return f"/api/v1/store/orders/{order['reference']}/"
     def action(self, order, action, **extra):
         return self.client.post(self.endpoint(order)+'actions/', {'revision':order['revision'],'action':action,'code':order['snapshot']['code'],**extra},format='json')
+    def login_customer(self, csrf=True):
+        customer=Customer.objects.create(email='member@example.com',verified_at=timezone.now())
+        session=self.client.session
+        session['store_customer_id']=str(customer.pk)
+        session['store_customer_version']=customer.session_version
+        session.save()
+        self.payload['customer_id']=str(customer.pk)
+        if csrf:
+            token=self.client.get('/api/v1/auth/csrf/').data['csrfToken']
+            self.client.credentials(HTTP_X_ORDER_KEY='a'*64,HTTP_X_CSRFTOKEN=token)
+        return customer
+    def test_signed_in_checkout_uses_verified_email_and_customer(self):
+        customer=self.login_customer()
+        self.payload['customer_email']='untrusted invalid email'
+        order=self.create()
+        saved=PrintOrder.objects.get()
+        self.assertEqual(saved.customer,customer)
+        self.assertEqual(order['customer_email'],customer.email)
+        self.assertNotIn('customer_id',order)
+        # A shared login does not replace the existing private browser order key.
+        self.client.credentials(HTTP_X_ORDER_KEY='b'*64)
+        self.assertEqual(self.client.get(self.endpoint(order)).status_code,404)
+    def test_signed_in_checkout_requires_csrf(self):
+        self.login_customer(csrf=False)
+        response=self.client.post('/api/v1/store/orders/',self.payload,format='json')
+        self.assertEqual(response.status_code,403)
+        self.assertFalse(PrintOrder.objects.exists())
+    def test_guest_can_leave_email_blank_or_type_it_without_linking_an_account(self):
+        Customer.objects.create(email='member@example.com',verified_at=timezone.now())
+        for email in ('', 'guest@example.com', 'member@example.com'):
+            self.payload.update(request_key=str(uuid.uuid4()),customer_email=email,customer_id=None)
+            order=self.create()
+            self.assertEqual(order['customer_email'],email)
+            self.assertIsNone(PrintOrder.objects.get(reference=order['reference']).customer_id)
+    def test_client_cannot_assign_customer_or_silently_use_a_changed_session(self):
+        self.payload['customer_id']=str(uuid.uuid4())
+        self.assertEqual(self.client.post('/api/v1/store/orders/',self.payload,format='json').status_code,409)
+        customer=self.login_customer()
+        for expected in (None,str(uuid.uuid4())):
+            self.payload['customer_id']=expected
+            self.assertEqual(self.client.post('/api/v1/store/orders/',self.payload,format='json').status_code,409)
+        self.payload['customer_id']=str(customer.pk)
+        Customer.objects.filter(pk=customer.pk).update(session_version=1)
+        self.assertEqual(self.client.post('/api/v1/store/orders/',self.payload,format='json').status_code,409)
+        self.assertFalse(PrintOrder.objects.exists())
+    def test_retry_after_sign_in_keeps_the_original_guest_contact_and_identity(self):
+        order=self.create()
+        self.login_customer()
+        response=self.client.post('/api/v1/store/orders/',self.payload,format='json')
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.data['reference'],order['reference'])
+        saved=PrintOrder.objects.get()
+        self.assertEqual(saved.customer_email,'example@example.com')
+        self.assertIsNone(saved.customer_id)
+    def test_admin_customer_link_is_read_only_and_does_not_grant_customer_access(self):
+        customer=self.login_customer()
+        self.create();saved=PrintOrder.objects.get()
+        viewer=User.objects.create_user('order-only',is_staff=True)
+        viewer.user_permissions.add(Permission.objects.get(codename='view_printorder'),Permission.objects.get(codename='change_printorder'))
+        admin=APIClient();admin.force_authenticate(viewer)
+        url=f'/api/v1/admin/orders/{saved.pk}/'
+        self.assertEqual(admin.get(url).data['customer_id'],str(customer.pk))
+        self.assertEqual(admin.get('/api/v1/admin/orders/').data['results'][0]['customer_id'],str(customer.pk))
+        self.assertEqual(admin.get(f'/api/v1/admin/customers/{customer.pk}/').status_code,403)
+        self.assertEqual(admin.patch(url,{'customer_id':None},format='json').status_code,400)
+        self.assertEqual(admin.patch(url,{'notes':'Handled'},format='json').status_code,200)
+        customer.delete();saved.refresh_from_db()
+        self.assertIsNone(saved.customer_id)
+        self.assertEqual(saved.customer_email,'member@example.com')
     def test_checkout_persists_authoritative_price_private_snapshot_and_no_real_payment(self):
         order=self.create()
         self.assertEqual(order['mode'],'demo')

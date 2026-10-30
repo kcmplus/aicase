@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {orderAccessKey,orderRequest,savedOrder,checkoutBody,getPaymentConfig,stripeCheckoutUrl} from '../storefront/order-service.js';
+import {orderAccessKey,orderRequest,savedOrder,checkoutBody,checkoutEmailField,getPaymentConfig,stripeCheckoutUrl} from '../storefront/order-service.js';
 import {createPersonalPass} from '../storefront/simple-core.js';
 import {phone} from '../storefront/art.js';
 import {makePersonalDesign} from '../storefront/simple-personalize.js';
@@ -26,9 +26,29 @@ test('order network failures never fabricate a paid result',async()=>{
  await assert.rejects(orderRequest('',{key:'a'.repeat(64),fetcher:async()=>({ok:false,status:409,json:async()=>({detail:'Price changed'})})}),/Price changed/);
  await assert.rejects(orderRequest('',{key:'a'.repeat(64),fetcher:async()=>({json:async()=>{throw Error()}})}),/temporarily unavailable/);
 });
-test('order request carries browser ownership separately from admin session cookies',async()=>{
- let sent;await orderRequest('example/',{key:'b'.repeat(64),method:'PATCH',body:{revision:1},fetcher:async(url,options)=>{sent={url,...options};return {ok:true,json:async()=>({})}}});
- assert.equal(sent.credentials,'omit');assert.equal(sent.cache,'no-store');assert.equal(sent.headers['X-Order-Key'],'b'.repeat(64));assert.equal(JSON.parse(sent.body).revision,1);
+test('order writes carry customer session and CSRF while retaining browser ownership',async()=>{
+ const calls=[];await orderRequest('example/',{key:'b'.repeat(64),method:'PATCH',body:{revision:1},fetcher:async(url,options)=>{calls.push({url,...options});return {ok:true,json:async()=>({csrfToken:'test-csrf'})}}});
+ const [csrf,sent]=calls;assert.equal(csrf.url,'/api/v1/auth/csrf/');assert.equal(csrf.credentials,'same-origin');
+ assert.equal(sent.credentials,'same-origin');assert.equal(sent.cache,'no-store');assert.equal(sent.headers['X-Order-Key'],'b'.repeat(64));assert.equal(sent.headers['X-CSRFToken'],'test-csrf');assert.equal(JSON.parse(sent.body).revision,1);
+});
+test('signed-in checkout displays email without input and sends expected identity only',()=>{
+ const account={authenticated:true,customer:{id:crypto.randomUUID(),email:'member@example.com'}};
+ const body=checkoutBody({requestKey:crypto.randomUUID(),pass:pass()},{account,accepted:true,email:'other@example.com',amount:'10.00'});
+ assert.equal(body.customer_id,account.customer.id);assert.equal(Object.hasOwn(body,'customer_email'),false);
+ const html=checkoutEmailField(account);assert.match(html,/member@example.com/);assert.doesNotMatch(html,/<input/);
+ assert.doesNotMatch(checkoutEmailField({...account,customer:{...account.customer,email:'<script>test</script>'}}),/<script>/);
+});
+test('guest checkout retains optional manual email without claiming an account',()=>{
+ for(const account of [undefined,{authenticated:false,customer:{id:'stale',email:'stale@example.com'}}]){
+  const body=checkoutBody({requestKey:crypto.randomUUID(),pass:pass()},{account,accepted:true,email:'guest@example.com',amount:'10.00'});
+  assert.equal(body.customer_id,null);assert.equal(body.customer_email,'guest@example.com');
+  const html=checkoutEmailField(account);assert.match(html,/<input name="email"/);assert.doesNotMatch(html,/required|stale@example.com/);
+ }
+});
+test('unavailable sign-in check stops checkout before sending the order',async()=>{
+ const calls=[];
+ await assert.rejects(orderRequest('',{method:'POST',body:{},key:'a'.repeat(64),fetcher:async url=>{calls.push(url);return {ok:false}}}),/sign-in could not be checked/);
+ assert.deepEqual(calls,['/api/v1/auth/csrf/']);
 });
 test('the shared admin/order renderer escapes customer text',()=>{
  const snapshot=pass();snapshot.addedArtwork=[{id:'extra-text',type:'text',text:'<script>alert(1)</script>',font:'serif',color:'#123456',x:50,y:50,scale:100,rotation:0}];

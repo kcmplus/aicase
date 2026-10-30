@@ -1,7 +1,9 @@
 <script setup>
 import {computed,onMounted,reactive,ref,watch} from 'vue';
+import {useRoute,useRouter,onBeforeRouteLeave,onBeforeRouteUpdate} from 'vue-router';
 import {ElMessage,ElMessageBox} from 'element-plus';
 import {api,can,session} from './api.js';
+const route=useRoute(),router=useRouter();
 const rows=ref([]),total=ref(0),page=ref(1),search=ref(''),query=ref(''),active=ref('all'),loading=ref(false),error=ref('');
 const open=ref(false),detail=ref(null),detailError=ref(''),detailLoading=ref(false),saving=ref(false);
 const ledger=ref([]),ledgerCursor=ref(null),ledgerBusy=ref(false),ledgerError=ref('');
@@ -23,7 +25,20 @@ async function loadLedger(reset=false){
  try{const data=await api('admin/customers/'+id+'/credits/'+(!reset&&ledgerCursor.value?'?before='+ledgerCursor.value:''));if(version===detailVersion){ledger.value=reset?data.results:[...ledger.value,...data.results];ledgerCursor.value=data.nextCursor;}}
  catch(e){if(version===detailVersion)ledgerError.value=e.message;}finally{if(version===detailVersion)ledgerBusy.value=false;}
 }
-async function close(done){if(saving.value)return;try{if(dirty.value||grant.reason.trim())await ElMessageBox.confirm('还有未保存的用户设置，是否关闭？','未保存的修改',{confirmButtonText:'关闭',cancelButtonText:'继续编辑'});++detailVersion;open.value=false;if(typeof done==='function')done();}catch{}}
+function select(row){router.push({query:{...route.query,customer:row.id}});}
+watch(()=>route.query.customer,id=>{
+ if(!id){++detailVersion;open.value=false;return;}
+ if(typeof id!=='string'||!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(id)){++detailVersion;detail.value=null;detailLoading.value=false;detailError.value='用户链接无效';open.value=true;return;}
+ show({id});
+},{immediate:true});
+async function canLeave(){
+ if(saving.value)return false;
+ if(open.value&&(dirty.value||grant.reason.trim())){try{await ElMessageBox.confirm('还有未保存的用户设置，离开后将丢弃。','未保存的修改',{confirmButtonText:'丢弃修改',cancelButtonText:'继续编辑'});}catch{return false;}}
+ return true;
+}
+onBeforeRouteLeave(canLeave);
+onBeforeRouteUpdate((to,from)=>to.query.customer===from.query.customer||canLeave());
+async function close(done){if(!await canLeave())return;++detailVersion;open.value=false;const query={...route.query};delete query.customer;await router.replace({query});if(typeof done==='function')done();}
 async function save(){if(saving.value||!dirty.value)return;if(detail.value.active&&!form.active){try{await ElMessageBox.confirm('停用后该用户将无法登录或使用 AI，已有登录会话会失效。已有设计和次数会保留。','停用注册用户',{confirmButtonText:'停用并保存',cancelButtonText:'取消',type:'warning'});}catch{return;}}
  saving.value=true;detailError.value='';try{const data=await api('admin/customers/'+detail.value.id+'/',{method:'PATCH',body:{revision:detail.value.revision,...form}});accept({...detail.value,...data});ElMessage.success('用户设置已保存');await load();}catch(e){detailError.value=e.message;}finally{saving.value=false;}}
 async function addCredits(){if(saving.value||dirty.value||!grant.reason.trim())return;try{await ElMessageBox.confirm(`为 ${detail.value.email} 补发 ${grant.amount} 次 AI 创作额度？`,'确认补发',{confirmButtonText:'确认补发',cancelButtonText:'取消'});}catch{return;}
@@ -37,13 +52,13 @@ async function addCredits(){if(saving.value||dirty.value||!grant.reason.trim())r
  <div class="panel customer-panel">
   <div class="customer-toolbar"><form @submit.prevent="filter"><el-input v-model="search" placeholder="搜索邮箱或昵称" aria-label="搜索注册用户" clearable/><el-button native-type="submit">搜索</el-button></form><el-select v-model="active" aria-label="账号状态" style="width:150px"><el-option label="全部状态" value="all"/><el-option label="正常使用" value="true"/><el-option label="已停用" value="false"/></el-select></div>
   <el-table v-loading="loading" :data="rows" empty-text="暂无符合条件的注册用户。顾客完成邮箱验证后会出现在这里。">
-   <el-table-column label="顾客" min-width="240"><template #default="{row}"><button class="customer-link" @click="show(row)">{{row.display_name||row.email}}</button><div v-if="row.display_name" class="small muted">{{row.email}}</div></template></el-table-column>
+   <el-table-column label="顾客" min-width="240"><template #default="{row}"><button class="customer-link" @click="select(row)">{{row.display_name||row.email}}</button><div v-if="row.display_name" class="small muted">{{row.email}}</div></template></el-table-column>
    <el-table-column label="账号状态" width="110"><template #default="{row}"><el-tag :type="row.active?'success':'info'" effect="plain">{{row.active?'正常':'已停用'}}</el-tag></template></el-table-column>
    <el-table-column label="剩余赠送次数" width="135"><template #default="{row}"><strong>{{row.credits.remaining}}</strong><span class="muted"> 次</span></template></el-table-column>
    <el-table-column label="已用 / 预留" width="120"><template #default="{row}">{{row.credits.used}} 次</template></el-table-column>
    <el-table-column label="注册时间" min-width="175"><template #default="{row}">{{date(row.created_at)}}</template></el-table-column>
    <el-table-column label="最近登录" min-width="175"><template #default="{row}">{{date(row.last_login_at)}}</template></el-table-column>
-   <el-table-column label="操作" fixed="right" width="90"><template #default="{row}"><el-button link type="primary" @click="show(row)">查看详情</el-button></template></el-table-column>
+   <el-table-column label="操作" fixed="right" width="90"><template #default="{row}"><el-button link type="primary" @click="select(row)">查看详情</el-button></template></el-table-column>
   </el-table>
   <div class="customer-pagination"><span class="muted">共 {{total}} 位注册用户</span><el-pagination v-model:current-page="page" :page-size="20" :total="total" layout="prev, pager, next" hide-on-single-page/></div>
  </div>

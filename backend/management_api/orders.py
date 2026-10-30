@@ -15,12 +15,14 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from PIL import Image
 from rest_framework import serializers
+from rest_framework.authentication import SessionAuthentication
 from rest_framework.exceptions import APIException, PermissionDenied
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from .models import PrintOrder, PhoneModel, DesignTemplate, PricingPlan, Graphic, AuditLog
+from .customer_auth import customer_for
 
 # The renderer is versioned with the storefront. Validate against its fixed layer IDs,
 # rather than mutable admin layouts that the storefront does not yet consume.
@@ -149,6 +151,8 @@ class Checkout(StrictSerializer):
     accepted = serializers.BooleanField()
     expected_amount = serializers.DecimalField(max_digits=8, decimal_places=2, min_value=Decimal('0'))
     customer_email = serializers.EmailField(allow_blank=True, required=False, default='')
+    # An expected session identity, not a customer ID that clients may assign.
+    customer_id = serializers.UUIDField(required=False, allow_null=True)
     snapshot = Snapshot()
     def validate_accepted(self, value):
         if not value:
@@ -193,7 +197,7 @@ def log(order, action):
 @method_decorator(never_cache, name='dispatch')
 class StoreOrders(APIView):
     permission_classes = [AllowAny]
-    authentication_classes = []  # A browser-specific bearer key, independent of admin cookies.
+    authentication_classes = []  # Browser key owns orders; customer session only supplies checkout identity.
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'orders'
     def get(self, request):
@@ -209,6 +213,9 @@ class StoreOrders(APIView):
     @transaction.atomic
     def post(self, request):
         owner_hash = owner(request)
+        customer = customer_for(request)
+        if customer:
+            SessionAuthentication().enforce_csrf(request)
         # Serialize checkout/retry against the same pricing record. PostgreSQL's
         # unique request_key also guards simultaneous requests across workers.
         plan = PricingPlan.objects.select_for_update().filter(kind='print', active=True).first()
@@ -225,9 +232,12 @@ class StoreOrders(APIView):
                     raise Conflict('This order uses a different payment environment. Open it from My orders to review it.')
             # Later edits must not make a retry overwrite the order snapshot.
             return Response(order_data(existing))
-        serializer = Checkout(data=request.data)
+        payload = {**request.data, 'customer_email': customer.email} if customer else request.data
+        serializer = Checkout(data=payload)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        if 'customer_id' in data and data['customer_id'] != (customer.pk if customer else None):
+            raise Conflict('Your sign-in changed. Reload checkout to review your email.')
         if not plan:
             raise Conflict('Printing is unavailable. Please try again later.')
         if data['expected_amount'] != plan.price:
@@ -236,7 +246,7 @@ class StoreOrders(APIView):
         payment = checkout_settings(data['payment_provider'], data['payment_mode'])
         if payment['mode'].startswith('stripe_') and plan.price < Decimal('0.50'):
             raise Conflict('Stripe requires a print price of at least USD 0.50.')
-        order = PrintOrder.objects.create(owner_hash=owner_hash, request_key=data['request_key'], **payment, model_name=data['snapshot']['model'], amount=plan.price, currency=plan.currency, customer_email=data['customer_email'], snapshot=data['snapshot'])
+        order = PrintOrder.objects.create(owner_hash=owner_hash, request_key=data['request_key'], **payment, model_name=data['snapshot']['model'], amount=plan.price, currency=plan.currency, customer=customer, customer_email=data['customer_email'], snapshot=data['snapshot'])
         log(order, 'create')
         return Response(order_data(order), status=201)
 
