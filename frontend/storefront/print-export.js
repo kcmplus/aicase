@@ -25,17 +25,21 @@ export function textLines(text,maxWidth,measure){
  return lines;
 }
 
+export function exportImageUrl(src,baseUrl){
+ // The same renderer runs at / and /admin/orders. Saved original asset paths
+ // must always resolve at the site root, not inside the admin bundle directory.
+ const url=new URL(src.replace(/^\.\/assets\//,'/assets/'),baseUrl);
+ if(url.origin!==new URL(baseUrl).origin&&!/^data:image\/(png|jpeg|webp);base64,/.test(src))throw Error('An image could not be loaded. Try again.');
+ return url.href;
+}
 function loadImage(src){
+ const url=exportImageUrl(src,location.href);
  return new Promise((resolve,reject)=>{
   const image=new Image(),timer=setTimeout(()=>reject(Error('An image could not be loaded. Try again.')),15000);
   image.onload=()=>{clearTimeout(timer);resolve(image);};
   image.onerror=()=>{clearTimeout(timer);reject(Error('An image could not be loaded. Try again.'));};
   // Only original same-origin assets and validated uploads; never thumbnails.
-  const url=new URL(src,location.href);
-  if(url.origin!==location.origin&&!/^data:image\/(png|jpeg|webp);base64,/.test(src)){
-   clearTimeout(timer);reject(Error('An image could not be loaded. Try again.'));return;
-  }
-  image.src=src;
+  image.src=url;
  });
 }
 function canvas(width,height){const el=document.createElement('canvas');el.width=width;el.height=height;return el;}
