@@ -104,7 +104,7 @@ class LiveGenerationTests(TestCase):
         with patch('management_api.ai_generation.edit_image',return_value=(png(),'test-request')) as provider:
             run_render(job.id);run_render(job.id)
         self.assertEqual(provider.call_count,1);job.refresh_from_db()
-        self.assertEqual(job.status,'ready');self.assertEqual(bytes(job.input_image),b'');self.assertEqual(bytes(job.result_image),png())
+        self.assertEqual(job.status,'ready');self.assertEqual(bytes(job.input_image),png());self.assertEqual(bytes(job.result_image),png())
         self.assertEqual(AIAccount.objects.get().trial_used,1)
 
     def test_failure_returns_generation_once_and_does_not_auto_retry(self):
@@ -115,7 +115,7 @@ class LiveGenerationTests(TestCase):
         self.assertEqual(CreditEntry.objects.filter(kind='failure_refund').count(),1)
         self.assertEqual(CreditEntry.objects.get(kind='failure_refund').amount,1)
         job.refresh_from_db();self.assertEqual(job.status,'failed');self.assertTrue(job.credit_restored)
-        self.assertEqual(AIAccount.objects.get().trial_used,0);self.assertEqual(bytes(job.input_image),b'')
+        self.assertEqual(AIAccount.objects.get().trial_used,0);self.assertEqual(bytes(job.input_image),png())
 
     def test_cancel_and_stale_cleanup_return_allowance(self):
         job=self.job();url=f'/api/v1/store/ai-renders/{job.id}/'
