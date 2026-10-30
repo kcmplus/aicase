@@ -201,7 +201,9 @@ class DashboardView(APIView):
         models = [("brands", m.Brand), ("phone_models", m.PhoneModel), ("designs", m.DesignTemplate), ("graphics", m.Graphic), ("ai_styles", m.AIStyle), ("ai_examples", m.AIExample), ("plans", m.PricingPlan), ("orders", m.PrintOrder), ("customers", m.Customer)]
         counts = {key: model.objects.count() for key, model in models if request.user.has_perm(f"management_api.view_{model._meta.model_name}")}
         logs = m.AuditLog.objects.all()[:6] if request.user.has_perm("management_api.view_auditlog") else []
-        return Response({"counts": counts, "activity": s.AuditLogSerializer(logs, many=True).data, "storefront_connected": True, "connected_resources": ["plans", "ai_styles", "ai_examples", "orders"], "payments_connected": False, "ai_connected": False})
+        from .stripe_payments import payment_config
+        payment = payment_config()
+        return Response({"counts": counts, "activity": s.AuditLogSerializer(logs, many=True).data, "storefront_connected": True, "connected_resources": ["plans", "ai_styles", "ai_examples", "orders"], "payments_connected": payment["provider"] == "stripe" and payment["available"], "ai_connected": False})
 
 class UploadView(APIView):
     permission_classes = [IsAdminUser]
@@ -239,12 +241,14 @@ class UploadView(APIView):
 def public_catalog(request):
     from .images import image_variants
     from .ai_generation import generation_available
+    from .ai_service import current_config
     from .customer_auth import signup_credits
     # Stable legacy indexes are never reassigned. This is an integration API, not a payment API.
     data = {
         "version": 2,
         "signupCredits": signup_credits(),
         "ai_generation_connected": generation_available(),
+        "ai_provider": current_config().provider,
         "brands": s.BrandSerializer(m.Brand.objects.filter(active=True), many=True).data,
         "phone_models": s.PublicPhoneModelSerializer(m.PhoneModel.objects.filter(active=True, brand__active=True), many=True).data,
         "designs": s.DesignTemplateSerializer(m.DesignTemplate.objects.filter(active=True), many=True).data,

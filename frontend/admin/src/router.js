@@ -5,6 +5,7 @@ import Login from './Login.vue';
 import Dashboard from './Dashboard.vue';
 import ResourcePage from './ResourcePage.vue';
 import PromptSettings from './PromptSettings.vue';
+import StripeSettings from './StripeSettings.vue';
 import Customers from './Customers.vue';
 import MailSettings from './MailSettings.vue';
 import AIServiceSettings from './AIServiceSettings.vue';
@@ -13,7 +14,7 @@ export const router=createRouter({history:createWebHistory(import.meta.env.BASE_
   {path:'/',component:Dashboard},
   {path:'/ai-examples',redirect:'/ai-prompts?tab=examples'},
   {path:'/ai-styles',redirect:'/ai-prompts?tab=style'},
-  ...Object.keys(resources).filter(key=>!['ai-examples','ai-styles'].includes(key)).map(resource=>({path:'/'+resource,component:resource==='customers'?Customers:resource==='mail'?MailSettings:resource==='ai-prompts'?PromptSettings:resource==='ai-service'?AIServiceSettings:ResourcePage,props:{resource},meta:{resource}})),
+  ...Object.keys(resources).filter(key=>!['ai-examples','ai-styles'].includes(key)).map(resource=>({path:'/'+resource,component:resource==='customers'?Customers:resource==='mail'?MailSettings:resource==='stripe'?StripeSettings:resource==='ai-prompts'?PromptSettings:resource==='ai-service'?AIServiceSettings:ResourcePage,props:{resource},meta:{resource}})),
   {path:'/:pathMatch(.*)*',redirect:'/'},
 ]});
 router.beforeEach(async to=>{

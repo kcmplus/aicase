@@ -35,7 +35,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from .ai_service import API_BASE, NoRedirect, current_config, decrypt_api_key, encryption_ready
+from .ai_service import PROVIDERS, NoRedirect, current_config, decrypt_api_key, encryption_ready, provider_profile
 from .models import AIAccount, AIRender, AIServiceConfig, AIStyle, PhoneModel, PricingPlan
 from .orders import StrictSerializer
 from .customer_auth import customer_owner as owner, customer_for, public_customer, signup_credits
@@ -136,6 +136,7 @@ class RenderInput(StrictSerializer):
     photo = serializers.CharField(max_length=3_000_000, trim_whitespace=False)
     style_id = serializers.SlugField(max_length=80)
     model = serializers.CharField(max_length=120)
+    provider = serializers.ChoiceField(choices=tuple(PROVIDERS), required=False)
 
     def validate_accepted(self, value):
         if not value:
@@ -267,6 +268,8 @@ class AIRenders(AIPrivateView):
                 if existing.owner_hash!=key or (existing.input_hash,existing.style_code,existing.phone_model)!=(digest,data['style_id'],data['model']):
                     return Response({'detail':'This render request conflicts with an existing request.'},status=409)
                 return Response(render_data(existing))
+            if data.get('provider', 'openai') != config.provider:
+                return Response({'detail': 'The AI provider has changed. Reload the page and confirm generation again.'}, status=409)
             plan=ai_plan()
             style=AIStyle.objects.filter(code=data['style_id'],active=True).first()
             model=PhoneModel.objects.filter(name=data['model'],active=True,brand__active=True).first()
@@ -294,7 +297,7 @@ class AIRenders(AIPrivateView):
                 return Response({'detail':'No AI generations remaining. Subscribe or wait for your next monthly reset.'},status=409)
             account.save(update_fields=['trial_used','subscription','updated_at'])
             job=AIRender.objects.create(request_key=data['request_key'],owner_hash=key,style_code=style.code,
-                style_name=style.name,model_name=config.model_name,phone_model=model.name,phone_template_id=template['id'],
+                style_name=style.name,provider=config.provider,model_name=config.model_name,phone_model=model.name,phone_template_id=template['id'],
                 prompt=build_prompt(style,model,template),input_image=raw,input_mime=mime,input_hash=digest,allocation=allocation)
             pool = 'gift' if allocation['type']=='trial' else 'monthly'
             record(account, 'render:'+str(job.pk), 'generation', pool, gift_before if pool=='gift' else monthly_before, balance(account,pool), render_id=job.pk, period=allocation.get('period'))
@@ -330,21 +333,29 @@ class AIRenderImage(AIPrivateView):
 
 @sensitive_variables()
 def edit_image(api_key, job):
+    provider = PROVIDERS[job.provider]
     boundary='popomo-'+uuid.uuid4().hex
-    fields={'model':job.model_name,'prompt':job.prompt,'n':'1','size':'1024x1536',
-            'quality':'medium','output_format':'png','background':'opaque','safety_identifier':job.owner_hash}
+    fields={'model':job.model_name,'prompt':job.prompt,'n':'1','size':'1024x1536','quality':'medium'}
+    if job.provider == 'ai778':
+        # TT Image 2 does not accept background/output_format. Ask for inline
+        # bytes so private results never require fetching arbitrary remote URLs.
+        fields['response_format'] = 'b64_json'
+    else:
+        fields.update(output_format='png', background='opaque', safety_identifier=job.owner_hash)
     body=bytearray()
     for name,value in fields.items():
         body.extend(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode())
     ext={'image/jpeg':'jpg','image/png':'png','image/webp':'webp'}[job.input_mime]
-    body.extend(f'--{boundary}\r\nContent-Disposition: form-data; name="image[]"; filename="photo.{ext}"\r\nContent-Type: {job.input_mime}\r\n\r\n'.encode())
+    image_field = 'image' if job.provider == 'ai778' else 'image[]'
+    body.extend(f'--{boundary}\r\nContent-Disposition: form-data; name="{image_field}"; filename="photo.{ext}"\r\nContent-Type: {job.input_mime}\r\n\r\n'.encode())
     body.extend(bytes(job.input_image));body.extend(f'\r\n--{boundary}--\r\n'.encode())
-    request=urllib.request.Request(API_BASE+'/images/edits',data=bytes(body),headers={
+    request=urllib.request.Request(provider['base_url']+'/images/edits',data=bytes(body),headers={
         'Authorization':'Bearer '+api_key,'Content-Type':'multipart/form-data; boundary='+boundary,
         'Accept':'application/json'},method='POST')
     try:
-        with urllib.request.build_opener(NoRedirect()).open(request,timeout=240) as response:
-            payload=response.read(32*1024*1024+1);request_id=response.headers.get('x-request-id','')[:150]
+        with urllib.request.build_opener(NoRedirect()).open(request,timeout=360 if job.provider == 'ai778' else 240) as response:
+            payload=response.read(32*1024*1024+1)
+            request_id=response.headers.get('X-Task-Id' if job.provider == 'ai778' else 'x-request-id','')[:150]
         if len(payload)>32*1024*1024:raise ValueError()
         data=json.loads(payload);encoded=data['data'][0]['b64_json'];raw=base64.b64decode(encoded,validate=True)
         with warnings.catch_warnings():
@@ -377,10 +388,14 @@ def edit_image(api_key, job):
         }
         if provider_code in billing_errors:
             code,message=provider_code,billing_errors[provider_code]
+        if job.provider == 'ai778':
+            message = message.replace('OpenAI', '七七八 AI')
+            if provider_code == 'ip_not_allowed':
+                code,message='permission','七七八 AI rejected the server IP. Check the API key IP allowlist in its console.'
         raise GenerationError(code,message) from None
     except (urllib.error.URLError,TimeoutError,OSError):
         raise GenerationError('network','The image service timed out or could not be reached. Please retry later.') from None
-    except (ValueError,KeyError,TypeError,IndexError):
+    except (ValueError,KeyError,TypeError,IndexError,AttributeError):
         raise GenerationError('invalid_response','The image service returned an unreadable image. Please retry later.') from None
 
 
@@ -390,7 +405,7 @@ def run_render(job_id):
         return
     job=AIRender.objects.get(pk=job_id)
     try:
-        config=current_config()
+        config=provider_profile(current_config(), job.provider)
         if not config.api_key_ciphertext:
             raise GenerationError('credentials','AI generation is not configured. Please contact the store.')
         result,request_id=edit_image(decrypt_api_key(config),job)

@@ -16,7 +16,7 @@ from PIL import Image
 from rest_framework.test import APIClient
 
 from .ai_generation import edit_image, GenerationError, run_render, restore_credit
-from .ai_service import encrypt_api_key
+from .ai_service import encrypt_api_key, switch_provider, NoRedirect
 from .models import AIAccount, AIRender, AIServiceConfig, AIStyle, Customer, CreditEntry
 
 
@@ -154,6 +154,91 @@ class LiveGenerationTests(TestCase):
             self.assertIn(part,request.data)
         self.assertNotIn(b'input_fidelity',request.data)
         self.assertEqual(output,png());self.assertEqual(request_id,'request-123')
+
+    def use_relay(self):
+        config = AIServiceConfig.objects.get()
+        switch_provider(config, 'ai778')
+        config.api_key_ciphertext = encrypt_api_key('relay-only-key')
+        config.save()
+        self.body['provider'] = 'ai778'
+
+    def test_relay_upload_uses_documented_fields_endpoint_and_task_id(self):
+        self.use_relay()
+        job = self.job()
+        self.assertEqual(job.provider, 'ai778')
+        self.assertEqual(job.model_name, 'tt-image-2')
+        with patch('management_api.ai_generation.urllib.request.build_opener') as build:
+            reply = build.return_value.open.return_value.__enter__.return_value
+            reply.read.return_value = json.dumps({'data': [{'b64_json': base64.b64encode(png()).decode()}]}).encode()
+            reply.headers = {'X-Task-Id': '123456'}
+            output, request_id = edit_image('relay-only-key', job)
+        request = build.return_value.open.call_args.args[0]
+        self.assertEqual(request.full_url, 'https://api.lk888.ai/v1/images/edits')
+        self.assertEqual(request.get_header('Authorization'), 'Bearer relay-only-key')
+        self.assertIsInstance(build.call_args.args[0], NoRedirect)
+        for field in (png(), b'name="image"', b'tt-image-2', b'1024x1536', b'b64_json'):
+            self.assertIn(field, request.data)
+        for field in (b'name="background"', b'name="output_format"', b'name="safety_identifier"', b'name="image[]"'):
+            self.assertNotIn(field, request.data)
+        self.assertEqual(output, png())
+        self.assertEqual(request_id, '123456')
+
+    def test_queued_jobs_keep_original_provider_after_switch(self):
+        job = self.job()
+        self.use_relay()
+        with patch('management_api.ai_generation.edit_image', return_value=(png(), '')) as edit:
+            run_render(job.id)
+        key, queued = edit.call_args.args
+        self.assertEqual(key, 'test-not-a-real-api-key')
+        self.assertEqual(queued.provider, 'openai')
+
+    def test_relay_job_uses_relay_key_after_switching_back(self):
+        self.use_relay()
+        job = self.job()
+        config = AIServiceConfig.objects.get()
+        switch_provider(config, 'openai')
+        config.save()
+        with patch('management_api.ai_generation.edit_image', return_value=(png(), '')) as edit:
+            run_render(job.id)
+        key, queued = edit.call_args.args
+        self.assertEqual(key, 'relay-only-key')
+        self.assertEqual(queued.provider, 'ai778')
+
+    def test_provider_change_requires_fresh_consent_and_does_not_charge(self):
+        self.use_relay()
+        response, dispatch = self.create(provider='openai')
+        self.assertEqual(response.status_code, 409)
+        dispatch.assert_not_called()
+        self.assertFalse(AIRender.objects.exists())
+        self.assertEqual(AIAccount.objects.get().trial_used, 0)
+        self.assertFalse(CreditEntry.objects.exists())
+
+    def test_relay_can_spend_bonus_credits_and_records_one_failure_refund(self):
+        self.use_relay()
+        AIAccount.objects.update(trial_granted=0, bonus_granted=1)
+        job = self.job()
+        charge = CreditEntry.objects.get(kind='generation', render_id=job.pk)
+        self.assertEqual((charge.pool, charge.amount, charge.balance_after), ('gift', -1, 0))
+        with patch('management_api.ai_generation.edit_image', side_effect=GenerationError('network', 'Try later.')):
+            run_render(job.pk)
+            run_render(job.pk)
+        refund = CreditEntry.objects.get(kind='failure_refund', render_id=job.pk)
+        self.assertEqual((refund.pool, refund.amount, refund.balance_after), ('gift', 1, 1))
+        account = self.client.get('/api/v1/store/ai-account/').data
+        self.assertEqual((account['bonusGranted'], account['trialRemaining']), (1, 1))
+
+    def test_relay_rejects_url_only_results_without_fetching_or_leaking(self):
+        self.use_relay()
+        job = self.job()
+        with patch('management_api.ai_generation.urllib.request.build_opener') as build:
+            reply = build.return_value.open.return_value.__enter__.return_value
+            reply.read.return_value = json.dumps({'data': [{'url': 'http://127.0.0.1/private-canary'}]}).encode()
+            reply.headers = {}
+            with self.assertRaises(GenerationError) as caught:
+                edit_image('relay-only-key', job)
+            self.assertEqual(caught.exception.code, 'invalid_response')
+            self.assertNotIn('private-canary', str(caught.exception))
+            self.assertEqual(build.return_value.open.call_count, 1)
 
     def test_provider_errors_never_echo_credentials_or_raw_body(self):
         job=self.job();error=urllib.error.HTTPError('https://api.openai.com/v1/images/edits',429,'error',{},BytesIO(b'{"error":{"code":"insufficient_quota","message":"private-canary-token"}}'))

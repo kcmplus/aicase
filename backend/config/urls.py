@@ -11,6 +11,7 @@ from management_api.customer_auth import CustomerView, SendCode, VerifyCode, Cus
 from management_api.mail_service import MailSettings, MailTest, RegistrationSettings
 
 from management_api.customers import CustomerViewSet
+from management_api.stripe_payments import StripeSettings, PublicPaymentConfig, StripeCheckout, StripeWebhook
 
 router = DefaultRouter()
 router.register("customers", CustomerViewSet)
@@ -25,6 +26,10 @@ urlpatterns = [
     path("api/v1/admin/registration/", RegistrationSettings.as_view()),
     path("api/v1/admin/mail/", MailSettings.as_view()),
     path("api/v1/admin/mail/test/", MailTest.as_view()),
+    path("api/v1/admin/stripe/", StripeSettings.as_view()),
+    path("api/v1/store/payment-config/", PublicPaymentConfig.as_view()),
+    path("api/v1/store/orders/<uuid:reference>/checkout/", StripeCheckout.as_view()),
+    path("api/v1/payments/stripe/webhook/", StripeWebhook.as_view()),
     path("api/v1/store/ai-account/", AIAccountView.as_view()),
     path("api/v1/store/ai-renders/", AIRenders.as_view()),
     path("api/v1/store/ai-renders/<uuid:reference>/", AIRenderDetail.as_view()),

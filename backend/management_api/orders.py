@@ -1,4 +1,4 @@
-"""Browser-owned test orders. Payment and station actions are explicitly simulated."""
+"""Browser-owned case orders; station actions remain explicitly simulated."""
 import base64
 import hashlib
 import json
@@ -143,6 +143,8 @@ class Snapshot(Layout):
         return data
 
 class Checkout(StrictSerializer):
+    payment_mode = serializers.ChoiceField(choices=['demo', 'test', 'live'], default='demo')
+    payment_provider = serializers.ChoiceField(choices=['demo', 'stripe'], default='demo')
     request_key = serializers.UUIDField()
     accepted = serializers.BooleanField()
     expected_amount = serializers.DecimalField(max_digits=8, decimal_places=2, min_value=Decimal('0'))
@@ -150,7 +152,7 @@ class Checkout(StrictSerializer):
     snapshot = Snapshot()
     def validate_accepted(self, value):
         if not value:
-            raise serializers.ValidationError('Confirm your design and test payment first.')
+            raise serializers.ValidationError('Confirm your design and payment first.')
         return value
 
 class Revision(StrictSerializer):
@@ -186,7 +188,7 @@ def order_data(order, detail=True):
 
 def log(order, action):
     label = {'create':'确认订单','revise':'修改设计','start':'开始打印','ready':'打印完成，待取货','collect':'确认取货','cancel':'取消订单'}[action]
-    AuditLog.objects.create(actor_name='顾客（测试订单）', action=action, resource='management_api.printorder', object_id=str(order.pk), summary=f'测试订单 {order.reference} · {label}')
+    AuditLog.objects.create(actor_name='顾客', action=action, resource='management_api.printorder', object_id=str(order.pk), summary=f'{order.mode} 订单 {order.reference} · {label}')
 
 @method_decorator(never_cache, name='dispatch')
 class StoreOrders(APIView):
@@ -217,6 +219,10 @@ class StoreOrders(APIView):
         if existing:
             if existing.owner_hash != owner_hash:
                 raise Conflict('This checkout key has already been used.')
+            if existing.status == 'pending' and existing.mode.startswith('stripe_'):
+                expected_mode = 'stripe_' + str(request.data.get('payment_mode', ''))
+                if request.data.get('payment_provider') != 'stripe' or expected_mode != existing.mode:
+                    raise Conflict('This order uses a different payment environment. Open it from My orders to review it.')
             # Later edits must not make a retry overwrite the order snapshot.
             return Response(order_data(existing))
         serializer = Checkout(data=request.data)
@@ -226,7 +232,11 @@ class StoreOrders(APIView):
             raise Conflict('Printing is unavailable. Please try again later.')
         if data['expected_amount'] != plan.price:
             raise Conflict(f'The print price changed to {plan.currency} {plan.price}. Reload to review the new price.')
-        order = PrintOrder.objects.create(owner_hash=owner_hash, request_key=data['request_key'], mode='demo', status='paid', model_name=data['snapshot']['model'], amount=plan.price, currency=plan.currency, customer_email=data['customer_email'], snapshot=data['snapshot'])
+        from .stripe_payments import checkout_settings
+        payment = checkout_settings(data['payment_provider'], data['payment_mode'])
+        if payment['mode'].startswith('stripe_') and plan.price < Decimal('0.50'):
+            raise Conflict('Stripe requires a print price of at least USD 0.50.')
+        order = PrintOrder.objects.create(owner_hash=owner_hash, request_key=data['request_key'], **payment, model_name=data['snapshot']['model'], amount=plan.price, currency=plan.currency, customer_email=data['customer_email'], snapshot=data['snapshot'])
         log(order, 'create')
         return Response(order_data(order), status=201)
 

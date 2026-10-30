@@ -15,6 +15,7 @@ export let PRINT_PRICE_CENTS=1000,PRINT_PRICE='$10.00',PRINT_AVAILABLE=true;
 export let AI_MONTHLY_CENTS=990,AI_MONTHLY_PRICE='$9.90',AI_MONTHLY_LIMIT=20,AI_TRIAL_LIMIT=1,AI_AVAILABLE=true;
 export let catalogStatus='demo';
 export let AI_GENERATION_CONNECTED=false;
+export let AI_PROVIDER='openai';
 export const money=cents=>'$'+(cents/100).toFixed(2);
 export const safeAssetPath=value=>typeof value==='string'&&/^\.?\/(?:assets|media)\/[a-zA-Z0-9_/-]+\.(?:svg|png|jpg|jpeg|webp)$/.test(value);
 const code=value=>typeof value==='string'&&/^[a-zA-Z0-9_-]{1,80}$/.test(value);
@@ -49,6 +50,7 @@ export function applyCatalog(data){
  }).filter(e=>Object.keys(e.results).length);
  if(new Set(examples.map(e=>e.id)).size!==examples.length)throw Error('Duplicate example');
  registerImageVariants(data.image_variants);
+ AI_PROVIDER=data.ai_provider==='ai778'?'ai778':'openai';
  AI_GENERATION_CONNECTED=data.ai_generation_connected===true;
  PRINT_AVAILABLE=!!print;PRINT_PRICE_CENTS=print?.cents??0;PRINT_PRICE=print?money(print.cents):'Unavailable';
  AI_AVAILABLE=!!ai;AI_MONTHLY_CENTS=ai?.cents??0;AI_MONTHLY_PRICE=ai?money(ai.cents):'Unavailable';AI_MONTHLY_LIMIT=ai?.monthly_credits??0;AI_TRIAL_LIMIT=signupCredits;

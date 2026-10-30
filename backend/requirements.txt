@@ -10,4 +10,10 @@ pillow==12.3.0
 psycopg==3.3.6
 psycopg-binary==3.3.6
 sqlparse==0.6.0
-typing_extensions==4.16.0; python_version < "3.13"
+typing_extensions==4.16.0
+stripe==16.0.1
+requests==2.34.2
+charset-normalizer==3.5.2
+idna==3.20
+urllib3==2.8.0
+certifi==2026.10.23

@@ -1,3 +1,4 @@
+import {AI_PROVIDER} from './runtime-catalog.js';
 import {createAIOrder} from './ai-core.js';
 import {importPhoto} from './simple-upload.js';
 
@@ -44,7 +45,7 @@ export async function hydrateLiveImage(job){
 }
 export async function submitLiveRender(job,accepted){
  const data=await aiRequest('ai-renders/',{method:'POST',body:{request_key:job.id.replace(/^AI-/,''),
-  accepted,photo:job.photo,style_id:job.styleId,model:job.model}});
+  accepted,photo:job.photo,style_id:job.styleId,model:job.model,provider:AI_PROVIDER}});
  return hydrateLiveImage(mergeLiveRender(job,data));
 }
 export async function refreshLiveRender(job){
