@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {orderAccessKey,orderRequest,savedOrder,checkoutBody} from '../storefront/order-service.js';
+import {orderAccessKey,orderRequest,savedOrder,checkoutBody,getPaymentConfig,stripeCheckoutUrl} from '../storefront/order-service.js';
 import {createPersonalPass} from '../storefront/simple-core.js';
 import {phone} from '../storefront/art.js';
 import {makePersonalDesign} from '../storefront/simple-personalize.js';
@@ -34,4 +34,21 @@ test('the shared admin/order renderer escapes customer text',()=>{
  const snapshot=pass();snapshot.addedArtwork=[{id:'extra-text',type:'text',text:'<script>alert(1)</script>',font:'serif',color:'#123456',x:50,y:50,scale:100,rotation:0}];
  const html=phone(makePersonalDesign(snapshot),snapshot.model);
  assert.ok(html.includes('&lt;script&gt;'));assert.ok(!html.includes('<script>'));
+});
+
+test('Stripe state stays unpaid until the server confirms payment',()=>{
+ const data={reference:crypto.randomUUID(),snapshot:pass(),status:'pending',amount:'10.00',currency:'USD',mode:'stripe_live',revision:1,created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+ assert.equal(savedOrder(data).status,'pending');assert.equal(savedOrder(data).mode,'stripe_live');
+ assert.equal(savedOrder({...data,status:'paid'}).status,'paid');
+ const body=checkoutBody({requestKey:crypto.randomUUID(),pass:pass()},{accepted:true,amount:'10.00',provider:'stripe',mode:'test'});
+ assert.equal(body.payment_provider,'stripe');assert.equal(body.payment_mode,'test');
+});
+test('payment config failure cannot silently select demo payment',async()=>{
+ await assert.rejects(getPaymentConfig(async()=>({ok:false})),/could not be loaded/);
+ await assert.rejects(getPaymentConfig(async()=>({ok:true,json:async()=>({})})),/Invalid payment settings/);
+ assert.deepEqual(await getPaymentConfig(async()=>({ok:true,json:async()=>({provider:'stripe',mode:'test',available:true})})),{provider:'stripe',mode:'test',available:true});
+});
+test('redirect only accepts Stripe hosted checkout',()=>{
+ assert.equal(stripeCheckoutUrl('https://checkout.stripe.com/c/pay/test'),'https://checkout.stripe.com/c/pay/test');
+ for(const url of ['javascript:alert(1)','https://evil.test','http://checkout.stripe.com/pay','https://checkout.stripe.com.evil.test','https://user@checkout.stripe.com/pay'])assert.throws(()=>stripeCheckoutUrl(url));
 });

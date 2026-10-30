@@ -14,8 +14,21 @@ export async function orderRequest(path='',{method='GET',body,fetcher=fetch,key=
 }
 export function savedOrder(data,previous){
  const pass=readPass(data.snapshot.code,data.snapshot);
- return {id:data.reference,server:true,mode:'demo',status:data.status==='completed'?'collected':data.status,priceCents:Math.round(Number(data.amount)*100),currency:data.currency,revision:data.revision,stationId:data.station_id,customerEmail:data.customer_email,pass,oldCodes:[...new Set([...(previous?.oldCodes||[]),...(previous&&previous.pass.code!==pass.code?[previous.pass.code]:[])])],createdAt:Date.parse(data.created_at),updatedAt:Date.parse(data.updated_at)};
+ return {id:data.reference,server:true,mode:data.mode,status:data.status==='completed'?'collected':data.status,priceCents:Math.round(Number(data.amount)*100),currency:data.currency,revision:data.revision,stationId:data.station_id,customerEmail:data.customer_email,pass,oldCodes:[...new Set([...(previous?.oldCodes||[]),...(previous&&previous.pass.code!==pass.code?[previous.pass.code]:[])])],createdAt:Date.parse(data.created_at),updatedAt:Date.parse(data.updated_at)};
 }
-export function checkoutBody(draft,{accepted,email='',amount}){
- return {request_key:draft.requestKey,accepted,customer_email:email,expected_amount:amount,snapshot:draft.pass};
+export function checkoutBody(draft,{accepted,email='',amount,provider='demo',mode='demo'}){
+ return {request_key:draft.requestKey,payment_provider:provider,payment_mode:mode,accepted,customer_email:email,expected_amount:amount,snapshot:draft.pass};
+}
+
+export async function getPaymentConfig(fetcher=fetch){
+ const response=await fetcher('/api/v1/store/payment-config/',{credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(10000)});
+ if(!response.ok)throw Error('Payment settings could not be loaded. Please reload and try again.');
+ const data=await response.json();
+ if(!['demo','stripe'].includes(data.provider)||!['demo','test','live'].includes(data.mode)||typeof data.available!=='boolean')throw Error('Invalid payment settings.');
+ return data;
+}
+export function stripeCheckoutUrl(value){
+ const url=new URL(value);
+ if(url.protocol!=='https:'||url.hostname!=='checkout.stripe.com'||url.username||url.password)throw Error('Invalid Stripe checkout address.');
+ return url.href;
 }

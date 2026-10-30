@@ -55,6 +55,9 @@ class AIStyle(CatalogItem):
 
 class AIServiceConfig(Timestamped):
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    provider = models.CharField(max_length=20, default="openai")
+    # Inactive provider profiles contain encrypted keys only. Never serialize this field.
+    provider_profiles = models.JSONField(default=dict, editable=False)
     model_name = models.CharField(max_length=100, default="gpt-image-2")
     api_key_ciphertext = models.TextField(blank=True, editable=False)
     key_last_four = models.CharField(max_length=4, blank=True, editable=False)
@@ -100,7 +103,13 @@ class PrintOrder(Timestamped):
     reference = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     owner_hash = models.CharField(max_length=64, blank=True, db_index=True, editable=False)
     request_key = models.UUIDField(null=True, unique=True, editable=False)
-    mode = models.CharField(max_length=20, default="legacy", choices=[("legacy", "历史订单"), ("demo", "测试支付")])
+    mode = models.CharField(max_length=20, default="legacy", choices=[("legacy", "历史订单"), ("demo", "演示支付"), ("stripe_test", "Stripe 测试"), ("stripe_live", "Stripe 正式")])
+    stripe_session_id = models.CharField(max_length=255, null=True, blank=True, unique=True, editable=False)
+    stripe_checkout_url = models.TextField(blank=True, editable=False)
+    stripe_payment_intent = models.CharField(max_length=255, blank=True, editable=False)
+    payment_credentials = models.TextField(blank=True, editable=False)
+    payment_return_url = models.URLField(blank=True, editable=False)
+    paid_at = models.DateTimeField(null=True, blank=True, editable=False)
     revision = models.PositiveIntegerField(default=1)
     station_id = models.CharField(max_length=30, blank=True)
     customer_email = models.EmailField(blank=True)
@@ -112,6 +121,20 @@ class PrintOrder(Timestamped):
     notes = models.TextField(blank=True, max_length=2000)
     class Meta:
         ordering = ["-created_at"]
+
+
+class StripeConfig(Timestamped):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    enabled = models.BooleanField(default=False)
+    mode = models.CharField(max_length=4, default="test", choices=[("test", "测试"), ("live", "正式")])
+    storefront_url = models.URLField(blank=True)
+    test_credentials = models.TextField(blank=True, editable=False)
+    live_credentials = models.TextField(blank=True, editable=False)
+    revision = models.PositiveIntegerField(default=0, editable=False)
+
+    class Meta:
+        default_permissions = ()
+        constraints = [models.CheckConstraint(condition=models.Q(id=1), name="single_stripe_config")]
 
 class AuditLog(models.Model):
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
@@ -126,8 +149,61 @@ class AuditLog(models.Model):
         default_permissions = ("view",)
 
 
+class Customer(Timestamped):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    email = models.EmailField(unique=True)
+    active = models.BooleanField(default=True)
+    verified_at = models.DateTimeField()
+
+    class Meta:
+        default_permissions = ()
+
+
+class EmailChallenge(models.Model):
+    email = models.EmailField(primary_key=True)
+    nonce = models.UUIDField(default=uuid.uuid4)
+    code_hash = models.CharField(max_length=64)
+    expires_at = models.DateTimeField()
+    sent_at = models.DateTimeField()
+    window_at = models.DateTimeField()
+    sent_count = models.PositiveIntegerField(default=0)
+    attempts = models.PositiveIntegerField(default=0)
+    delivered = models.BooleanField(default=False)
+
+    class Meta:
+        default_permissions = ()
+
+
+class CustomerAuthLimit(models.Model):
+    key = models.CharField(primary_key=True, max_length=64)
+    window_at = models.DateTimeField()
+    count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        default_permissions = ()
+
+
+class SMTPConfig(Timestamped):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    enabled = models.BooleanField(default=False)
+    host = models.CharField(max_length=253, blank=True)
+    port = models.PositiveIntegerField(default=587)
+    security = models.CharField(max_length=10, default='starttls')
+    username = models.CharField(max_length=254, blank=True)
+    password_ciphertext = models.TextField(blank=True, editable=False)
+    from_email = models.EmailField(blank=True)
+    from_name = models.CharField(max_length=100, default='POPOMO')
+    revision = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        default_permissions = ()
+        constraints = [models.CheckConstraint(condition=models.Q(id=1), name='single_smtp_config')]
+
+
 class AIAccount(Timestamped):
     owner_hash = models.CharField(primary_key=True, max_length=64, editable=False)
+    customer = models.OneToOneField(Customer, null=True, blank=True, on_delete=models.PROTECT)
+    trial_granted = models.PositiveIntegerField(default=0)
     trial_used = models.PositiveIntegerField(default=0)
     subscription = models.JSONField(null=True, blank=True)
 
@@ -142,6 +218,7 @@ class AIRender(Timestamped):
     status = models.CharField(max_length=20, default='queued', db_index=True)
     style_code = models.CharField(max_length=80)
     style_name = models.CharField(max_length=120)
+    provider = models.CharField(max_length=20, default="openai", editable=False)
     model_name = models.CharField(max_length=80)
     phone_model = models.CharField(max_length=120)
     phone_template_id = models.CharField(max_length=80)

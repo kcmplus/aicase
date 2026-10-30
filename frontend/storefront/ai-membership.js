@@ -15,6 +15,7 @@ export function refreshMembership(value,now=Date.now()){
 }
 export function credits(value,now=Date.now()){
  const a=refreshMembership(value,now),s=a.subscription;
+ if(a.server)return {trial:AI_AVAILABLE&&a.authenticated===true?Math.max(0,Number(a.trialRemaining)||0):0,monthly:a.authenticated===true&&s&&now<s.endsAt?Math.max(0,subscriptionLimit(s)-s.used):0,active:a.authenticated===true&&!!s&&now<s.endsAt};
  return {trial:AI_AVAILABLE?Math.max(0,AI_TRIAL_LIMIT-trialSpent(a)):0,monthly:s&&now<s.endsAt?Math.max(0,subscriptionLimit(s)-s.used):0,active:!!s&&now<s.endsAt};
 }
 export function subscribe(value,{accepted=false,now=Date.now()}={}){

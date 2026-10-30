@@ -30,7 +30,7 @@ npm run backend
 - `/api/v1/admin/users/`：账号查询、新增、编辑、停用。不提供删除账号或提升超级管理员接口。
 - `/api/v1/admin/roles/`：角色和模型权限。角色仍有关联账号时不可删除。
 - `GET /api/v1/admin/permissions/`：权限清单。
-- `GET/PATCH /api/v1/admin/ai-service/`：仅超级管理员查看及更新生图服务配置；不回传完整密钥。PATCH 要求 `revision`，空密钥保留已有值，`clear_api_key: true` 显式清除。
+- `GET/PATCH /api/v1/admin/ai-service/`：仅超级管理员查看及更新生图服务配置；不回传完整密钥。PATCH 要求 `revision`，支持 `provider: openai/ai778`，两家分别保存模型与加密 Key；空密钥保留当前服务商已有值，`clear_api_key: true` 显式清除。升级执行迁移 `0011_ai_relay_provider`，见 [配置说明](../docs/ai-service-config.md)。
 - `POST /api/v1/admin/ai-service/check/`：检查已保存密钥是否可读取所选模型信息；要求 `revision`，每用户每进程每分钟最多 6 次，不生成图片。
 - `POST /api/v1/admin/uploads/`：multipart file。10 MB / 2000 万像素上限，仅 JPG / PNG / WebP，解码后转 PNG、删除元数据、最长边 2400，生成随机文件名。不是生产原图存储服务。
 - `/api/v1/admin/orders/`：分页、搜索、status 筛选；详情含私有设计快照，列表不含图像。PATCH 仅更新客服 notes。
@@ -72,3 +72,15 @@ npm run backend
 订单创建使用数据库唯一请求键与套餐行锁避免重复；修订、状态流转在订单行锁下校验版本，重复请求不重复推进。同一笔订单的金额与设计快照独立保存。静态编辑器当前支持的机型 / 设计必须仍启用。快照仅接受声明式字段、受限图层和有效图片，最多 300 万字符的图片 data URL / 400 万像素；照片仅在授权订单详情中读取，不保存到公开 media。当前是压缩预览快照，不能视为生产打印文件。
 
 顾客访问依赖本浏览器持有的密钥，没有账号找回与跨设备扫码授权。旧 IndexedDB 演示订单不会自动导入；新下单失败不会回退本地“已付款”。
+
+## Stripe 手机壳支付
+
+后台 `/admin/stripe` 可配置开关、测试/正式环境、用户端网站地址和两组 Secret Key / Webhook 签名密钥。默认关闭，旧演示流程保留。开启后壳单先创建为待付款，只有通过 Stripe 签名与金额校验的 Webhook 才确认到账。配置权限仅超级管理员，密钥使用现有 `AI_CONFIG_ENCRYPTION_KEY` 加密。
+
+- `GET/PATCH /api/v1/admin/stripe/`：安全配置读取与更新，PATCH 要求 `revision`；密钥留空保留，`test/live: {clear: true}` 显式清除。
+- `GET /api/v1/store/payment-config/`：公开付款方式、环境与可用状态，不含密钥。
+- `POST /api/v1/store/orders/`：增加 `payment_provider`（`demo/stripe`）、`payment_mode`（`demo/test/live`），与当前配置不符返回 409；Stripe 订单状态初始为 `pending`。
+- `POST /api/v1/store/orders/<reference>/checkout/`：验证浏览器归属，返回该订单的托管付款链接，重复请求保持同一 Session。
+- `POST /api/v1/payments/stripe/webhook/`：验证原始请求签名并幂等更新订单。
+
+迁移和账号注册后的配置、测试方法及边界见 [Stripe 接入说明](../docs/stripe-payments.md)。

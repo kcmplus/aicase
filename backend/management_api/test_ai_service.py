@@ -11,6 +11,7 @@ from rest_framework.test import APIClient
 
 from .ai_service import API_BASE, NoRedirect, check_openai_connection, decrypt_api_key
 from .models import AIServiceConfig, AuditLog
+from .ai_service import check_ai778_connection, provider_profile, PROVIDERS
 
 FAKE_KEY = "sk-test-nonfunctional-" + "a" * 36
 PATH = "/api/v1/admin/ai-service/"
@@ -31,6 +32,93 @@ class AIServiceTests(TestCase):
 
     def save_key(self):
         return self.client.patch(PATH, {"revision": 0, "api_key": FAKE_KEY}, format="json")
+
+    def test_provider_switch_preserves_encrypted_keys_and_models_separately(self):
+        self.save_key()
+        relay_key = 'test-relay-key-canary-5678'
+        response = self.client.patch(PATH, {"revision": 1, "provider": "ai778", "api_key": relay_key,
+                                           "model_name": "tt-image-2-token"}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['base_url'], 'https://api.lk888.ai/v1')
+        config = AIServiceConfig.objects.get()
+        self.assertEqual(decrypt_api_key(config), relay_key)
+        self.assertEqual(decrypt_api_key(provider_profile(config, 'openai')), FAKE_KEY)
+        for response in (response, self.client.get(PATH), self.client.get('/api/v1/catalog/')):
+            self.assertNotIn(relay_key, response.content.decode())
+            self.assertNotIn(FAKE_KEY, response.content.decode())
+            self.assertNotIn('provider_profiles', response.content.decode())
+            self.assertNotIn(config.api_key_ciphertext, response.content.decode())
+        self.assertNotIn(relay_key, str(list(AuditLog.objects.values())))
+        self.assertNotIn(relay_key, json.dumps(config.provider_profiles))
+        response = self.client.patch(PATH, {"revision": 2, "provider": "openai"}, format="json")
+        self.assertEqual(response.data['model_name'], 'gpt-image-2')
+        self.assertEqual(decrypt_api_key(AIServiceConfig.objects.get()), FAKE_KEY)
+        response = self.client.patch(PATH, {"revision": 3, "provider": "ai778", "api_key": ""}, format="json")
+        self.assertEqual(response.data['model_name'], 'tt-image-2-token')
+        self.assertEqual(decrypt_api_key(AIServiceConfig.objects.get()), relay_key)
+        response = self.client.patch(PATH, {"revision": 4, "clear_api_key": True}, format="json")
+        self.assertFalse(response.data['has_api_key'])
+        response = self.client.patch(PATH, {"revision": 5, "provider": "openai"}, format="json")
+        self.assertTrue(response.data['has_api_key'])
+        self.assertEqual(decrypt_api_key(AIServiceConfig.objects.get()), FAKE_KEY)
+        self.client.patch(PATH, {"revision": 6, "provider": "ai778"}, format="json")
+        self.assertFalse(AIServiceConfig.objects.get().api_key_ciphertext)
+
+    def test_switching_to_unconfigured_provider_never_reuses_openai_key(self):
+        self.save_key()
+        AIServiceConfig.objects.update(last_check_status='ok')
+        result = self.client.patch(PATH, {"revision": 1, "provider": "ai778"}, format="json")
+        self.assertEqual(result.status_code, 200)
+        self.assertFalse(result.data['has_api_key'])
+        self.assertFalse(result.data['generation_connected'])
+        self.assertEqual(result.data['last_check_status'], 'untested')
+        self.assertEqual(result.data['model_name'], 'tt-image-2')
+        with patch('management_api.ai_service.urllib.request.build_opener') as build:
+            self.assertEqual(self.client.post(PATH+'check/', {'revision': 2}).status_code, 400)
+            build.assert_not_called()
+
+    def test_provider_models_and_urls_cannot_be_mixed_or_overridden(self):
+        self.save_key()
+        for body in ({'provider': 'unknown'}, {'provider': 'ai778', 'model_name': 'gpt-image-1-mini'},
+                     {'model_name': 'tt-image-2'}, {'provider_profiles': {}}, {'base_url': 'https://example.com'}):
+            response = self.client.patch(PATH, {'revision': 1, **body}, format='json')
+            self.assertEqual(response.status_code, 400, body)
+        self.assertEqual(AIServiceConfig.objects.get().provider, 'openai')
+        self.assertEqual(decrypt_api_key(AIServiceConfig.objects.get()), FAKE_KEY)
+
+    @patch('management_api.ai_service.check_ai778_connection', return_value=(True, 'ok'))
+    @patch('management_api.ai_service.check_openai_connection')
+    def test_relay_check_uses_only_its_saved_credentials(self, openai, relay):
+        self.save_key()
+        self.client.patch(PATH, {'revision': 1, 'provider': 'ai778', 'api_key': 'relay-only-key'}, format='json')
+        result = self.client.post(PATH+'check/', {'revision': 2})
+        self.assertEqual(result.data['last_check_status'], 'ok')
+        relay.assert_called_once_with('relay-only-key', 'tt-image-2')
+        openai.assert_not_called()
+
+    @patch('management_api.ai_service.urllib.request.build_opener')
+    def test_relay_check_reads_models_without_generating_or_redirecting(self, build):
+        response = build.return_value.open.return_value.__enter__.return_value
+        for model in ('tt-image-2', 'gpt-image-2'):
+            response.read.return_value = json.dumps({'data': [{'id': model}]}).encode()
+            self.assertTrue(check_ai778_connection('relay-only-key', 'tt-image-2')[0])
+        request = build.return_value.open.call_args.args[0]
+        self.assertEqual(request.full_url, PROVIDERS['ai778']['base_url']+'/models')
+        self.assertEqual(request.get_method(), 'GET')
+        self.assertIsNone(request.data)
+        self.assertEqual(request.get_header('Authorization'), 'Bearer relay-only-key')
+        self.assertIsInstance(build.call_args.args[0], NoRedirect)
+        for body in ({'data': []}, {'data': {}}, [], {'error': 'private-canary'}, {'data': [{'id': 'other'}]}):
+            response.read.return_value = json.dumps(body).encode()
+            ok, message = check_ai778_connection('relay-only-key', 'tt-image-2')
+            self.assertFalse(ok)
+            self.assertNotIn('private-canary', message)
+        for status in (401, 403, 429, 500, 302):
+            build.return_value.open.side_effect = urllib.error.HTTPError('https://api.lk888.ai/v1/models', status,
+                'private-canary', {}, BytesIO(b'private-canary'))
+            ok, message = check_ai778_connection('relay-only-key', 'tt-image-2')
+            self.assertFalse(ok)
+            self.assertNotIn('private-canary', message)
 
     def test_superuser_only_including_reads_and_checks(self):
         for user in (None, self.staff):
