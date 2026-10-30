@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {aiRequest,createLiveRender,mergeLiveRender} from '../storefront/ai-service.js';
+import {aiRequest,createLiveRender,mergeLiveRender,hydrateLiveImage} from '../storefront/ai-service.js';
 import {refreshAIOrder,canApplyAIOrder} from '../storefront/ai-core.js';
 import {aiPage} from '../storefront/ai-view.js';
 import {freshMembership,refreshMembership} from '../storefront/ai-membership.js';
@@ -21,6 +21,27 @@ test('real jobs never advance on a demo timer or substitute reference images',()
 test('responses must match the saved request and private image route',()=>{
  const j=job();const r=response(j);
  for(const change of [{id:'bad'},{requestKey:crypto.randomUUID()},{mode:'demo'},{status:'complete'},{status:'ready',result:'https://example.com/tracker.png'}])assert.throws(()=>mergeLiveRender(j,{...r,...change}));
+});
+test('expired server images stop loading while an existing local copy remains usable',async()=>{
+ const j=job(),r=response(j);
+ const expired=mergeLiveRender(j,{...r,status:'ready',result:`/api/v1/store/ai-renders/${r.id}/image/`,imageExpired:true,imageExpiresAt:12345});
+ assert.equal(await hydrateLiveImage(expired),expired);
+ const html=aiPage(expired,freshMembership());
+ assert.match(html,/Image retention period ended/);
+ assert.doesNotMatch(html,/Loading your image|Reload my image|data-ai-action="apply"|STYLE REFERENCE/);
+ const local={...expired,resultPhoto:photo};
+ assert.equal(await hydrateLiveImage(local),local);
+ assert.equal(canApplyAIOrder(local),true);
+ assert.match(aiPage(local,freshMembership()),/data-ai-action="apply"/);
+});
+test('expiry between status polling and image loading becomes an expired state',async t=>{
+ t.mock.method(globalThis,'fetch',async()=>({ok:false,status:410,json:async()=>({detail:'Image expired'})}));
+ const j=job(),r=response(j);
+ const ready=mergeLiveRender(j,{...r,status:'ready',result:`/api/v1/store/ai-renders/${r.id}/image/`});
+ const expired=await hydrateLiveImage(ready);
+ assert.equal(expired.imageExpired,true);
+ assert.equal(expired.status,'ready');
+ assert.equal(expired.payment,'credit_reserved');
 });
 test('result screen shows the actual input and actual generated image',()=>{
  const j=job();const r=response(j);const ready={...mergeLiveRender(j,{...r,status:'ready',result:`/api/v1/store/ai-renders/${r.id}/image/`}),resultPhoto:'data:image/jpeg;base64,BAUG'};
@@ -55,7 +76,7 @@ test('active previews never substitute a sample or offer cancellation after gene
  assert.doesNotMatch(running,/data-ai-action="cancel"/);
  for(const html of [queued,running]){
   assert.doesNotMatch(html,/STYLE REFERENCE|data-ai-action="apply"|About \d+s|\d+%/);
-  assert.match(html,/A little magic in progress/);assert.match(html,/This can take a few minutes|Waiting for an available slot/);
+  assert.match(html,/A little magic in progress/);assert.match(html,/Usually takes around 10–20 seconds/);
  }
 });
 test('ready previews retain slider endpoints and use each supplied phone mask',()=>{

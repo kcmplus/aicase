@@ -59,6 +59,7 @@ class AIServiceConfig(Timestamped):
     # Inactive provider profiles contain encrypted keys only. Never serialize this field.
     provider_profiles = models.JSONField(default=dict, editable=False)
     model_name = models.CharField(max_length=100, default="gpt-image-2")
+    image_retention_days = models.PositiveSmallIntegerField(default=30)
     api_key_ciphertext = models.TextField(blank=True, editable=False)
     key_last_four = models.CharField(max_length=4, blank=True, editable=False)
     key_updated_at = models.DateTimeField(null=True, blank=True, editable=False)
@@ -234,6 +235,8 @@ class AIRender(Timestamped):
     input_mime = models.CharField(max_length=20)
     input_hash = models.CharField(max_length=64, editable=False)
     result_image = models.BinaryField(null=True, editable=False)
+    image_expires_at = models.DateTimeField(null=True, editable=False, db_index=True)
+    image_deleted_at = models.DateTimeField(null=True, editable=False)
     allocation = models.JSONField(default=dict)
     credit_restored = models.BooleanField(default=False)
     started_at = models.DateTimeField(null=True)
@@ -241,10 +244,22 @@ class AIRender(Timestamped):
     error_code = models.CharField(max_length=60, blank=True)
     error_message = models.CharField(max_length=300, blank=True)
     provider_request_id = models.CharField(max_length=150, blank=True, editable=False)
+    api_started_at = models.DateTimeField(null=True, editable=False)
+    api_finished_at = models.DateTimeField(null=True, editable=False)
+    api_duration_ms = models.PositiveIntegerField(null=True, editable=False)
+    http_status = models.PositiveSmallIntegerField(null=True, editable=False)
+    request_params = models.JSONField(default=dict, editable=False)
+    usage = models.JSONField(default=dict, editable=False)
+    cost_amount = models.DecimalField(max_digits=18, decimal_places=8, null=True, editable=False)
+    cost_currency = models.CharField(max_length=12, blank=True, editable=False)
+    cost_source = models.CharField(max_length=20, default='unknown', editable=False)
+    cost_details = models.JSONField(default=dict, editable=False)
+    cost_recorded_at = models.DateTimeField(null=True, editable=False)
 
     class Meta:
         ordering = ['-created_at']
         default_permissions = ()
+        indexes = [models.Index(fields=['-created_at'], name='ai_render_created_idx')]
 
 
 class CreditEntry(models.Model):

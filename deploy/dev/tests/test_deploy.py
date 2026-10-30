@@ -20,6 +20,7 @@ class DeploymentTests(unittest.TestCase):
         self.state.mkdir()
         (self.state / 'media').mkdir()
         self.base.mkdir()
+        (self.root / 'units').mkdir()
         self.bin = self.root / 'bin'
         self.bin.mkdir()
         self.release_id = '1-1-' + 'a' * 40
@@ -33,6 +34,7 @@ class DeploymentTests(unittest.TestCase):
         source = (Path(__file__).resolve().parents[1] / 'deploy.sh').read_text()
         source = source.replace('[[ $EUID -eq 0 ]]', 'true')
         source = source.replace('base=/opt/aicase-dev', f'base={self.base}')
+        source = source.replace('unit_dir=/etc/systemd/system', f'unit_dir={self.root / "units"}')
         source = source.replace('state=/var/lib/aicase-dev', f'state={self.state}')
         source = source.replace('env_file=/etc/aicase-dev/backend.env', f'env_file={env_file}')
         source = source.replace('/var/lock/aicase-dev-deploy.lock', str(self.root / 'lock'))
@@ -75,6 +77,9 @@ elif name == 'curl' and fail == 'health':
         (tree / 'frontend/storefront').mkdir(parents=True)
         (tree / 'frontend/storefront/index.html').write_text('test')
         (tree / 'VERSION').write_text('a' * 40 + '\n')
+        (tree / 'deploy/dev').mkdir(parents=True)
+        for name in ['aicase-dev-ai-cleanup.service', 'aicase-dev-ai-cleanup.timer']:
+            shutil.copyfile(Path(__file__).resolve().parents[1] / name, tree / 'deploy/dev' / name)
         with tarfile.open(self.root / 'release.tar.gz', 'w:gz') as archive:
             for path in tree.iterdir(): archive.add(path, arcname=path.name)
 
@@ -99,6 +104,8 @@ elif name == 'curl' and fail == 'health':
         self.assertFalse((self.state / 'deploying').exists())
         calls = (self.root / 'calls').read_text()
         self.assertIn('seed_phone_templates --only-supplied', calls)
+        self.assertIn('systemctl enable --now aicase-dev-ai-cleanup.timer', calls)
+        self.assertTrue((self.root / 'units/aicase-dev-ai-cleanup.service').exists())
         self.assertLess(calls.index('pg_dump '), calls.index('migrate --noinput'))
         self.assertTrue((self.state / 'backups' / self.release_id / 'COMPLETE').exists())
 

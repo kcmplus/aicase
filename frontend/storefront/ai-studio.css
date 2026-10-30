@@ -100,6 +100,8 @@
 .studio-progress .is-done .studio-progress-dot{background:#e5efdd;color:#64874e;border-color:#dce8d1}.studio-progress .is-current .studio-progress-dot{background:#315c40;color:#fff;border-color:#315c40;box-shadow:0 0 0 4px #ebf1e4}
 .studio-progress strong{font-size:12px;font-weight:500;line-height:1.5;color:#697760}.studio-progress p{font-size:10px;line-height:1.7;color:#697760;margin-top:4px}
 .studio-progress .is-done strong{color:#6b805f}.studio-progress .is-current strong{color:#355635}.studio-progress .is-current p{color:#697760}
+.studio-progress .is-current>div{flex:1;min-width:0}.studio-progress .is-current strong{font-size:14px}.studio-progress .is-current p{font-size:12px;line-height:1.65}
+.studio-progress .studio-wait-message{display:flex;align-items:center;margin-top:10px;padding:12px 14px;border-radius:10px;background:#f1f5eb;border:1px solid #e3eadb;color:#425d4d;min-height:calc(3.3em + 24px)}
 @keyframes studio-orbit{to{transform:rotate(360deg)}}@keyframes studio-breathe{50%{transform:scale(.86);opacity:.65}}
 /* The editor keeps the image grid. Filtering and choosing a look do not rebuild the case canvas. */
 .studio-picker{background:#fff;border:1px solid #dce5d5;border-radius:18px;padding:21px;margin-top:24px;box-shadow:0 5px 16px #30432708;overflow:visible}

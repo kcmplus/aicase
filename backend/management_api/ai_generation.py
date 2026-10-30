@@ -21,7 +21,6 @@ from .credit_ledger import balance, ensure_opening, record, expire_monthly
 from django.conf import settings
 from django.db import transaction
 from django.db.models import F
-from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -36,6 +35,8 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .ai_service import PROVIDERS, NoRedirect, current_config, decrypt_api_key, encryption_ready, provider_profile
+from .ai_costs import CallTelemetry, safe_request_id, sync_relay_cost
+from .ai_images import image_expired, image_response, maybe_cleanup_images
 from .models import AIAccount, AIRender, AIServiceConfig, AIStyle, PhoneModel, PricingPlan
 from .orders import StrictSerializer
 from .customer_auth import customer_owner as owner, customer_for, public_customer, signup_credits
@@ -110,6 +111,8 @@ def render_data(job):
             'completedAt': int(job.completed_at.timestamp()*1000) if job.completed_at else None,
             'payment': 'credit_restored' if job.credit_restored else 'credit_expired' if job.error_code=='credit_period_expired' else 'credit_reserved',
             'errorCode': job.error_code, 'errorMessage': job.error_message,
+            'imageExpired': image_expired(job),
+            'imageExpiresAt': int(job.image_expires_at.timestamp()*1000) if job.image_expires_at else None,
             'result': f'/api/v1/store/ai-renders/{job.id}/image/' if job.status == 'ready' else None}
 
 
@@ -308,6 +311,7 @@ class AIRenders(AIPrivateView):
 class AIRenderDetail(AIPrivateView):
     def get(self, request, reference):
         key=owner(request);expire_stale_jobs(key)
+        maybe_cleanup_images()
         return Response(render_data(get_object_or_404(AIRender.objects.defer('input_image','result_image'),pk=reference,owner_hash=key)))
 
     def post(self, request, reference):
@@ -324,11 +328,9 @@ class AIRenderDetail(AIPrivateView):
 
 class AIRenderImage(AIPrivateView):
     def get(self, request, reference):
-        job=get_object_or_404(AIRender,pk=reference,owner_hash=owner(request),status='ready')
-        response=HttpResponse(bytes(job.result_image),content_type='image/png')
-        response['Content-Disposition']=f'inline; filename="ai-{job.id}.png"'
-        response['Cache-Control']='private, no-store';response['X-Content-Type-Options']='nosniff'
-        return response
+        job=get_object_or_404(AIRender.objects.only('result_image','image_expires_at','image_deleted_at'),
+                             pk=reference,owner_hash=owner(request),status='ready')
+        return image_response(job)
 
 
 @sensitive_variables()
@@ -352,12 +354,16 @@ def edit_image(api_key, job):
     request=urllib.request.Request(provider['base_url']+'/images/edits',data=bytes(body),headers={
         'Authorization':'Bearer '+api_key,'Content-Type':'multipart/form-data; boundary='+boundary,
         'Accept':'application/json'},method='POST')
+    telemetry = CallTelemetry(job, {key: fields[key] for key in ('n', 'size', 'quality')})
     try:
         with urllib.request.build_opener(NoRedirect()).open(request,timeout=360 if job.provider == 'ai778' else 240) as response:
+            request_id=safe_request_id(response.headers.get('X-Task-Id' if job.provider == 'ai778' else 'x-request-id',''), api_key)
+            telemetry.response(response.status, request_id)
             payload=response.read(32*1024*1024+1)
-            request_id=response.headers.get('X-Task-Id' if job.provider == 'ai778' else 'x-request-id','')[:150]
         if len(payload)>32*1024*1024:raise ValueError()
-        data=json.loads(payload);encoded=data['data'][0]['b64_json'];raw=base64.b64decode(encoded,validate=True)
+        data=json.loads(payload)
+        telemetry.response(telemetry.http_status, request_id, data)
+        encoded=data['data'][0]['b64_json'];raw=base64.b64decode(encoded,validate=True)
         with warnings.catch_warnings():
             warnings.simplefilter('error',Image.DecompressionBombWarning)
             with Image.open(BytesIO(raw)) as image:
@@ -366,7 +372,12 @@ def edit_image(api_key, job):
         return output.getvalue(),request_id
     except urllib.error.HTTPError as error:
         status=error.code
-        try:provider_code=json.loads(error.read(16384)).get('error',{}).get('code','')
+        request_id=safe_request_id((error.headers or {}).get('X-Task-Id' if job.provider == 'ai778' else 'x-request-id',''), api_key)
+        telemetry.response(status, request_id)
+        try:
+            data=json.loads(error.read(16384))
+            telemetry.response(status, request_id, data)
+            provider_code=data.get('error',{}).get('code','')
         except Exception:provider_code=''
         error.close()
         messages={401:('credentials','OpenAI rejected the API key. Please check the saved service configuration.'),
@@ -397,6 +408,8 @@ def edit_image(api_key, job):
         raise GenerationError('network','The image service timed out or could not be reached. Please retry later.') from None
     except (ValueError,KeyError,TypeError,IndexError,AttributeError):
         raise GenerationError('invalid_response','The image service returned an unreadable image. Please retry later.') from None
+    finally:
+        telemetry.finish()
 
 
 @sensitive_variables()
@@ -404,15 +417,26 @@ def run_render(job_id):
     if not AIRender.objects.filter(pk=job_id,status='queued').update(status='generating',started_at=timezone.now()):
         return
     job=AIRender.objects.get(pk=job_id)
+    api_key = None
     try:
         config=provider_profile(current_config(), job.provider)
         if not config.api_key_ciphertext:
             raise GenerationError('credentials','AI generation is not configured. Please contact the store.')
-        result,request_id=edit_image(decrypt_api_key(config),job)
+        api_key = decrypt_api_key(config)
+        result,request_id=edit_image(api_key,job)
+        completed = timezone.now()
+        expires = completed + timedelta(days=current_config().image_retention_days)
         AIRender.objects.filter(pk=job_id,status='generating').update(status='ready',result_image=result,
-            input_image=b'',completed_at=timezone.now(),provider_request_id=request_id)
+            input_image=b'',completed_at=completed,provider_request_id=request_id,image_expires_at=expires)
     except GenerationError as error:
         restore_credit(job,'failed',error.code,error.message)
     except Exception:
         # Never put provider bodies, credentials or uploaded photos into logs/UI.
         restore_credit(job,'failed','internal','The render could not finish. Your generation has been returned. Please retry.')
+    finally:
+        if job.provider == 'ai778' and api_key:
+            try:
+                job.refresh_from_db(fields=['provider_request_id','usage','cost_details','cost_source'])
+                sync_relay_cost(job, api_key)
+            except Exception:
+                pass  # Billing lookup must never delay delivery or refund a completed render.

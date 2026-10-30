@@ -3,16 +3,17 @@ import {computed,onMounted,onBeforeUnmount,ref} from 'vue';
 import {onBeforeRouteLeave} from 'vue-router';
 import {ElMessage,ElMessageBox} from 'element-plus';
 import {api} from './api.js';
+defineProps({embedded:Boolean});
 
-const config=ref(null),provider=ref('openai'),model=ref(''),keyInput=ref(''),loading=ref(false),saving=ref(false),checking=ref(false),error=ref('');
+const config=ref(null),provider=ref('openai'),model=ref(''),retentionDays=ref(30),keyInput=ref(''),loading=ref(false),saving=ref(false),checking=ref(false),error=ref('');
 const busy=computed(()=>loading.value||saving.value||checking.value);
-const dirty=computed(()=>Boolean(config.value)&&(provider.value!==config.value.provider||model.value!==config.value.model_name||Boolean(keyInput.value)));
+const dirty=computed(()=>Boolean(config.value)&&(provider.value!==config.value.provider||model.value!==config.value.model_name||retentionDays.value!==config.value.image_retention_days||Boolean(keyInput.value)));
 const selectedProvider=computed(()=>config.value?.available_providers.find(item=>item.id===provider.value));
 function changeProvider(){model.value=selectedProvider.value.model_name;keyInput.value='';}
 const checkLabels={untested:'尚未检查',ok:'连接检查通过',error:'连接检查未通过'};
 const renderLabels={queued:'排队中',generating:'生成中',ready:'生成成功',failed:'生成未完成',cancelled:'已取消'};
 const renderErrors={credit_balance_exhausted:'OpenAI API 预付余额已用完，请检查 API 平台的计费设置。',project_spend_limit_exceeded:'此 OpenAI API 项目已达到支出上限。',organization_spend_limit_exceeded:'OpenAI API 企业组织已达到支出上限。',organization_usage_limit_exceeded:'OpenAI API 企业组织已达到获批的使用额度上限。',rate_limit_exceeded:'该模型的请求速率已达到限制，请查看 API 项目的模型限额。',slow_down:'OpenAI 暂时限制新请求，请等待后再试。',rate_limit:'OpenAI 返回 429：生图请求受到用量或计费限制，请检查该 API 项目的余额、账单及模型限额。',quota:'OpenAI API 余额不足或已达到计费上限。',credentials:'OpenAI 拒绝了当前密钥，请检查已保存的配置。',permission:'该 API 项目缺少图片生成或模型访问权限。',model:'该 API 项目无法使用此模型。',network:'连接图片服务超时或网络不可达。',content_policy:'该图片未通过生图服务的内容审核。',interrupted:'任务中断，生成次数已返还。'};
-function accept(data){config.value=data;provider.value=data.provider;model.value=data.model_name;keyInput.value='';}
+function accept(data){config.value=data;provider.value=data.provider;model.value=data.model_name;retentionDays.value=data.image_retention_days;keyInput.value='';}
 const formatDate=value=>value?new Date(value).toLocaleString('zh-CN'):'尚无记录';
 async function confirmDiscard(){
   if(busy.value)return false;
@@ -28,7 +29,7 @@ async function save(){
   if(!config.value||busy.value)return;
   saving.value=true;error.value='';
   try{
-    const body={revision:config.value.revision,provider:provider.value,model_name:model.value};
+    const body={revision:config.value.revision,provider:provider.value,model_name:model.value,image_retention_days:retentionDays.value};
     if(keyInput.value.trim())body.api_key=keyInput.value.trim();
     accept(await api('admin/ai-service/',{method:'PATCH',body}));
     ElMessage.success('生图配置已保存');
@@ -55,7 +56,7 @@ onBeforeRouteLeave(()=>confirmDiscard());
 
 <template>
   <section class="ai-service-page">
-    <div class="page-heading"><div><p class="eyebrow">AI CONNECTION</p><h1>AI 生图配置<span class="greeting-dot">.</span></h1><p class="muted">统一管理生图服务商、API Key 与图像模型。仅超级管理员可以管理。</p></div><el-button :disabled="busy" @click="refresh">刷新配置</el-button></div>
+    <div class="page-heading" :class="{'ai-section-heading':embedded}"><div><p v-if="!embedded" class="eyebrow">AI CONNECTION</p><component :is="embedded?'h2':'h1'">AI 生图配置<span v-if="!embedded" class="greeting-dot">.</span></component><p class="muted">统一管理生图服务商、API Key 与图像模型。仅超级管理员可以管理。</p></div><el-button :disabled="busy" @click="refresh">刷新配置</el-button></div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="form-alert"/>
     <el-skeleton v-if="loading&&!config" :rows="7" animated/>
     <template v-if="config">
@@ -72,6 +73,7 @@ onBeforeRouteLeave(()=>confirmDiscard());
               <el-input id="ai-api-key" v-model="keyInput" type="password" :placeholder="selectedProvider.has_api_key?'留空保留该服务商的密钥；填写新 Key 可替换':'粘贴当前服务商的 API Key'" autocomplete="new-password" :spellcheck="false" maxlength="1024" :disabled="busy||!config.encryption_ready"/>
               <p class="field-help">请填写在 <a :href="selectedProvider.console_url" target="_blank" rel="noopener noreferrer">{{selectedProvider.label}} 控制台</a>创建的 API Key。密钥仅保存在服务端，不会发送给用户端。</p></div>
             </el-form-item>
+            <el-form-item id="image-retention" label="生成图片保留时间"><el-input-number v-model="retentionDays" :min="1" :max="365" :precision="0" :disabled="busy" aria-label="生成图片保留天数"/><span class="retention-unit">天</span><p class="field-help">适用于之后生成成功的图片（1–365 天）。已有图片的到期时间不变，可在「统计与日志」详情中查看。到期停止预览和下载，并定期清理图片内容；调用日志、用量和成本继续保留。</p></el-form-item>
             <div class="service-actions"><el-button type="primary" :loading="saving" :disabled="busy||!dirty||(!config.encryption_ready&&Boolean(keyInput))" @click="save">保存配置</el-button><el-button :loading="checking" :disabled="busy||dirty||!config.has_api_key||!config.encryption_ready" @click="checkConnection">检查连接</el-button><el-button v-if="selectedProvider.has_api_key" link type="danger" :disabled="busy||dirty" @click="clearKey">清除密钥</el-button></div>
             <p v-if="dirty" class="pending-note">有未保存的修改，保存后才能检查连接。</p>
           </el-form>
@@ -85,11 +87,13 @@ onBeforeRouteLeave(()=>confirmDiscard());
         </aside>
       </div>
       <el-alert title="前台已接入真实生图：顾客确认后，服务器使用此配置处理上传照片。保存 Key 不会自动生成图片；模型读取检查不代表图片生成权限或余额已验证。" type="info" :closable="false" show-icon/>
-      <router-link to="/ai-prompts" class="prompt-link">打开 AI 管理 →</router-link>
+      <router-link v-if="!embedded" to="/ai/prompts" class="prompt-link">打开 AI 管理 →</router-link>
+      <router-link v-if="!embedded" to="/ai/usage" class="prompt-link" style="margin-left:24px">查看生图统计与调用日志 →</router-link>
     </template>
   </section>
 </template>
 
 <style scoped>
+.retention-unit{margin-left:10px;color:#73847b}#image-retention{scroll-margin-top:24px}
 .service-layout{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(250px,1fr);gap:22px;margin-bottom:22px}.service-form,.service-status{padding:26px}.service-heading{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:26px}.service-layout h2{font-size:17px;margin:0 0 20px}.service-heading h2{margin:0}.service-url{background:#f4f7f5;border:1px solid #e1e8e4;border-radius:7px;padding:10px 13px;width:100%;font-size:13px;overflow-wrap:anywhere}.key-field{width:100%}.field-help{font-size:11px;line-height:1.8;color:#7b8887;margin:8px 0 0}.field-help a{color:#196967;text-decoration:underline;text-underline-offset:3px}.saved-key{display:flex;gap:9px;align-items:center;flex-wrap:wrap;font-size:12px;margin-bottom:12px;color:#41775f}.saved-key code{background:#edf5ef;padding:2px 7px;border-radius:5px}.saved-key span{font-size:10px;color:#8a968e}.service-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.service-actions .el-button+.el-button{margin-left:0}.service-status p{font-size:13px;line-height:1.8;color:#71857b;margin-top:16px}.service-status dl{margin:25px 0;font-size:12px}.service-status dt{color:#99a69d;margin-top:16px}.service-status dd{margin:7px 0 0;color:#486355}.service-status .check-note{font-size:11px;border-top:1px solid #e6ece7;padding-top:18px}.pending-note{color:#987532;font-size:12px;margin:16px 0 0}.prompt-link{display:inline-block;color:#196967;font-size:13px;margin-top:20px}.service-form :deep(.el-select){width:100%}@media(max-width:1050px){.service-layout{grid-template-columns:1fr}.service-form,.service-status{padding:20px}}
 </style>

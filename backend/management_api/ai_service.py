@@ -120,6 +120,7 @@ def safe_config(config):
         "masked_api_key": "••••" + config.key_last_four if config.api_key_ciphertext else "",
         "key_updated_at": config.key_updated_at, "updated_at": config.updated_at,
         "revision": config.revision, "encryption_ready": encryption_ready(),
+        "image_retention_days": config.image_retention_days,
         "last_check_at": config.last_check_at, "last_check_status": config.last_check_status,
         "last_check_message": config.last_check_message,
         "generation_connected": bool(config.api_key_ciphertext) and encryption_ready(),
@@ -132,6 +133,7 @@ def safe_config(config):
 
 class UpdateConfigSerializer(serializers.Serializer):
     revision = serializers.IntegerField(min_value=0)
+    image_retention_days = serializers.IntegerField(min_value=1, max_value=365, required=False)
     provider = serializers.ChoiceField(choices=tuple(PROVIDERS), required=False, error_messages={"invalid_choice": "请选择支持的生图服务。"})
     model_name = serializers.ChoiceField(choices=tuple(model for info in PROVIDERS.values() for model in info["models"]), required=False, error_messages={"invalid_choice": "请选择支持的图像模型。"})
     api_key = serializers.CharField(required=False, allow_blank=True, max_length=1024, write_only=True)
@@ -198,11 +200,16 @@ class AIServiceSettingsView(APIView):
             config.key_last_four = values["api_key"][-4:]
             config.key_updated_at = timezone.now()
             changed.append("更新 API Key")
+        connection_changed = bool(changed)
+        if 'image_retention_days' in values and values['image_retention_days'] != config.image_retention_days:
+            config.image_retention_days = values['image_retention_days']
+            changed.append('图片保留天数')
         if changed:
             config.revision += 1
-            config.last_check_status = "untested"
-            config.last_check_at = None
-            config.last_check_message = ""
+            if connection_changed:
+                config.last_check_status = "untested"
+                config.last_check_at = None
+                config.last_check_message = ""
             config.save()
             audit(request, "update", "management_api.aiserviceconfig", config, "修改生图配置：" + "、".join(changed))
         return Response(safe_config(config))
