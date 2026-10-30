@@ -36,6 +36,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .ai_service import PROVIDERS, NoRedirect, current_config, decrypt_api_key, encryption_ready, provider_profile
+from .ai_costs import CallTelemetry, safe_request_id, sync_relay_cost
 from .models import AIAccount, AIRender, AIServiceConfig, AIStyle, PhoneModel, PricingPlan
 from .orders import StrictSerializer
 from .customer_auth import customer_owner as owner, customer_for, public_customer, signup_credits
@@ -352,12 +353,16 @@ def edit_image(api_key, job):
     request=urllib.request.Request(provider['base_url']+'/images/edits',data=bytes(body),headers={
         'Authorization':'Bearer '+api_key,'Content-Type':'multipart/form-data; boundary='+boundary,
         'Accept':'application/json'},method='POST')
+    telemetry = CallTelemetry(job, {key: fields[key] for key in ('n', 'size', 'quality')})
     try:
         with urllib.request.build_opener(NoRedirect()).open(request,timeout=360 if job.provider == 'ai778' else 240) as response:
+            request_id=safe_request_id(response.headers.get('X-Task-Id' if job.provider == 'ai778' else 'x-request-id',''), api_key)
+            telemetry.response(response.status, request_id)
             payload=response.read(32*1024*1024+1)
-            request_id=response.headers.get('X-Task-Id' if job.provider == 'ai778' else 'x-request-id','')[:150]
         if len(payload)>32*1024*1024:raise ValueError()
-        data=json.loads(payload);encoded=data['data'][0]['b64_json'];raw=base64.b64decode(encoded,validate=True)
+        data=json.loads(payload)
+        telemetry.response(telemetry.http_status, request_id, data)
+        encoded=data['data'][0]['b64_json'];raw=base64.b64decode(encoded,validate=True)
         with warnings.catch_warnings():
             warnings.simplefilter('error',Image.DecompressionBombWarning)
             with Image.open(BytesIO(raw)) as image:
@@ -366,7 +371,12 @@ def edit_image(api_key, job):
         return output.getvalue(),request_id
     except urllib.error.HTTPError as error:
         status=error.code
-        try:provider_code=json.loads(error.read(16384)).get('error',{}).get('code','')
+        request_id=safe_request_id((error.headers or {}).get('X-Task-Id' if job.provider == 'ai778' else 'x-request-id',''), api_key)
+        telemetry.response(status, request_id)
+        try:
+            data=json.loads(error.read(16384))
+            telemetry.response(status, request_id, data)
+            provider_code=data.get('error',{}).get('code','')
         except Exception:provider_code=''
         error.close()
         messages={401:('credentials','OpenAI rejected the API key. Please check the saved service configuration.'),
@@ -397,6 +407,8 @@ def edit_image(api_key, job):
         raise GenerationError('network','The image service timed out or could not be reached. Please retry later.') from None
     except (ValueError,KeyError,TypeError,IndexError,AttributeError):
         raise GenerationError('invalid_response','The image service returned an unreadable image. Please retry later.') from None
+    finally:
+        telemetry.finish()
 
 
 @sensitive_variables()
@@ -404,11 +416,13 @@ def run_render(job_id):
     if not AIRender.objects.filter(pk=job_id,status='queued').update(status='generating',started_at=timezone.now()):
         return
     job=AIRender.objects.get(pk=job_id)
+    api_key = None
     try:
         config=provider_profile(current_config(), job.provider)
         if not config.api_key_ciphertext:
             raise GenerationError('credentials','AI generation is not configured. Please contact the store.')
-        result,request_id=edit_image(decrypt_api_key(config),job)
+        api_key = decrypt_api_key(config)
+        result,request_id=edit_image(api_key,job)
         AIRender.objects.filter(pk=job_id,status='generating').update(status='ready',result_image=result,
             input_image=b'',completed_at=timezone.now(),provider_request_id=request_id)
     except GenerationError as error:
@@ -416,3 +430,10 @@ def run_render(job_id):
     except Exception:
         # Never put provider bodies, credentials or uploaded photos into logs/UI.
         restore_credit(job,'failed','internal','The render could not finish. Your generation has been returned. Please retry.')
+    finally:
+        if job.provider == 'ai778' and api_key:
+            try:
+                job.refresh_from_db(fields=['provider_request_id','usage','cost_details','cost_source'])
+                sync_relay_cost(job, api_key)
+            except Exception:
+                pass  # Billing lookup must never delay delivery or refund a completed render.

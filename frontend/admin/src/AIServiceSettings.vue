@@ -86,6 +86,7 @@ onBeforeRouteLeave(()=>confirmDiscard());
       </div>
       <el-alert title="前台已接入真实生图：顾客确认后，服务器使用此配置处理上传照片。保存 Key 不会自动生成图片；模型读取检查不代表图片生成权限或余额已验证。" type="info" :closable="false" show-icon/>
       <router-link to="/ai-prompts" class="prompt-link">打开 AI 管理 →</router-link>
+      <router-link to="/ai-usage" class="prompt-link" style="margin-left:24px">查看生图统计与调用日志 →</router-link>
     </template>
   </section>
 </template>

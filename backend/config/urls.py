@@ -7,6 +7,7 @@ from management_api import views
 from management_api.orders import StoreOrders, StoreOrder, StoreOrderAction
 from management_api.ai_service import AIServiceSettingsView, AIServiceCheckView
 from management_api.ai_generation import AIAccountView, AIRenders, AIRenderDetail, AIRenderImage
+from management_api.ai_reporting import AIUsageView, AICallLogsView, AIRenderCostView
 from management_api.customer_auth import CustomerView, SendCode, VerifyCode, CustomerCredits
 from management_api.mail_service import MailSettings, MailTest, RegistrationSettings
 
@@ -45,6 +46,9 @@ urlpatterns = [
     path("api/v1/admin/dashboard/", views.DashboardView.as_view()),
     path("api/v1/admin/ai-service/", AIServiceSettingsView.as_view()),
     path("api/v1/admin/ai-service/check/", AIServiceCheckView.as_view()),
+    path("api/v1/admin/ai-usage/", AIUsageView.as_view()),
+    path("api/v1/admin/ai-renders/", AICallLogsView.as_view()),
+    path("api/v1/admin/ai-renders/<uuid:reference>/cost/", AIRenderCostView.as_view()),
     path("api/v1/admin/permissions/", views.PermissionsView.as_view()),
     path("api/v1/admin/uploads/", views.UploadView.as_view()),
     path("api/v1/admin/", include(router.urls)),

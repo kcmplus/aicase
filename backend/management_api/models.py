@@ -241,10 +241,22 @@ class AIRender(Timestamped):
     error_code = models.CharField(max_length=60, blank=True)
     error_message = models.CharField(max_length=300, blank=True)
     provider_request_id = models.CharField(max_length=150, blank=True, editable=False)
+    api_started_at = models.DateTimeField(null=True, editable=False)
+    api_finished_at = models.DateTimeField(null=True, editable=False)
+    api_duration_ms = models.PositiveIntegerField(null=True, editable=False)
+    http_status = models.PositiveSmallIntegerField(null=True, editable=False)
+    request_params = models.JSONField(default=dict, editable=False)
+    usage = models.JSONField(default=dict, editable=False)
+    cost_amount = models.DecimalField(max_digits=18, decimal_places=8, null=True, editable=False)
+    cost_currency = models.CharField(max_length=12, blank=True, editable=False)
+    cost_source = models.CharField(max_length=20, default='unknown', editable=False)
+    cost_details = models.JSONField(default=dict, editable=False)
+    cost_recorded_at = models.DateTimeField(null=True, editable=False)
 
     class Meta:
         ordering = ['-created_at']
         default_permissions = ()
+        indexes = [models.Index(fields=['-created_at'], name='ai_render_created_idx')]
 
 
 class CreditEntry(models.Model):
