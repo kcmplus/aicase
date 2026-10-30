@@ -44,15 +44,16 @@ class PromptSettingsTests(TestCase):
 
     def test_prompt_read_and_write_permissions_are_separate(self):
         for obj, resource, field in self.targets:
+            original_prompt = getattr(obj, field)
             path = f"/api/v1/admin/{resource}/{obj.pk}/"
             self.client.logout()
             self.assertEqual(self.client.get(path).status_code, 403)
             self.assertEqual(self.client.patch(path, {field: "denied"}).status_code, 403)
             self.client.force_login(self.reader)
-            self.assertIn(field, self.client.get(path).json())
+            self.assertEqual(self.client.get(path).json()[field], original_prompt)
             self.assertEqual(self.client.patch(path, {field: "denied"}).status_code, 403)
             obj.refresh_from_db()
-            self.assertEqual(getattr(obj, field), "")
+            self.assertEqual(getattr(obj, field), original_prompt)
 
     def test_model_only_permission_does_not_reveal_style_prompts(self):
         user = User.objects.create_user("model-only", is_staff=True)
