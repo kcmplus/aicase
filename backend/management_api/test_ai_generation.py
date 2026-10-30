@@ -31,6 +31,7 @@ class LiveGenerationTests(TestCase):
     def setUpTestData(cls):
         call_command('seed_catalog',stdout=StringIO())
         call_command('seed_phone_templates',stdout=StringIO())
+        cls.seeded_anime_prompt = AIStyle.objects.get(code='anime').prompt
         AIServiceConfig.objects.create(pk=1,api_key_ciphertext=encrypt_api_key('test-not-a-real-api-key'),model_name='gpt-image-1-mini')
         AIStyle.objects.filter(code='anime').update(prompt='Private English style prompt')
 
@@ -68,6 +69,15 @@ class LiveGenerationTests(TestCase):
         entry=CreditEntry.objects.get(kind='generation');self.assertEqual(entry.amount,-1);self.assertEqual(entry.balance_after,0)
         self.assertNotIn('Private English style prompt',str(response.data));self.assertNotIn('api_key',str(response.data))
         conflict,_=self.create(model='iPhone 16e');self.assertEqual(conflict.status_code,409)
+
+    def test_default_catalog_styles_accept_generation_without_manual_prompt_edits(self):
+        AIStyle.objects.filter(code='anime').update(prompt=self.seeded_anime_prompt)
+        for code in ('anime', 'realism', '3d'):
+            self.body.update(style_id=code, request_key=str(uuid.uuid4()))
+            job = self.job()
+            self.assertIn(AIStyle.objects.get(code=code).prompt, job.prompt)
+            restore_credit(job, 'cancelled')
+        self.assertEqual(AIAccount.objects.get().trial_used, 0)
 
     def test_rejects_missing_owner_consent_unknown_fields_and_invalid_images(self):
         for changes in ({'accepted':False},{'photo':'data:image/png;base64,AQID'},{'style_id':'missing'}, {'model':'Unknown'}, {'prompt':'override'}, {'api_key':'override'}):

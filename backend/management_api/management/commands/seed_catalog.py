@@ -18,7 +18,7 @@ class Command(BaseCommand):
         for i, item in enumerate(data["graphics"]):
             Graphic.objects.get_or_create(code=item["id"], defaults={"name": item["zh"], "image_path": item["src"].removeprefix("."), "license": item["license"], "sort_order": i})
         for item in data["aiStyles"]:
-            AIStyle.objects.get_or_create(code=item["id"], defaults={"name": item["name"], "description": item["description"], "image_path": item["image"].removeprefix(".")})
+            AIStyle.objects.get_or_create(code=item["id"], defaults={"name": item["name"], "description": item["description"], "image_path": item["image"].removeprefix("."), "prompt": item["prompt"]})
         for i, (code, name, subject) in enumerate([
             ("portrait", "Portrait", "Seaside portrait"), ("pets", "Pets", "A little best friend"),
             ("couples", "Couples", "Better together"), ("travel", "Travel", "Somewhere worth keeping"),
