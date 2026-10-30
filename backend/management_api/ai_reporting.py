@@ -28,7 +28,7 @@ LOG_FIELDS = ('id', 'request_key', 'provider', 'model_name', 'style_name', 'phon
               'api_finished_at', 'api_duration_ms', 'http_status', 'provider_request_id',
               'request_params', 'usage', 'cost_amount', 'cost_currency', 'cost_source',
               'cost_details', 'cost_recorded_at', 'error_code', 'error_message', 'credit_restored',
-              'image_expires_at', 'image_deleted_at', 'image_size_bytes')
+              'image_expires_at', 'image_deleted_at', 'image_size_bytes', 'original_size_bytes', 'input_mime')
 
 
 class ReportFilter(serializers.Serializer):
@@ -96,6 +96,7 @@ def measures():
 
 def safe_log(row):
     row['image'] = image_metadata(row)
+    row['original'] = image_metadata(row, original=True)
     row['cost_amount'] = amount(row['cost_amount'])
     row['provider_label'] = PROVIDERS.get(row['provider'], {}).get('label', row['provider'])
     row['endpoint'] = PROVIDERS.get(row['provider'], {}).get('base_url', '') + '/images/edits'
@@ -169,8 +170,13 @@ class AIRenderCostView(APIView):
 @method_decorator(never_cache, name='dispatch')
 class AIAdminImageView(APIView):
     permission_classes = [SuperuserOnly]
+    original = False
 
     def get(self, request, reference):
-        job = get_object_or_404(AIRender.objects.only('result_image', 'image_expires_at', 'image_deleted_at'),
-                                pk=reference, status='ready')
-        return image_response(job, download=request.query_params.get('download') == '1')
+        qs = AIRender.objects.only('input_image' if self.original else 'result_image', 'input_mime',
+                                   'image_expires_at', 'image_deleted_at')
+        if not self.original:
+            qs = qs.filter(status='ready')
+        job = get_object_or_404(qs, pk=reference)
+        return image_response(job, download=request.query_params.get('download') == '1', original=self.original,
+                              thumbnail=request.query_params.get('thumbnail') == '1')

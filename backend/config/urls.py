@@ -50,6 +50,7 @@ urlpatterns = [
     path("api/v1/admin/ai-renders/", AICallLogsView.as_view()),
     path("api/v1/admin/ai-renders/<uuid:reference>/cost/", AIRenderCostView.as_view()),
     path("api/v1/admin/ai-renders/<uuid:reference>/image/", AIAdminImageView.as_view()),
+    path("api/v1/admin/ai-renders/<uuid:reference>/original/", AIAdminImageView.as_view(original=True)),
     path("api/v1/admin/permissions/", views.PermissionsView.as_view()),
     path("api/v1/admin/uploads/", views.UploadView.as_view()),
     path("api/v1/admin/", include(router.urls)),

@@ -186,8 +186,9 @@ def restore_credit(job, status, code='', message=''):
             code='credit_period_expired'
             message='The original credit period has expired. Your current balance is unchanged.'
         locked.status=status; locked.error_code=code; locked.error_message=message
-        locked.credit_restored=not expired; locked.completed_at=timezone.now(); locked.input_image=b''
-        locked.save(update_fields=['status','error_code','error_message','credit_restored','completed_at','input_image','updated_at'])
+        locked.credit_restored=not expired; locked.completed_at=timezone.now()
+        locked.image_expires_at=locked.completed_at+timedelta(days=current_config().image_retention_days)
+        locked.save(update_fields=['status','error_code','error_message','credit_restored','completed_at','image_expires_at','updated_at'])
         return locked
 
 
@@ -427,7 +428,7 @@ def run_render(job_id):
         completed = timezone.now()
         expires = completed + timedelta(days=current_config().image_retention_days)
         AIRender.objects.filter(pk=job_id,status='generating').update(status='ready',result_image=result,
-            input_image=b'',completed_at=completed,provider_request_id=request_id,image_expires_at=expires)
+            completed_at=completed,provider_request_id=request_id,image_expires_at=expires)
     except GenerationError as error:
         restore_credit(job,'failed',error.code,error.message)
     except Exception:

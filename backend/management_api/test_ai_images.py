@@ -17,10 +17,10 @@ from django.utils import timezone
 from PIL import Image
 from rest_framework.test import APIClient
 
-from .ai_generation import run_render
+from .ai_generation import run_render, restore_credit
 from .ai_images import cleanup_expired_images
 from .ai_service import encrypt_api_key
-from .models import AIRender, AIServiceConfig, Customer
+from .models import AIAccount, AIRender, AIServiceConfig, Customer
 
 
 @override_settings(AI_CONFIG_ENCRYPTION_KEY=Fernet.generate_key().decode())
@@ -64,6 +64,86 @@ class AIImageRetentionTests(TestCase):
             self.assertIn('no-store', response['Cache-Control'])
             self.assertEqual(response['X-Content-Type-Options'], 'nosniff')
 
+    def test_original_preview_and_download_preserve_uploaded_format_and_bytes(self):
+        for fmt, mime, ext in (('PNG', 'image/png', 'png'), ('JPEG', 'image/jpeg', 'jpg'), ('WEBP', 'image/webp', 'webp')):
+            buffer = BytesIO()
+            Image.new('RGB', (400, 300), 'navy').save(buffer, format=fmt)
+            raw = buffer.getvalue()
+            job = self.job(input_image=raw, input_mime=mime)
+            path = f'/api/v1/admin/ai-renders/{job.pk}/original/'
+            for suffix, disposition in (('', 'inline'), ('?download=1', 'attachment')):
+                response = self.client.get(path+suffix)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.content, raw)
+                self.assertEqual(response['Content-Type'], mime)
+                self.assertEqual(response['Content-Disposition'], f'{disposition}; filename="ai-{job.pk}-original.{ext}"')
+                self.assertIn('no-store', response['Cache-Control'])
+            for url in (path, self.image_url(job)):
+                response = self.client.get(url+'?thumbnail=1')
+                self.assertEqual(response.status_code, 200)
+                with Image.open(BytesIO(response.content)) as preview:
+                    self.assertLessEqual(max(preview.size), 160)
+                    self.assertEqual(preview.format, 'JPEG')
+
+    def test_originals_require_superuser_and_obey_expiry_for_every_variant(self):
+        job = self.job(input_image=self.png, input_mime='image/png')
+        path = f'/api/v1/admin/ai-renders/{job.pk}/original/'
+        for user in (None, self.staff):
+            self.client.logout()
+            if user:
+                self.client.force_login(user)
+            for suffix in ('', '?download=1', '?thumbnail=1'):
+                self.assertEqual(self.client.get(path+suffix).status_code, 403)
+        self.client.force_login(self.root)
+        AIRender.objects.filter(pk=job.pk).update(image_expires_at=self.now)
+        for suffix in ('', '?download=1', '?thumbnail=1'):
+            self.assertEqual(self.client.get(path+suffix).status_code, 410)
+            self.assertEqual(self.client.get(self.image_url(job)+suffix).status_code, 410)
+
+    def test_original_metadata_distinguishes_legacy_missing_and_failed_input(self):
+        legacy = self.job()
+        failed = self.job(status='failed', result_image=None, input_image=self.png, input_mime='image/png')
+        rows = {str(row['id']): row for row in self.client.get('/api/v1/admin/ai-renders/').data['results']}
+        self.assertEqual(rows[str(legacy.pk)]['original']['state'], 'missing')
+        original = rows[str(failed.pk)]['original']
+        self.assertEqual((original['state'], original['size_bytes']), ('available', len(self.png)))
+        self.assertIn('/original/?thumbnail=1', original['thumbnail_url'])
+        self.assertEqual(rows[str(failed.pk)]['image']['state'], 'none')
+        self.assertEqual(self.client.get(original['preview_url']).content, self.png)
+        self.assertEqual(self.client.get(f'/api/v1/admin/ai-renders/{legacy.pk}/original/').status_code, 404)
+
+    def test_failure_and_cancellation_keep_original_until_shared_cleanup_deadline(self):
+        for status in ('failed', 'cancelled'):
+            job = self.job(status='queued', input_image=self.png, input_mime='image/png',
+                           result_image=None, allocation={'type': 'trial'}, image_expires_at=None)
+            AIAccount.objects.get_or_create(owner_hash=job.owner_hash, defaults={'trial_granted': 1, 'trial_used': 1})
+            restore_credit(job, status)
+            job.refresh_from_db()
+            self.assertEqual(bytes(job.input_image), self.png)
+            self.assertEqual(job.image_expires_at, job.completed_at+timedelta(days=30))
+            self.assertEqual(cleanup_expired_images(now=job.image_expires_at), 1)
+            job.refresh_from_db()
+            self.assertFalse(job.input_image)
+            self.assertIsNone(job.result_image)
+            self.assertEqual(job.status, status)
+            self.assertEqual(job.cost_amount, Decimal('.01'))
+
+    def test_cleanup_removes_both_images_and_original_route_cannot_leak_through_store_api(self):
+        buffer = BytesIO()
+        Image.new('RGB', (24, 32), 'navy').save(buffer, format='PNG')
+        job = self.job(input_image=buffer.getvalue(), input_mime='image/png')
+        customer = APIClient()
+        session = customer.session
+        session['store_customer_id'] = str(self.customer.pk)
+        session.save()
+        response = customer.get(f'/api/v1/store/ai-renders/{job.pk}/image/?original=1')
+        self.assertEqual(response.content, self.png)
+        cleanup_expired_images(now=job.image_expires_at)
+        job.refresh_from_db()
+        self.assertFalse(job.input_image)
+        self.assertIsNone(job.result_image)
+        self.assertEqual(self.client.get(f'/api/v1/admin/ai-renders/{job.pk}/original/').status_code, 410)
+
     def test_admin_images_reject_anonymous_staff_and_inactive_superuser(self):
         job = self.job()
         inactive = get_user_model().objects.create_user('disabled-image-root', is_superuser=True, is_staff=True, is_active=False)
@@ -90,7 +170,7 @@ class AIImageRetentionTests(TestCase):
 
     def test_cleanup_is_bounded_idempotent_and_preserves_usage_and_costs(self):
         expired = [self.job(image_expires_at=self.now-timedelta(days=1), usage={'total_tokens': 99}) for _ in range(3)]
-        protected = [self.job(), self.job(status='generating', image_expires_at=self.now), self.job(status='failed', image_expires_at=self.now)]
+        protected = [self.job(), self.job(status='generating', image_expires_at=self.now), self.job(status='failed', image_expires_at=self.now+timedelta(days=1))]
         self.assertEqual(cleanup_expired_images(now=self.now, batch_size=2, max_batches=1), 2)
         self.assertEqual(cleanup_expired_images(now=self.now), 1)
         self.assertEqual(cleanup_expired_images(now=self.now), 0)
@@ -128,7 +208,7 @@ class AIImageRetentionTests(TestCase):
         job = self.job(image_expires_at=self.now-timedelta(seconds=1))
         output = StringIO()
         call_command('cleanup_ai_images', dry_run=True, stdout=output)
-        self.assertIn('1 generated images due', output.getvalue())
+        self.assertIn('1 image pairs due', output.getvalue())
         job.refresh_from_db()
         self.assertIsNotNone(job.result_image)
         call_command('cleanup_ai_images', stdout=StringIO())
@@ -167,13 +247,13 @@ class AIImageRetentionTests(TestCase):
     @patch('management_api.ai_generation.edit_image')
     def test_new_result_gets_deadline_from_completion_and_current_policy(self, edit):
         AIServiceConfig.objects.filter(pk=1).update(image_retention_days=7)
-        job = self.job(status='queued', result_image=None, image_expires_at=None)
+        job = self.job(status='queued', result_image=None, image_expires_at=None, input_image=self.png, input_mime='image/png')
         edit.return_value = (self.png, 'req-example')
         run_render(job.pk)
         job.refresh_from_db()
         self.assertEqual(job.status, 'ready')
         self.assertEqual(job.image_expires_at, job.completed_at+timedelta(days=7))
-        self.assertFalse(job.input_image)
+        self.assertEqual(bytes(job.input_image), self.png)
 
     def test_legacy_migration_gives_existing_images_thirty_days_from_upgrade(self):
         job = self.job(image_expires_at=None, completed_at=self.now-timedelta(days=365))
