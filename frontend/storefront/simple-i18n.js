@@ -150,6 +150,7 @@ const entries=[
  ['Close preview','关闭预览'],
  ['No image was generated','本次未生成图片'],
  ['AI generation is unavailable.','AI 生图暂不可用。'],
+ ['This AI style is unavailable or has no saved prompt.','此风格暂不可用，请选择其他风格或联系门店完善风格配置。'],
  ['We couldn’t generate your image.','图片生成失败。'],
  ['Try again later','稍后重试'],
  ['The image service could not be reached.','未能连接到生图服务。'],
