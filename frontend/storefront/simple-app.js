@@ -31,7 +31,7 @@ await loadCatalog();
 let state = {designId:'bloom',model:'',pass:null,stationId:'DEMO-01',job:null,source:'collection',photo:'',effect:'original',intensity:65,zoom:100,x:50,y:50,aiStyle:'anime',aiExample:'portrait',artworkLayouts:{},photoArtwork:[],keepCollection:false,photoPlacement:null,photoOrigin:'upload',ai:null,aiJobId:null};
 let storageWarning = false;
 let aiJob=null,aiBusy=false;
-const aiUi={mode:'pair',compare:50,lookMode:'effect',lookCompare:50,accepted:false,error:''};
+const aiUi={mode:'pair',compare:50,lookMode:'effect',lookCompare:50,accepted:false,error:'',reconnecting:false};
 let cleanupAIStudio=()=>{};
 const customerUI={email:'',codeSent:false,busy:false,error:'',success:'',ledger:[],ledgerNext:null,ledgerOpen:false,ledgerBusy:false,ledgerError:'',resendAt:0,next:'choose'};
 let resendTimer;
@@ -306,9 +306,14 @@ function steps(active) {
   return `<ol class="steps" aria-label="Your design journey">${['Pick your design','Confirm & save','Scan & print'].map((label,i)=>`<li ${i===active?'aria-current="step"':''} class="${i===active?'active':i<active?'complete':''}"><span>${i<active?'✓':i+1}</span>${label}</li>`).join('')}</ol>`;
 }
 function home() {
-  return `<section class="hero wrap"><div class="hero-copy"><p class="eyebrow">YOUR PHONE. YOUR LITTLE WORLD.</p><h1>A little more<br><em>you.</em></h1><p class="intro">Pick a design you love.<br>Bring it to life at a POPOMO station.</p><a class="button primary" href="#designs">Find your design ${arrow()}</a><a class="upload-home-link" href="#choose?source=photo&fresh=1">Or start with your own photo ${icon('upload',15)}</a><p class="hero-note">Choose online. Scan in store. Make it yours.<br>Standard printing ${PRINT_PRICE} per print.</p></div><div class="hero-scene" aria-label="Two colorful POPOMO phone case designs"><span class="scene-top">GOOD THINGS ARE PERSONAL.</span><div class="hero-case back-case">${casePreview('type',phoneModels[1])}</div><div class="hero-case front-case">${casePreview('bloom')}</div><span class="scene-star" aria-hidden="true">✳</span><span class="scene-bottom">DESIGNED TO GO WITH YOU.</span><span class="scene-number">01 — 06</span></div></section>
-  <section class="collection wrap" id="designs"><div class="section-heading"><div><p class="eyebrow">THE SMALL, GOOD COLLECTION</p><h2>Find your kind of happy.</h2></div><p>Six designs. One that feels like you.</p></div><div class="design-grid">${designs.map((d,i)=>`<a class="design-card" data-start-design="${d.id}" href="#choose?design=${d.id}" aria-label="Choose ${d.name}"><div class="design-image" style="--card:${d.color}"><span class="card-index">0${i+1}</span><div class="card-case">${casePreview(d.id)}</div><span class="card-arrow">${arrow()}</span></div><div class="card-caption"><div><h3>${d.name}</h3><p>${d.category}</p></div></div></a>`).join('')}</div></section>
-  <section class="how-section" id="how-it-works"><div class="wrap how-layout"><div><p class="eyebrow">FROM YOUR SCREEN TO YOUR HAND.</p><h2>Love it.<br>Scan it.<br>Keep it.</h2></div><ol class="how-list"><li><span>01</span><div><h3>Find your design.</h3><p>Choose your phone model first. Then pick a design or upload your photo, with optional AI effects.</p></div></li><li><span>02</span><div><h3>Keep your code.</h3><p>Preview your design, confirm your ${PRINT_PRICE} print order, then save the QR code.</p></div></li><li><span>03</span><div><h3>Make it real.</h3><p>Show your code to the station scanner. Confirm your prepaid design, then print and collect.</p></div></li></ol></div></section>`;
+  const samplePhoto='./assets/ai-styles/pets-original.png';
+  return `<section class="hero photo-home wrap">
+   <div class="hero-scene photo-home-scene"><span class="scene-top">FROM YOUR ALBUM, WITH LOVE.</span><div class="photo-home-art"><figure class="album-snapshot">${imageTag(samplePhoto,{alt:'A pet photo used as a customization example',loading:'eager',sizes:'(max-width: 700px) 55vw, 300px'})}<figcaption>Your favorite photo</figcaption></figure><span class="photo-scene-arrow" aria-hidden="true">${arrow()}</span><div class="hero-case photo-result">${phone({image:samplePhoto},phoneModels[0])}</div><span class="scene-star" aria-hidden="true">✳</span></div><span class="scene-bottom">YOUR PHOTO. YOUR CASE.</span><span class="scene-number">Photo example</span><button type="button" class="photo-upload-target" data-action="home-photo" aria-label="Choose from your album" aria-busy="${photoBusy}" ${photoBusy?'disabled':''}><span class="photo-tap-hint">${icon('upload',15)} ${photoBusy?'Reading your photo…':'Tap the image to choose a photo'}</span></button></div>
+   <div class="photo-home-action"><button type="button" class="photo-up-button" data-action="home-photo" aria-label="Choose from your album" aria-busy="${photoBusy}" ${photoBusy?'disabled':''}>${icon('upload',96)}</button><h1>${photoBusy?'Reading your photo…':'Choose from your album'}</h1><p>Your photo. Your own case.</p><a class="collection-home-link" href="#designs">Browse the gallery ${arrow()}</a></div>
+   <input id="photo-file" data-home-upload type="file" accept="image/jpeg,image/png,image/webp" hidden>
+  </section>
+  <section class="how-section home-how" id="how-it-works"><div class="wrap how-layout"><div><p class="eyebrow">FROM YOUR SCREEN TO YOUR HAND.</p><h2>Your photo.<br>Your case.<br>Your everyday.</h2></div><ol class="how-list"><li><span>01</span><div><h3>Choose a photo you love.</h3><p>Pick a photo from your album, then choose your phone model and adjust the crop. AI effects are optional.</p></div></li><li><span>02</span><div><h3>Keep your code.</h3><p>Preview your design, confirm your ${PRINT_PRICE} print order, then save the QR code.</p></div></li><li><span>03</span><div><h3>Make it real.</h3><p>Show your code to the station scanner. Confirm your prepaid design, then print and collect.</p></div></li></ol></div></section>
+  <section class="collection wrap home-gallery" id="designs"><div class="section-heading"><div><p class="eyebrow">A LITTLE INSPIRATION</p><h2>No photo in mind? Try the gallery.</h2></div><p>Ready-made designs, if you need a starting point.</p></div><div class="design-grid">${designs.map((d,i)=>`<a class="design-card" data-start-design="${d.id}" href="#choose?design=${d.id}" aria-label="Choose ${d.name}"><div class="design-image" style="--card:${d.color}"><span class="card-index">0${i+1}</span><div class="card-case">${casePreview(d.id)}</div><span class="card-arrow">${arrow()}</span></div><div class="card-caption"><div><h3>${d.name}</h3><p>${d.category}</p></div></div></a>`).join('')}</div></section>`;
 }
 function modelResults(){
  const models=findPhoneModels(phoneModels,modelBrand,modelQuery);
@@ -375,12 +380,26 @@ function zoomAIStudio(){
  const dialog=document.querySelector('.look-browser');if(!dialog)return;
  const expanded=dialog.classList.toggle('is-zoomed');const button=dialog.querySelector('[data-look-action=zoom]');button.setAttribute('aria-pressed',String(expanded));button.setAttribute('aria-label',t(expanded?'Back to styles':'Enlarge style example'));
 }
-async function receivePhoto(file){
+async function receivePhoto(file,{startFresh=false}={}){
  if(!file||photoBusy||aiBusy)return;
+ let imported=false;
  photoBusy=true;render(true);
- try{const photo=await importPhoto(file);await writeDesign('draft-photo',photo);state.photo=photo;state.photoOrigin='upload';state.ai=null;state.effect='original';state.source='photo';state.zoom=100;state.x=50;state.y=50;state.intensity=65;clearPreviousPhotoArtwork();save();notify('New photo added. Previous graphics and text cleared.');}
- catch(error){notify(error.message||'Your photo could not be saved. Try a smaller image.');}
- finally{photoBusy=false;render(true);}
+ try{
+  const photo=await importPhoto(file);
+  await writeDesign('draft-photo',photo);
+  Object.assign(state,{photo,photoOrigin:'upload',ai:null,effect:'original',source:'photo',zoom:100,x:50,y:50,intensity:65});
+  clearPreviousPhotoArtwork();
+  // A homepage upload starts a new design only after the image is safely saved.
+  if(startFresh){
+   state.artworkLayouts={};state.editOrderId=null;
+   effectPanelOpen=false;cropPanelOpen=false;
+   editorPanels.collection=false;editorPanels.graphics=false;
+   Object.assign(aiUi,{accepted:false,error:''});
+   history.replaceState(null,'','#choose');
+  }
+  imported=true;save();notify('New photo added. Previous graphics and text cleared.');
+ }catch(error){notify(error.message||'Your photo could not be saved. Try a smaller image.');}
+ finally{photoBusy=false;render(!(startFresh&&imported));}
 }
 app.addEventListener('dragover',event=>{
  const zone=event.target.closest('[data-photo-drop]');if(!zone||!event.dataTransfer?.types.includes('Files'))return;
@@ -487,7 +506,7 @@ function render(preserveScroll=false) {
   const title=({account:'My account',choose:'Choose your case',pass:'Your design pass',kiosk:'Station demo',ai:'Your AI render',membership:'AI membership',checkout:'Review print order',orders:'My orders',payment:'Payment status'})[route];
   document.title=title?`${t(title)} · POPOMO`:t('POPOMO — A little more you.');
   localize(app);document.querySelector('.skip-link').textContent=t('Skip to content');
-  cleanupAIStudio=mountAIStudio(app,aiJob);
+  cleanupAIStudio=mountAIStudio(app,aiJob,aiUi);
   document.querySelector('#language').disabled=aiBusy||photoBusy||passBusy;
   document.querySelectorAll('[data-editor-panel]').forEach(bindEditorPanel);
   document.querySelector('.canvas-editor')?.addEventListener('cancel',event=>{event.preventDefault();closeCanvasEditor();});
@@ -598,7 +617,7 @@ app.addEventListener('change',async event=>{
   }
   if(event.target.id==='station'){state.stationId=event.target.value;save();render(true);document.querySelector('#station')?.focus({preventScroll:true});}
   if(event.target.id==='photo-file'){
-    await receivePhoto(event.target.files[0]);
+    await receivePhoto(event.target.files[0],{startFresh:event.target.hasAttribute('data-home-upload')});
   }
 });
 app.addEventListener('input',event=>{
@@ -656,6 +675,7 @@ app.addEventListener('submit',async event=>{
 });
 app.addEventListener('click',async event=>{
   const el=event.target.closest('[data-phone-brand],[data-phone-model],[data-action],[data-design],[data-start-design],[data-source],[data-effect],[data-ai-action],[data-ai-look-example],[data-ai-look-step],[data-look-action],[data-look-mode],[data-ai-group],[data-ai-view],[data-artwork-item],[data-add-graphic],[data-quick-font],[data-quick-color]');if(!el||el.disabled||photoBusy||passBusy||aiBusy)return;
+  if(el.dataset.action==='home-photo'){openPhotoPicker();return;}
   if(el.dataset.lookAction==='open'){openAIStudio();return;}
   if(el.dataset.lookAction==='close'){closeAIStudio();return;}
   if(el.dataset.lookAction==='zoom'){zoomAIStudio();return;}
@@ -821,7 +841,7 @@ async function newAI(input){
  if(!AI_GENERATION_CONNECTED)throw Error('AI generation is not configured. Please contact the store.');
  const job=createLiveRender({...input,model:input.model||state.model});
  if(aiJob?.mode==='live'&&aiJob.status==='awaiting_confirmation'&&!aiJob.remoteId)await rememberLiveJob({...aiJob,status:'cancelled'});
- Object.assign(aiUi,{mode:'pair',compare:50,accepted:false,error:''});
+ Object.assign(aiUi,{mode:'pair',compare:50,accepted:false,error:'',reconnecting:false});
  await rememberLiveJob(job);
  if(!membership.authenticated){customerUI.next='ai';go('account');}else go('ai');
 }
@@ -860,18 +880,18 @@ async function handleAI(action){
 let pollBusy=false,pollErrors=0;
 setInterval(async()=>{
  if(!aiJob||aiJob.mode!=='live'||aiBusy||pollBusy||!(['queued','generating'].includes(aiJob.status)||aiJob.status==='ready'&&!aiJob.resultPhoto))return;
- pollBusy=true;
+ pollBusy=true;const pollingJob=aiJob;
  try{
-  const pollingJob=aiJob,previous=aiJob.status,hadImage=Boolean(aiJob.resultPhoto);
+  const previous=aiJob.status,hadImage=Boolean(aiJob.resultPhoto);
   const updated=await refreshLiveRender(pollingJob);
   if(aiJob?.id!==pollingJob.id)return;
-  await rememberLiveJob(updated);pollErrors=0;
+  await rememberLiveJob(updated);pollErrors=0;aiUi.reconnecting=false;
   if(previous!==aiJob.status||hadImage!==Boolean(aiJob.resultPhoto)){
-   if(['ready','failed','cancelled'].includes(aiJob.status))await syncAIAccount();
+   if(['ready','failed','cancelled'].includes(aiJob.status))try{await syncAIAccount();}catch{/* Show the finished image even if the balance refresh is unavailable. */}
    render(true);
    if(aiJob.status==='ready')notify('Your AI image is ready. Open AI studio to use it.');
   }
- }catch{if(++pollErrors===1)notify('We could not update your render. Reconnecting…');}
+ }catch{if(aiJob?.id===pollingJob.id){aiUi.reconnecting=true;if(++pollErrors===1)notify('We could not update your render. Reconnecting…');}}
  finally{pollBusy=false;}
 },3000);
 
