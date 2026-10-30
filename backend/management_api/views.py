@@ -198,7 +198,7 @@ class PermissionsView(APIView):
 class DashboardView(APIView):
     permission_classes = [IsAdminUser]
     def get(self, request):
-        models = [("brands", m.Brand), ("phone_models", m.PhoneModel), ("designs", m.DesignTemplate), ("graphics", m.Graphic), ("ai_styles", m.AIStyle), ("ai_examples", m.AIExample), ("plans", m.PricingPlan), ("orders", m.PrintOrder)]
+        models = [("brands", m.Brand), ("phone_models", m.PhoneModel), ("designs", m.DesignTemplate), ("graphics", m.Graphic), ("ai_styles", m.AIStyle), ("ai_examples", m.AIExample), ("plans", m.PricingPlan), ("orders", m.PrintOrder), ("customers", m.Customer)]
         counts = {key: model.objects.count() for key, model in models if request.user.has_perm(f"management_api.view_{model._meta.model_name}")}
         logs = m.AuditLog.objects.all()[:6] if request.user.has_perm("management_api.view_auditlog") else []
         from .stripe_payments import payment_config
@@ -242,9 +242,11 @@ def public_catalog(request):
     from .images import image_variants
     from .ai_generation import generation_available
     from .ai_service import current_config
+    from .customer_auth import signup_credits
     # Stable legacy indexes are never reassigned. This is an integration API, not a payment API.
     data = {
         "version": 2,
+        "signupCredits": signup_credits(),
         "ai_generation_connected": generation_available(),
         "ai_provider": current_config().provider,
         "brands": s.BrandSerializer(m.Brand.objects.filter(active=True), many=True).data,

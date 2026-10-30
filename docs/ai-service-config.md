@@ -27,6 +27,8 @@
 
 ## 存储与部署
 
+与 dev 合并后执行全部待应用迁移即可。`0014_merge_payments_relay_credits` 汇合支付、中转站和积分流水三条迁移分支，保留 dev 原有 `0010_customer_email_signup` 的依赖关系；已有 dev 数据库及已启用 Stripe / 中转站的数据库都能直接升级，无需删除数据或伪造迁移记录。
+
 - 依赖 `cryptography`，版本锁定在 `backend/requirements.txt`。迁移 `0005_ai_service_config` 新增单例配置表；`0011_ai_relay_provider` 增加服务商、其他服务商的加密配置及任务服务商快照。升级执行 `backend/.venv/bin/python backend/manage.py migrate`。旧配置及历史任务默认归属 OpenAI，原密钥保留。
 - 生产通过 `AI_CONFIG_ENCRYPTION_KEY` 环境变量提供独立 Fernet 主密钥（32 字节随机数的 URL-safe Base64）。不要复用 Django SECRET_KEY、OpenAI Key，也不要将其放入前端、Git 或日志。
 - 配置表当前密钥及 `provider_profiles` 中非当前服务商的密钥均使用认证加密；接口只返回状态、末尾四位和检查时间。审计仅记录操作名称，不包含明文、密文或请求正文。配置接口禁止缓存，写操作要求 Session + CSRF。

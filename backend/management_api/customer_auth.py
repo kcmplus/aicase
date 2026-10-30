@@ -19,8 +19,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Customer, EmailChallenge, CustomerAuthLimit, AIAccount, PricingPlan
-from .mail_service import send_transactional_mail, mail_available
+from .models import Customer, EmailChallenge, CustomerAuthLimit, AIAccount
+from .mail_service import send_transactional_mail, mail_available, mail_config
 
 SESSION_KEY = 'store_customer_id'
 
@@ -29,7 +29,7 @@ def customer_for(request):
     customer_id = request.session.get(SESSION_KEY)
     if not customer_id:
         return None
-    return Customer.objects.filter(pk=customer_id, active=True).first()
+    return Customer.objects.filter(pk=customer_id, active=True, session_version=request.session.get('store_customer_version', 0)).first()
 
 
 def customer_owner(request):
@@ -41,11 +41,13 @@ def customer_owner(request):
 
 
 def signup_credits():
-    return PricingPlan.objects.filter(kind='ai_monthly', active=True).values_list('trial_credits', flat=True).first() or 0
+    return mail_config().signup_credits
 
 
 def public_customer(customer):
-    return {'id': str(customer.pk), 'email': customer.email} if customer else None
+    return {'id': str(customer.pk), 'email': customer.email, 'displayName': customer.display_name,
+            'joinedAt': customer.created_at.isoformat(),
+            'lastLoginAt': customer.last_login_at.isoformat() if customer.last_login_at else None} if customer else None
 
 
 def code_digest(email, nonce, code):
@@ -99,8 +101,20 @@ class CustomerView(APIView):
                          'signupCredits': signup_credits(), 'emailEnabled': mail_available(),
                          'csrfToken': get_token(request)})
 
+    def patch(self, request):
+        customer = customer_for(request)
+        if not customer:
+            raise PermissionDenied('Sign in with your email to use AI generations.')
+        if set(request.data) != {'displayName'}:
+            raise serializers.ValidationError('Only your display name can be changed here.')
+        name = serializers.CharField(max_length=60, allow_blank=True).run_validation(request.data['displayName'])
+        Customer.objects.filter(pk=customer.pk).update(display_name=name, revision=F('revision') + 1)
+        customer.refresh_from_db()
+        return Response({'customer': public_customer(customer)})
+
     def delete(self, request):
         request.session.pop(SESSION_KEY, None)
+        request.session.pop('store_customer_version', None)
         request.session.cycle_key()
         return Response({'customer': None, 'csrfToken': get_token(request)})
 
@@ -135,12 +149,10 @@ class SendCode(CustomerView):
             challenge.sent_count += 1
             challenge.attempts, challenge.delivered = 0, False
             challenge.save()
-        subject = 'POPOMO 登录验证码' if language == 'zh-CN' else 'Your POPOMO sign-in code'
-        body = (f'你的验证码是 {code}，10 分钟内有效。\n首次验证邮箱后将自动注册，并一次性领取注册赠送的 AI 次数。\n如果不是你本人操作，请忽略此邮件，请勿分享验证码。'
-                if language == 'zh-CN' else
-                f'Your sign-in code is {code}. It expires in 10 minutes.\nYour first verified sign-in creates an account and grants your one-time welcome AI generations.\nIf you did not request this email, you can ignore it. Never share this code.')
+        from .email_content import verification_email
+        subject, body, html = verification_email(code, language)
         try:
-            send_transactional_mail(email, subject, body)
+            send_transactional_mail(email, subject, body, html_body=html)
         except Exception:
             # Never echo SMTP credentials, verification codes or provider replies.
             return Response({'detail': 'We could not send your code. Please try again later.'}, status=503)
@@ -168,10 +180,16 @@ class VerifyCode(CustomerView):
                 challenge.delivered, challenge.code_hash = False, ''
                 challenge.save(update_fields=['delivered', 'code_hash'])
                 customer, created = Customer.objects.get_or_create(email=email, defaults={'verified_at': timezone.now()})
+                customer = Customer.objects.select_for_update().get(pk=customer.pk)
                 if customer.active:
+                    customer.last_login_at = timezone.now()
+                    customer.save(update_fields=['last_login_at', 'updated_at'])
                     key = hashlib.sha256(('customer:' + str(customer.pk)).encode()).hexdigest()
-                    AIAccount.objects.get_or_create(owner_hash=key, defaults={
+                    account, account_created = AIAccount.objects.get_or_create(owner_hash=key, defaults={
                         'customer': customer, 'trial_granted': signup_credits()})
+                    if account_created:
+                        from .credit_ledger import record
+                        record(account, 'signup', 'signup', 'gift', 0, account.trial_granted)
         if not valid:
             return Response({'detail': 'This code is invalid or expired. Request a new code.'}, status=400)
         if not customer.active:
@@ -179,5 +197,23 @@ class VerifyCode(CustomerView):
         request.session.cycle_key()
         rotate_token(request)
         request.session[SESSION_KEY] = str(customer.pk)
+        request.session['store_customer_version'] = customer.session_version
         request.session.set_expiry(30*24*60*60)
         return Response({'customer': public_customer(customer), 'created': created, 'csrfToken': get_token(request)})
+
+
+class CustomerCredits(CustomerView):
+    http_method_names = ['get', 'options']
+
+    def get(self, request):
+        customer = customer_for(request)
+        if not customer:
+            raise PermissionDenied('Sign in with your email to use AI generations.')
+        from .models import PricingPlan
+        from .ai_generation import refresh_account, expire_stale_jobs
+        from .credit_ledger import entries_page
+        account = AIAccount.objects.filter(customer=customer).first()
+        if account:
+            expire_stale_jobs(account.pk)
+            refresh_account(account, PricingPlan.objects.filter(kind='ai_monthly', active=True).first())
+        return Response(entries_page(account, request))

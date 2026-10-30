@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
     dependencies = [
         (
             "management_api",
-            "0009_printorder_paid_at_printorder_payment_credentials_and_more",
+            "0008_aiaccount_airender",
         ),
     ]
 

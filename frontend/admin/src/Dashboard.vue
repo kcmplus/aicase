@@ -4,7 +4,7 @@ import {api,session,can} from './api.js';
 import {resources,permissionFor,displayLabels} from './resources.js';
 const environment=import.meta.env.DEV?'本地开发环境':'管理环境';
 const data=ref(null),error=ref('');
-const metrics=[['phone_models','支持的机型','phone-models'],['designs','Collection 设计','designs'],['graphics','图案素材','graphics'],['orders','服务端订单','orders']];
+const metrics=[['phone_models','支持的机型','phone-models'],['designs','Collection 设计','designs'],['customers','注册用户','customers'],['orders','服务端订单','orders']];
 onMounted(async()=>{try{data.value=await api('admin/dashboard/');}catch(e){error.value=e.message;}});
 const date=value=>new Date(value).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
 </script>

@@ -17,7 +17,7 @@ from rest_framework.test import APIClient
 
 from .ai_generation import edit_image, GenerationError, run_render, restore_credit
 from .ai_service import encrypt_api_key, switch_provider, NoRedirect
-from .models import AIAccount, AIRender, AIServiceConfig, AIStyle, Customer
+from .models import AIAccount, AIRender, AIServiceConfig, AIStyle, Customer, CreditEntry
 
 
 def png():
@@ -65,6 +65,7 @@ class LiveGenerationTests(TestCase):
         self.assertEqual(AIAccount.objects.get().trial_used,1)
         response,dispatch=self.create();self.assertEqual(response.status_code,200);self.assertFalse(dispatch.called)
         self.assertEqual(AIRender.objects.count(),1);self.assertEqual(AIAccount.objects.get().trial_used,1)
+        entry=CreditEntry.objects.get(kind='generation');self.assertEqual(entry.amount,-1);self.assertEqual(entry.balance_after,0)
         self.assertNotIn('Private English style prompt',str(response.data));self.assertNotIn('api_key',str(response.data))
         conflict,_=self.create(model='iPhone 16e');self.assertEqual(conflict.status_code,409)
 
@@ -101,6 +102,8 @@ class LiveGenerationTests(TestCase):
         with patch('management_api.ai_generation.edit_image',side_effect=GenerationError('quota','No API credit.')) as provider:
             run_render(job.id);run_render(job.id)
         restore_credit(job,'failed');self.assertEqual(provider.call_count,1)
+        self.assertEqual(CreditEntry.objects.filter(kind='failure_refund').count(),1)
+        self.assertEqual(CreditEntry.objects.get(kind='failure_refund').amount,1)
         job.refresh_from_db();self.assertEqual(job.status,'failed');self.assertTrue(job.credit_restored)
         self.assertEqual(AIAccount.objects.get().trial_used,0);self.assertEqual(bytes(job.input_image),b'')
 
@@ -121,6 +124,15 @@ class LiveGenerationTests(TestCase):
         with patch('management_api.ai_generation.edit_image',return_value=(png(),'')):run_render(job.id)
         self.assertEqual(self.create()[0].status_code,409)
         self.assertEqual(AIRender.objects.count(),1)
+
+    def test_bonus_credits_can_be_used_and_refunded_without_resetting_usage(self):
+        AIAccount.objects.update(trial_used=1, bonus_granted=2)
+        response=self.create()[0];self.assertEqual(response.status_code,202,response.data)
+        self.assertEqual(AIAccount.objects.get().trial_used,2)
+        self.assertEqual(self.client.get('/api/v1/store/ai-account/').data['trialRemaining'],1)
+        self.assertEqual(self.client.post('/api/v1/store/ai-renders/'+response.data['id']+'/',{'action':'cancel'},format='json').status_code,200)
+        self.assertEqual(AIAccount.objects.get().trial_used,1)
+        self.assertEqual(self.client.get('/api/v1/store/ai-account/').data['trialRemaining'],2)
 
     @override_settings(AI_DAILY_RENDER_LIMIT=0)
     def test_global_daily_limit_reserves_nothing(self):
@@ -199,6 +211,21 @@ class LiveGenerationTests(TestCase):
         dispatch.assert_not_called()
         self.assertFalse(AIRender.objects.exists())
         self.assertEqual(AIAccount.objects.get().trial_used, 0)
+        self.assertFalse(CreditEntry.objects.exists())
+
+    def test_relay_can_spend_bonus_credits_and_records_one_failure_refund(self):
+        self.use_relay()
+        AIAccount.objects.update(trial_granted=0, bonus_granted=1)
+        job = self.job()
+        charge = CreditEntry.objects.get(kind='generation', render_id=job.pk)
+        self.assertEqual((charge.pool, charge.amount, charge.balance_after), ('gift', -1, 0))
+        with patch('management_api.ai_generation.edit_image', side_effect=GenerationError('network', 'Try later.')):
+            run_render(job.pk)
+            run_render(job.pk)
+        refund = CreditEntry.objects.get(kind='failure_refund', render_id=job.pk)
+        self.assertEqual((refund.pool, refund.amount, refund.balance_after), ('gift', 1, 1))
+        account = self.client.get('/api/v1/store/ai-account/').data
+        self.assertEqual((account['bonusGranted'], account['trialRemaining']), (1, 1))
 
     def test_relay_rejects_url_only_results_without_fetching_or_leaking(self):
         self.use_relay()

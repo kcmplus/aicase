@@ -85,3 +85,11 @@ test('legacy completed renders and already active subscriptions retain their ori
  assert.equal(credits(legacy).monthly,20);
  unavailableCatalog();assert.ok(canApplyAIOrder(refreshAIOrder(old,31000)));assert.match(membershipPage(legacy),/20 AI generations/);
 });
+
+// Registration promotions can change without editing subscription prices.
+test('independent signup allowance overrides legacy plan allowance, including zero',()=>{
+ const data=fixture();data.signupCredits=4;data.plans[1].trial_credits=99;applyCatalog(data);
+ assert.equal(credits(freshMembership(),now).trial,4);
+ data.signupCredits=0;applyCatalog(data);assert.equal(credits(freshMembership(),now).trial,0);
+ data.signupCredits=-1;assert.throws(()=>applyCatalog(data),/Invalid signup/);
+});
