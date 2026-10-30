@@ -31,7 +31,7 @@ await loadCatalog();
 let state = {designId:'bloom',model:'',pass:null,stationId:'DEMO-01',job:null,source:'collection',photo:'',effect:'original',intensity:65,zoom:100,x:50,y:50,aiStyle:'anime',aiExample:'portrait',artworkLayouts:{},photoArtwork:[],keepCollection:false,photoPlacement:null,photoOrigin:'upload',ai:null,aiJobId:null};
 let storageWarning = false;
 let aiJob=null,aiBusy=false;
-const aiUi={mode:'pair',compare:50,lookMode:'effect',lookCompare:50,accepted:false,error:''};
+const aiUi={mode:'pair',compare:50,lookMode:'effect',lookCompare:50,accepted:false,error:'',reconnecting:false};
 let cleanupAIStudio=()=>{};
 const customerUI={email:'',codeSent:false,busy:false,error:'',success:'',ledger:[],ledgerNext:null,ledgerOpen:false,ledgerBusy:false,ledgerError:'',resendAt:0,next:'choose'};
 let resendTimer;
@@ -487,7 +487,7 @@ function render(preserveScroll=false) {
   const title=({account:'My account',choose:'Choose your case',pass:'Your design pass',kiosk:'Station demo',ai:'Your AI render',membership:'AI membership',checkout:'Review print order',orders:'My orders',payment:'Payment status'})[route];
   document.title=title?`${t(title)} · POPOMO`:t('POPOMO — A little more you.');
   localize(app);document.querySelector('.skip-link').textContent=t('Skip to content');
-  cleanupAIStudio=mountAIStudio(app,aiJob);
+  cleanupAIStudio=mountAIStudio(app,aiJob,aiUi);
   document.querySelector('#language').disabled=aiBusy||photoBusy||passBusy;
   document.querySelectorAll('[data-editor-panel]').forEach(bindEditorPanel);
   document.querySelector('.canvas-editor')?.addEventListener('cancel',event=>{event.preventDefault();closeCanvasEditor();});
@@ -821,7 +821,7 @@ async function newAI(input){
  if(!AI_GENERATION_CONNECTED)throw Error('AI generation is not configured. Please contact the store.');
  const job=createLiveRender({...input,model:input.model||state.model});
  if(aiJob?.mode==='live'&&aiJob.status==='awaiting_confirmation'&&!aiJob.remoteId)await rememberLiveJob({...aiJob,status:'cancelled'});
- Object.assign(aiUi,{mode:'pair',compare:50,accepted:false,error:''});
+ Object.assign(aiUi,{mode:'pair',compare:50,accepted:false,error:'',reconnecting:false});
  await rememberLiveJob(job);
  if(!membership.authenticated){customerUI.next='ai';go('account');}else go('ai');
 }
@@ -860,18 +860,18 @@ async function handleAI(action){
 let pollBusy=false,pollErrors=0;
 setInterval(async()=>{
  if(!aiJob||aiJob.mode!=='live'||aiBusy||pollBusy||!(['queued','generating'].includes(aiJob.status)||aiJob.status==='ready'&&!aiJob.resultPhoto))return;
- pollBusy=true;
+ pollBusy=true;const pollingJob=aiJob;
  try{
-  const pollingJob=aiJob,previous=aiJob.status,hadImage=Boolean(aiJob.resultPhoto);
+  const previous=aiJob.status,hadImage=Boolean(aiJob.resultPhoto);
   const updated=await refreshLiveRender(pollingJob);
   if(aiJob?.id!==pollingJob.id)return;
-  await rememberLiveJob(updated);pollErrors=0;
+  await rememberLiveJob(updated);pollErrors=0;aiUi.reconnecting=false;
   if(previous!==aiJob.status||hadImage!==Boolean(aiJob.resultPhoto)){
-   if(['ready','failed','cancelled'].includes(aiJob.status))await syncAIAccount();
+   if(['ready','failed','cancelled'].includes(aiJob.status))try{await syncAIAccount();}catch{/* Show the finished image even if the balance refresh is unavailable. */}
    render(true);
    if(aiJob.status==='ready')notify('Your AI image is ready. Open AI studio to use it.');
   }
- }catch{if(++pollErrors===1)notify('We could not update your render. Reconnecting…');}
+ }catch{if(aiJob?.id===pollingJob.id){aiUi.reconnecting=true;if(++pollErrors===1)notify('We could not update your render. Reconnecting…');}}
  finally{pollBusy=false;}
 },3000);
 
