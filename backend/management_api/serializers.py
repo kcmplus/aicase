@@ -162,8 +162,8 @@ class PrintOrderSerializer(serializers.ModelSerializer):
 
 class PrintOrderDetailSerializer(PrintOrderSerializer):
     class Meta(PrintOrderSerializer.Meta):
-        fields = PrintOrderSerializer.Meta.fields + ["snapshot", "stripe_session_id", "stripe_payment_intent", "paid_at"]
-        read_only_fields = PrintOrderSerializer.Meta.read_only_fields + ["snapshot", "stripe_session_id", "stripe_payment_intent", "paid_at"]
+        fields = PrintOrderSerializer.Meta.fields + ["snapshot", "stripe_session_id", "stripe_payment_intent", "airwallex_payment_intent", "paid_at"]
+        read_only_fields = PrintOrderSerializer.Meta.read_only_fields + ["snapshot", "stripe_session_id", "stripe_payment_intent", "airwallex_payment_intent", "paid_at"]
 
 class AuditLogSerializer(serializers.ModelSerializer):
     class Meta:

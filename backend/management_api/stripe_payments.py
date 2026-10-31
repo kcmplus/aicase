@@ -130,7 +130,8 @@ class StripeSettings(APIView):
         serializer = ConfigUpdate(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        config, _ = StripeConfig.objects.select_for_update().get_or_create(pk=1)
+        from .payments import lock_configs, disable_other
+        config, other = lock_configs()
         if data['revision'] != config.revision:
             raise Conflict('配置已更新，请刷新后重试。')
         changed = []
@@ -155,20 +156,13 @@ class StripeSettings(APIView):
                 raise serializers.ValidationError('启用前请填写网站地址及当前模式的 Secret Key、Webhook 签名密钥。')
             if config.mode == 'live' and not config.storefront_url.startswith('https://'):
                 raise serializers.ValidationError('正式收款必须使用 HTTPS 网站地址。')
+        if config.enabled:
+            disable_other(request, other)
         if changed:
             config.revision += 1
             config.save()
             audit(request, 'update', 'management_api.stripeconfig', config, '修改 Stripe 配置：' + '、'.join(changed))
         return Response(safe_config(config))
-
-
-@method_decorator(never_cache, name='dispatch')
-class PublicPaymentConfig(APIView):
-    permission_classes = [AllowAny]
-    authentication_classes = []
-
-    def get(self, request):
-        return Response(payment_config())
 
 
 @sensitive_variables()

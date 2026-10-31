@@ -37,7 +37,7 @@ export async function getPaymentConfig(fetcher=fetch){
  const response=await fetcher('/api/v1/store/payment-config/',{credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(10000)});
  if(!response.ok)throw Error('Payment settings could not be loaded. Please reload and try again.');
  const data=await response.json();
- if(!['demo','stripe'].includes(data.provider)||!['demo','test','live'].includes(data.mode)||typeof data.available!=='boolean')throw Error('Invalid payment settings.');
+ if(!['demo','stripe','airwallex'].includes(data.provider)||!['demo','test','live'].includes(data.mode)||typeof data.available!=='boolean')throw Error('Invalid payment settings.');
  return data;
 }
 export function stripeCheckoutUrl(value){

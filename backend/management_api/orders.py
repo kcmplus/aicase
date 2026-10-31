@@ -146,7 +146,7 @@ class Snapshot(Layout):
 
 class Checkout(StrictSerializer):
     payment_mode = serializers.ChoiceField(choices=['demo', 'test', 'live'], default='demo')
-    payment_provider = serializers.ChoiceField(choices=['demo', 'stripe'], default='demo')
+    payment_provider = serializers.ChoiceField(choices=['demo', 'stripe', 'airwallex'], default='demo')
     request_key = serializers.UUIDField()
     accepted = serializers.BooleanField()
     expected_amount = serializers.DecimalField(max_digits=8, decimal_places=2, min_value=Decimal('0'))
@@ -226,9 +226,10 @@ class StoreOrders(APIView):
         if existing:
             if existing.owner_hash != owner_hash:
                 raise Conflict('This checkout key has already been used.')
-            if existing.status == 'pending' and existing.mode.startswith('stripe_'):
-                expected_mode = 'stripe_' + str(request.data.get('payment_mode', ''))
-                if request.data.get('payment_provider') != 'stripe' or expected_mode != existing.mode:
+            if existing.status == 'pending' and existing.mode.startswith(('stripe_', 'airwallex_')):
+                expected_provider = existing.mode.rsplit('_', 1)[0]
+                expected_mode = expected_provider + '_' + str(request.data.get('payment_mode', ''))
+                if request.data.get('payment_provider') != expected_provider or expected_mode != existing.mode:
                     raise Conflict('This order uses a different payment environment. Open it from My orders to review it.')
             # Later edits must not make a retry overwrite the order snapshot.
             return Response(order_data(existing))
@@ -242,10 +243,10 @@ class StoreOrders(APIView):
             raise Conflict('Printing is unavailable. Please try again later.')
         if data['expected_amount'] != plan.price:
             raise Conflict(f'The print price changed to {plan.currency} {plan.price}. Reload to review the new price.')
-        from .stripe_payments import checkout_settings
+        from .payments import checkout_settings
         payment = checkout_settings(data['payment_provider'], data['payment_mode'])
-        if payment['mode'].startswith('stripe_') and plan.price < Decimal('0.50'):
-            raise Conflict('Stripe requires a print price of at least USD 0.50.')
+        if payment['mode'].startswith(('stripe_', 'airwallex_')) and plan.price < Decimal('0.50'):
+            raise Conflict('Online payment requires a print price of at least USD 0.50.')
         order = PrintOrder.objects.create(owner_hash=owner_hash, request_key=data['request_key'], **payment, model_name=data['snapshot']['model'], amount=plan.price, currency=plan.currency, customer=customer, customer_email=data['customer_email'], snapshot=data['snapshot'])
         log(order, 'create')
         return Response(order_data(order), status=201)

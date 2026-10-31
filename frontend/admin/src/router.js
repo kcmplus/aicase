@@ -5,17 +5,27 @@ import Login from './Login.vue';
 import Dashboard from './Dashboard.vue';
 import ResourcePage from './ResourcePage.vue';
 import PromptSettings from './PromptSettings.vue';
+import AirwallexSettings from './AirwallexSettings.vue';
 import StripeSettings from './StripeSettings.vue';
 import Customers from './Customers.vue';
 import MailSettings from './MailSettings.vue';
 import AIServiceSettings from './AIServiceSettings.vue';
 import AIUsage from './AIUsage.vue';
 import AICenter from './AICenter.vue';
+import PaymentSettings from './PaymentSettings.vue';
 const aiResources=['ai','ai-prompts','ai-service','ai-usage','ai-examples','ai-styles'];
+const paymentResources=['payments','stripe','airwallex'];
 const aiRedirect=path=>to=>({path,query:to.query,hash:to.hash});
 export const router=createRouter({history:createWebHistory(import.meta.env.BASE_URL),routes:[
   {path:'/login',component:Login},
   {path:'/',component:Dashboard},
+  {path:'/payments',component:PaymentSettings,meta:{resource:'payments',module:'payments'},children:[
+    {path:'',redirect:'/payments/airwallex'},
+    {path:'airwallex',component:AirwallexSettings,props:{embedded:true},meta:{resource:'airwallex'}},
+    {path:'stripe',component:StripeSettings,props:{embedded:true},meta:{resource:'stripe'}},
+  ]},
+  {path:'/airwallex',redirect:aiRedirect('/payments/airwallex')},
+  {path:'/stripe',redirect:aiRedirect('/payments/stripe')},
   {path:'/ai',component:AICenter,meta:{resource:'ai',module:'ai'},children:[
     {path:'',redirect:'/ai/prompts'},
     {path:'prompts',component:PromptSettings,props:{embedded:true},meta:{resource:'ai-prompts'}},
@@ -27,7 +37,7 @@ export const router=createRouter({history:createWebHistory(import.meta.env.BASE_
   {path:'/ai-usage',redirect:aiRedirect('/ai/usage')},
   {path:'/ai-examples',redirect:to=>({path:'/ai/prompts',query:{...to.query,tab:'examples'}})},
   {path:'/ai-styles',redirect:to=>({path:'/ai/prompts',query:{...to.query,tab:'style'}})},
-  ...Object.keys(resources).filter(key=>!aiResources.includes(key)).map(resource=>({path:'/'+resource,component:resource==='customers'?Customers:resource==='mail'?MailSettings:resource==='stripe'?StripeSettings:ResourcePage,props:{resource},meta:{resource}})),
+  ...Object.keys(resources).filter(key=>!aiResources.includes(key)&&!paymentResources.includes(key)).map(resource=>({path:'/'+resource,component:resource==='customers'?Customers:resource==='mail'?MailSettings:ResourcePage,props:{resource},meta:{resource}})),
   {path:'/:pathMatch(.*)*',redirect:'/'},
 ]});
 router.beforeEach(async to=>{
