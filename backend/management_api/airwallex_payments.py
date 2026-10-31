@@ -29,7 +29,8 @@ from .models import AirwallexConfig, PrintOrder, AuditLog
 from .orders import StrictSerializer, StoreOrders, owner, order_data, Conflict
 from .stripe_payments import credentials, encrypt_credentials, ConfigUpdate as StripeConfigUpdate
 
-KEYS = ('client_id', 'api_key', 'webhook_secret')
+REQUIRED_KEYS = ('client_id', 'api_key', 'webhook_secret')
+KEYS = (*REQUIRED_KEYS, 'account_id')
 WEBHOOK_EVENTS = ('payment_intent.succeeded', 'payment_intent.cancelled')
 API_HOSTS = {'test': 'https://api.sandbox.airwallex.com', 'live': 'https://api.airwallex.com'}
 
@@ -48,7 +49,7 @@ def payment_config(config=None):
     config = config or current_config()
     try:
         values = credentials(getattr(config, config.mode + '_credentials')) if config.enabled else {}
-        ready = config.storefront_url.startswith('https://') and all(values.get(k) for k in KEYS)
+        ready = config.storefront_url.startswith('https://') and all(values.get(k) for k in REQUIRED_KEYS)
     except CredentialStorageUnavailable:
         ready = False
     return {'provider': 'airwallex' if config.enabled else 'demo',
@@ -74,7 +75,16 @@ class CredentialUpdate(StrictSerializer):
     client_id = serializers.CharField(required=False, allow_blank=True, max_length=1024)
     api_key = serializers.CharField(required=False, allow_blank=True, max_length=1024)
     webhook_secret = serializers.CharField(required=False, allow_blank=True, max_length=1024)
+    account_id = serializers.CharField(required=False, allow_blank=True, max_length=36)
     clear = serializers.BooleanField(default=False)
+
+    def validate_account_id(self, value):
+        if not value:
+            return value
+        try:
+            return str(uuid.UUID(value))
+        except ValueError:
+            raise serializers.ValidationError('请填写收款账户的 Account ID（UUID），不是 Client ID 或组织 ID。')
 
     def validate(self, data):
         if data['clear'] and any(data.get(k) for k in KEYS):
@@ -164,8 +174,10 @@ def api_request(order, method, path, *, body=None, params=None):
     try:
         token = cache.get(cache_key)
         if not token:
-            response = requests.post(host + '/api/v1/authentication/login', headers={
-                'x-client-id': values['client_id'], 'x-api-key': values['api_key'], 'Content-Type': 'application/json'},
+            headers = {'x-client-id': values['client_id'], 'x-api-key': values['api_key'], 'Content-Type': 'application/json'}
+            if values.get('account_id'):
+                headers['x-login-as'] = values['account_id']
+            response = requests.post(host + '/api/v1/authentication/login', headers=headers,
                 timeout=(3, 5), allow_redirects=False)
             response.raise_for_status()
             auth = response.json()

@@ -16,6 +16,16 @@
 
 保存配置只检查完整性，不代表 Airwallex 商户权限、收款能力或密钥已经通过在线验证。不要将真实密钥提交到仓库、测试脚本或日志。
 
+## 多账户密钥与权限排查
+
+- 在 Airwallex API key 的账户级权限中选择收款账户，并授予 Payment Acceptance 写入权限（包含读取）。组织级 Billing / Checkout 权限不能代替账户级收单权限。
+- 密钥关联多个账户时，必须填写该环境的收款账户 `Account ID`（设置 → 账户详情），认证请求通过 `x-login-as` 指定账户。该值不是 Client ID 或组织 ID。仅关联一个账户的密钥可留空。
+- Account ID 与凭据一同加密、按订单冻结，Token 缓存按账户隔离；更新配置不会替换旧单的收款账户。旧单若缺少此配置，请先核对 Airwallex 记录再处理，不要直接修改已有付款单的账户。
+- 认证成功但创建/查询返回 `Insufficient permissions` 时，检查账户选择及账户级收单授权；重新取得 Token 后再验证，不能仅凭认证成功判断可收款。
+- 配置留空保留已保存的值；移除 Account ID 需清除此环境凭据后重新填写。
+
+依据：[API key 管理与账户选择](https://www.airwallex.com/docs/developer-tools/api/manage-api-keys)、[收单权限范围](https://www.airwallex.com/docs/developer-tools/api/api-key-scopes)。
+
 ## 接口
 
 | 接口 | 用途 |

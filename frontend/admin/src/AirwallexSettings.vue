@@ -6,9 +6,9 @@ import {api} from './api.js';
 defineProps({embedded:Boolean});
 const config=ref(null),busy=ref(false),error=ref('');
 const form=reactive({enabled:false,mode:'test',storefront_url:''});
-const empty=()=>({client_id:'',api_key:'',webhook_secret:'',clear:false});
+const empty=()=>({client_id:'',api_key:'',webhook_secret:'',account_id:'',clear:false});
 const keys=reactive({test:empty(),live:empty()});
-const labels={test:'Sandbox 测试环境',live:'正式环境'},fields={client_id:'Client ID',api_key:'API Key',webhook_secret:'Webhook 签名密钥'};
+const labels={test:'Sandbox 测试环境',live:'正式环境'},fields={client_id:'Client ID',api_key:'API Key',webhook_secret:'Webhook 签名密钥',account_id:'收款账户 Account ID（多账户密钥必填）'};
 const dirty=computed(()=>config.value&&(Object.keys(form).some(k=>form[k]!==config.value[k])||Object.values(keys).some(v=>Object.values(v).some(Boolean))));
 const webhook=computed(()=>form.storefront_url?form.storefront_url.replace(/\/$/,'')+'/api/v1/payments/airwallex/webhook/':'填写网站地址后显示回调地址');
 function accept(data){config.value=data;for(const k of Object.keys(form))form[k]=data[k];for(const mode of ['test','live'])Object.assign(keys[mode],empty());}
@@ -35,15 +35,16 @@ onBeforeRouteLeave(discard);
      <el-form-item label="用户端网站地址"><el-input v-model="form.storefront_url" placeholder="https://你的域名"/><p class="help">填写顾客访问的网站根地址。Airwallex 返回地址需使用 HTTPS；本机联调请用 HTTPS 测试域名并把同一域名的 /api/ 转发到后端。</p></el-form-item>
      <section v-for="mode in ['test','live']" :key="mode" class="credentials">
       <h2>{{labels[mode]}}凭据 <el-tag v-if="mode===form.mode" size="small">当前选择</el-tag></h2>
-      <el-form-item v-for="(label,key) in fields" :key="key" :label="label"><el-input v-model="keys[mode][key]" type="password" autocomplete="new-password" :spellcheck="false" :disabled="keys[mode].clear||!config.encryption_ready" :placeholder="config[mode][key].configured?'已保存 '+config[mode][key].masked+'，留空保留':'填写 '+label" maxlength="1024"/></el-form-item>
-      <el-checkbox v-if="Object.keys(fields).some(k=>config[mode][k].configured)" v-model="keys[mode].clear">保存时清除这一环境的凭据</el-checkbox>
+      <el-form-item v-for="(label,key) in fields" :key="key" :label="label"><el-input v-model="keys[mode][key]" type="password" autocomplete="new-password" :spellcheck="false" :disabled="keys[mode].clear||!config.encryption_ready" :placeholder="config[mode][key]?.configured?'已保存 '+config[mode][key].masked+'，留空保留':'填写 '+label" maxlength="1024"/></el-form-item>
+      <el-checkbox v-if="Object.keys(fields).some(k=>config[mode][k]?.configured)" v-model="keys[mode].clear">保存时清除这一环境的凭据</el-checkbox>
      </section>
+     <p class="help">Account ID 在 Airwallex「设置 → 账户详情」中查看，不能填写组织 ID。密钥关联多个账户时必须指定收款账户；只关联一个账户时可留空。保存后仅新订单使用新配置。</p>
      <p class="help">凭据加密保存，返回页面仅显示末四位。测试和正式环境互不共用凭据。</p>
      <el-button native-type="submit" type="primary" :loading="busy" :disabled="!dirty">保存配置</el-button><span v-if="dirty" class="switch-note">有未保存的修改</span>
     </el-form>
     <aside class="panel setup-guide">
      <h2>接入步骤</h2>
-     <ol><li>登录 Airwallex Sandbox，开通 Payments 并激活至少一种支持 USD 的支付方式。</li><li>在 Developer → API keys 获取 Client ID 和 API Key，启用支付创建、查询所需权限。</li><li>在 Developer → Webhooks 创建下方地址，勾选下方事件，复制签名密钥。</li><li>保存并启用测试配置，从用户端完成成功、拒付及 3DS 测试，核对后台付款状态后再切正式环境。</li></ol>
+     <ol><li>登录 Airwallex Sandbox，开通 Payments 并激活至少一种支持 USD 的支付方式。</li><li>在 Developer → API keys 获取 Client ID 和 API Key，在账户级权限中选择收款账户，并启用 Payment Acceptance（收单）的写入权限（包含查询）。关联多个账户时，在此填写对应 Account ID。</li><li>在 Developer → Webhooks 创建下方地址，勾选下方事件，复制签名密钥。</li><li>保存并启用测试配置，从用户端完成成功、拒付及 3DS 测试，核对后台付款状态后再切正式环境。</li></ol>
      <h3>Webhook 地址</h3><code class="webhook">{{webhook}}</code><p class="help">需要公网 HTTPS。Sandbox 和正式账号分别配置订阅；不能把浏览器的返回地址当作回调地址。</p>
      <h3>订阅事件</h3><code v-for="event in config.webhook_events" :key="event" class="event">{{event}}</code>
      <h3>订单规则</h3><p>金额由「价格与套餐」决定，当前支持 USD，至少 $0.50。后台验证签名并查询 Airwallex 确认成功后才记为已付款。</p><p>切换渠道仅影响新订单。已有订单仍按创建时的渠道和环境付款；失败可在「我的订单」重试，重复点击复用同一笔付款。</p><p>本次接入一次性壳单支付。退款、AI 订阅收款和实际打印下发另行接入。</p>
