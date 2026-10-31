@@ -31,7 +31,7 @@ from .stripe_payments import credentials, encrypt_credentials, ConfigUpdate as S
 
 REQUIRED_KEYS = ('client_id', 'api_key', 'webhook_secret')
 KEYS = (*REQUIRED_KEYS, 'account_id')
-WEBHOOK_EVENTS = ('payment_intent.succeeded', 'payment_intent.cancelled')
+WEBHOOK_EVENTS = ('payment_intent.succeeded', 'payment_intent.cancelled', 'refund.received', 'refund.accepted', 'refund.settled', 'refund.failed')
 API_HOSTS = {'test': 'https://api.sandbox.airwallex.com', 'live': 'https://api.airwallex.com'}
 
 
@@ -194,7 +194,7 @@ def api_request(order, method, path, *, body=None, params=None):
             cache.delete(cache_key)
         # An interrupted create may already have succeeded. Recover exactly the
         # same intent by merchant reference, never generate a fresh request ID.
-        if response.status_code == 400 and method == 'POST' and response.json().get('code') == 'duplicate_request':
+        if response.status_code == 400 and method == 'POST' and path == '/api/v1/pa/payment_intents/create' and response.json().get('code') == 'duplicate_request':
             result = api_request(order, 'GET', '/api/v1/pa/payment_intents',
                                  params={'merchant_order_id': str(order.reference), 'page_size': 10})
             matches = [item for item in result.get('items', []) if item.get('request_id') == str(order.reference)]
@@ -291,6 +291,9 @@ class AirwallexWebhook(APIView):
         # returned or mutated based on it until verification of the raw bytes.
         try:
             event = json.loads(payload)
+            from .refunds import AIRWALLEX_EVENTS, refund_webhook
+            if event.get('name') in AIRWALLEX_EVENTS:
+                return refund_webhook(request, payload, 'airwallex')
             obj = event['data']['object']
             reference = uuid.UUID(obj['merchant_order_id'])
         except (ValueError, TypeError, KeyError, AttributeError):

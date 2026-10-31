@@ -128,6 +128,21 @@ class PrintOrder(Timestamped):
         ordering = ["-created_at"]
 
 
+class PrintRefund(Timestamped):
+    order = models.OneToOneField(PrintOrder, on_delete=models.PROTECT, related_name='refund')
+    reference = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    provider_id = models.CharField(max_length=255, blank=True)
+    status = models.CharField(max_length=20, default='requested', choices=[('requested', '待核实'), ('pending', '退款处理中'), ('succeeded', '已退款'), ('failed', '退款失败')])
+    amount = models.DecimalField(max_digits=8, decimal_places=2)
+    currency = models.CharField(max_length=3)
+    reason = models.CharField(max_length=128)
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        default_permissions = ()
+
+
 class StripeConfig(Timestamped):
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     enabled = models.BooleanField(default=False)

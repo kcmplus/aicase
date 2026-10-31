@@ -24,7 +24,8 @@ from .models import StripeConfig, PrintOrder, AuditLog
 from .orders import StrictSerializer, StoreOrders, owner, order_data, Conflict
 
 WEBHOOK_EVENTS = ('checkout.session.completed', 'checkout.session.async_payment_succeeded',
-                  'checkout.session.async_payment_failed', 'checkout.session.expired')
+                  'checkout.session.async_payment_failed', 'checkout.session.expired',
+                  'refund.created', 'refund.updated', 'refund.failed')
 
 
 class PaymentUnavailable(APIException):
@@ -247,6 +248,9 @@ class StripeWebhook(APIView):
         # data is returned or changed until the SDK verifies the raw body.
         try:
             untrusted = json.loads(payload)
+            from .refunds import STRIPE_EVENTS, refund_webhook
+            if untrusted.get('type') in STRIPE_EVENTS:
+                return refund_webhook(request, payload, 'stripe')
             reference = uuid.UUID(untrusted['data']['object']['metadata']['order_reference'])
         except (ValueError, KeyError, TypeError, AttributeError):
             return Response({'detail': 'Invalid checkout event.'}, status=400)

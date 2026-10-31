@@ -184,6 +184,8 @@ def owner(request):
 
 def order_data(order, detail=True):
     result = {key: getattr(order, key) for key in ('reference','model_name','customer_email','status','amount','currency','mode','revision','station_id','created_at','updated_at')}
+    from .refunds import refund_data
+    result['refund'] = refund_data(order)
     result['code'] = order.snapshot.get('code', '')
     if detail:
         result['snapshot'] = order.snapshot

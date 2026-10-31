@@ -1,6 +1,6 @@
 # 手机壳 Stripe 支付
 
-实现范围是当前首页使用的 `simple-app.js` 手机壳订单。使用 Stripe 托管 Checkout，一次购买一个手机壳，USD 定价，信用卡付款。AI 订阅、历史展示站购物车、真实打印设备、退款和物流不在此接入范围。
+实现范围是当前首页使用的 `simple-app.js` 手机壳订单。使用 Stripe 托管 Checkout，一次购买一个手机壳，USD 定价，信用卡付款。AI 订阅、历史展示站购物车、真实打印设备和物流不在此接入范围。后台整单原路退款参见 [退款操作](payment-refunds.md)。
 
 ## 注册账号后配置
 
@@ -21,6 +21,9 @@
    - `checkout.session.async_payment_succeeded`
    - `checkout.session.async_payment_failed`
    - `checkout.session.expired`
+   - `refund.created`
+   - `refund.updated`
+   - `refund.failed`
 6. 选择测试环境，启用并保存。前台确认壳单会跳转 Stripe；测试后返回并等待订单显示已付款。
 7. 账号可正式收款后，另填正式环境 `sk_live_…` 和正式 Webhook 签名密钥，再选择正式收款保存。测试与正式配置分开保存。托管 Checkout 不需要 Publishable Key、预建 Product 或 Price。
 
@@ -29,7 +32,7 @@
 本机转发示例（Stripe CLI 登录到你的测试账号后）：
 
 ```sh
-stripe listen --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,checkout.session.expired --forward-to localhost:8000/api/v1/payments/stripe/webhook/
+stripe listen --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,checkout.session.expired,refund.created,refund.updated,refund.failed --forward-to localhost:8000/api/v1/payments/stripe/webhook/
 ```
 
 使用 CLI 输出的签名密钥填写后台测试配置，再通过网站创建一笔订单。CLI 通用示例事件不含本网站订单标识，不能代替完整下单测试。

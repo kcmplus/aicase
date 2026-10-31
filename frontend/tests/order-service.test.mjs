@@ -139,3 +139,12 @@ test('payment config does not retry authorization errors or malformed successful
   assert.equal(calls,1);
  }
 });
+
+test('refund states suppress payment and fulfillment code without rewriting order history',()=>{
+ for(const status of ['requested','pending','succeeded','failed']){
+  const view=paymentState({status:'paid',refund:{status}},{returned:true});
+  assert.equal(view.canPay,false);assert.equal(view.showCode,false);assert.equal(view.fulfilled,false);
+  assert.match(view.title,/refund/i);
+ }
+ assert.equal(paymentState({status:'paid',refund:{status:'succeeded'}}).showNewOrder,true);
+});

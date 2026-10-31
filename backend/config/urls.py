@@ -16,12 +16,15 @@ from management_api.stripe_payments import StripeSettings, StripeWebhook
 from management_api.payments import PublicPaymentConfig, PaymentCheckout
 from management_api.airwallex_payments import AirwallexSettings, AirwallexWebhook
 
+from management_api.refunds import AdminRefund
+
 router = DefaultRouter()
 router.register("customers", CustomerViewSet)
 router.register("ai-examples", views.AIExampleViewSet)
 for name, view in [("brands", views.BrandViewSet), ("phone-models", views.PhoneModelViewSet), ("graphics", views.GraphicViewSet), ("designs", views.DesignTemplateViewSet), ("ai-styles", views.AIStyleViewSet), ("plans", views.PricingPlanViewSet), ("orders", views.OrderViewSet), ("users", views.UserViewSet), ("roles", views.RoleViewSet), ("audit-logs", views.AuditViewSet)]:
     router.register(name, view)
 urlpatterns = [
+    path("api/v1/admin/orders/<int:pk>/refund/", AdminRefund.as_view()),
     path("api/v1/store/customer/credits/", CustomerCredits.as_view()),
     path("api/v1/store/customer/", CustomerView.as_view()),
     path("api/v1/store/customer/send-code/", SendCode.as_view()),

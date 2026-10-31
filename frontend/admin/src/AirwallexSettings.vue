@@ -47,7 +47,7 @@ onBeforeRouteLeave(discard);
      <ol><li>登录 Airwallex Sandbox，开通 Payments 并激活至少一种支持 USD 的支付方式。</li><li>在 Developer → API keys 获取 Client ID 和 API Key，在账户级权限中选择收款账户，并启用 Payment Acceptance（收单）的写入权限（包含查询）。关联多个账户时，在此填写对应 Account ID。</li><li>在 Developer → Webhooks 创建下方地址，勾选下方事件，复制签名密钥。</li><li>保存并启用测试配置，从用户端完成成功、拒付及 3DS 测试，核对后台付款状态后再切正式环境。</li></ol>
      <h3>Webhook 地址</h3><code class="webhook">{{webhook}}</code><p class="help">需要公网 HTTPS。Sandbox 和正式账号分别配置订阅；不能把浏览器的返回地址当作回调地址。</p>
      <h3>订阅事件</h3><code v-for="event in config.webhook_events" :key="event" class="event">{{event}}</code>
-     <h3>订单规则</h3><p>金额由「价格与套餐」决定，当前支持 USD，至少 $0.50。后台验证签名并查询 Airwallex 确认成功后才记为已付款。</p><p>切换渠道仅影响新订单。已有订单仍按创建时的渠道和环境付款；失败可在「我的订单」重试，重复点击复用同一笔付款。</p><p>本次接入一次性壳单支付。退款、AI 订阅收款和实际打印下发另行接入。</p>
+     <h3>订单规则</h3><p>金额由「价格与套餐」决定，当前支持 USD，至少 $0.50。后台验证签名并查询 Airwallex 确认成功后才记为已付款。</p><p>切换渠道仅影响新订单。已有订单仍按创建时的渠道和环境付款；失败可在「我的订单」重试，重复点击复用同一笔付款。</p><p>本次接入一次性壳单支付。整单退款在「打印订单」详情中处理；AI 订阅收款和实际打印下发另行接入。</p>
      <p><a href="https://www.airwallex.com/docs/payments/get-started/quickstart" target="_blank" rel="noopener noreferrer">Airwallex 官方接入文档 →</a></p><router-link to="/plans">管理壳单价格 →</router-link>
     </aside>
    </div>

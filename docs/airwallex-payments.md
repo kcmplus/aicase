@@ -8,7 +8,7 @@
 2. 超级管理员进入 `/admin/payments/airwallex`（侧栏「支付配置」→ Airwallex）。默认关闭，不会自行发起扣款。
 3. 在 Airwallex Sandbox 账号激活 Payments 及至少一种支持 USD 的付款方式。Developer → API keys 获取 Client ID、API Key，按最小权限允许创建和查询 PaymentIntent。
 4. 填写顾客访问的 **HTTPS 网站根地址**，无子路径、查询参数或 hash。开发时使用 HTTPS 测试域名，将同一域名的 `/api/` 转发到本地后端，配置 `DJANGO_ALLOWED_HOSTS` 和 `DJANGO_CSRF_TRUSTED_ORIGINS`。从这个 HTTPS 域名开始下单，不能在 `127.0.0.1` 下单再返回另一个域名：浏览器订单访问凭据按域名保存。
-5. Developer → Webhooks 新建公网 HTTPS 接收地址 `https://你的域名/api/v1/payments/airwallex/webhook/`，订阅 `payment_intent.succeeded`、`payment_intent.cancelled`，将该订阅的签名密钥填入相同环境。事件使用 `name`、`data.object` 结构，正式启用前核对所选 API 版本的样例；不接受测试请求头传入的签名密钥。
+5. Developer → Webhooks 新建公网 HTTPS 接收地址 `https://你的域名/api/v1/payments/airwallex/webhook/`，订阅 `payment_intent.succeeded`、`payment_intent.cancelled`、`refund.received`、`refund.accepted`、`refund.settled`、`refund.failed`，将该订阅的签名密钥填入相同环境。事件使用 `name`、`data.object` 结构，正式启用前核对所选 API 版本的样例；不接受测试请求头传入的签名密钥。
 6. 保存并启用 Sandbox 测试配置。此操作原子关闭 Stripe 的新订单开关，旧 Stripe 订单不变。两渠道都关闭时沿用项目原有演示付款。
 7. 在用户端完成测试订单，检查后台「打印订单」中的渠道、PaymentIntent 编号和付款时间，再配置独立的正式环境凭据。
 
@@ -49,7 +49,7 @@
 - 只有服务端查到 `SUCCEEDED` 且 `captured_amount` 等于订单全额才标为已付款。处理中、风控审核、待捕获、单次付款失败均不会发放打印权限；单次失败可在同一 Intent 下重试。`CANCELLED` 只关闭未付款单。重复/乱序回调不会重复记账或将已付款单降级。
 - 回调依赖查询 Airwallex API；查询失败返回 503，等待平台重试。生产环境监控回调失败、长期 pending 和重试积压；手工补发 webhook 以平台当前签名为准。
 - 当前没有自动定时查单补偿；用户刷新只查询本地订单状态。回调长期失败需在 Airwallex 管理台核对并重新投递，不能依据前端返回页手工猜测到账。
-- 已付款订单不能走模拟退款、修改设计或演示打印。真实打印下发、退款、拒付处理、AI 订阅支付仍属于后续范围。
+- 已付款订单不能走模拟退款、修改设计或演示打印。后台支持整单原路退款，参见 [退款操作](payment-refunds.md)。真实打印下发、拒付处理、AI 订阅支付仍属于后续范围。
 
 ## 上线前验收
 
@@ -71,7 +71,7 @@
 - 后台配置：`https://aicase.chunpat.cc/admin/payments/airwallex`
 - 网站根地址：`https://aicase.chunpat.cc/`
 - Airwallex 通知链接：`https://aicase.chunpat.cc/api/v1/payments/airwallex/webhook/`
-- 事件：`payment_intent.succeeded`、`payment_intent.cancelled`。
+- 事件：`payment_intent.succeeded`、`payment_intent.cancelled`、`refund.received`、`refund.accepted`、`refund.settled`、`refund.failed`。
 
 dev 的数据库及加密密钥独立；部署不复制本机保存的支付凭据，也不自动启用正式收款。需要在服务器后台填写正式账号凭据、该通知链接的签名密钥及网站地址，再启用。
 
