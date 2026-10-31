@@ -116,3 +116,26 @@ test('paid and fulfillment statuses retain receipt; cancelled and unknown do not
   const state=paymentState({status});assert.equal(state.showCode,false);assert.equal(state.canPay,false);
  }
 });
+
+test('payment config retries only 503 up to three times, including HTML maintenance responses',async()=>{
+ for(const failures of [0,1,3,4]){
+  let calls=0;const delays=[],signals=[];
+  const request=getPaymentConfig(async(url,options)=>{
+   calls++;signals.push(options.signal);
+   assert.equal(options.credentials,'omit');assert.equal(options.cache,'no-store');
+   return calls<=failures?{ok:false,status:503,json:async()=>{throw Error('HTML maintenance page');}}:{ok:true,status:200,json:async()=>({provider:'airwallex',mode:'live',available:true})};
+  },{sleep:async ms=>delays.push(ms)});
+  if(failures===4)await assert.rejects(request,/after 3 retries/);
+  else assert.equal((await request).provider,'airwallex');
+  assert.equal(calls,Math.min(failures+1,4));
+  assert.deepEqual(delays,[1000,2000,4000].slice(0,failures));
+  assert.equal(new Set(signals).size,calls);
+ }
+});
+test('payment config does not retry authorization errors or malformed successful responses',async()=>{
+ for(const status of [401,403,200]){
+  let calls=0;
+  await assert.rejects(getPaymentConfig(async()=>{calls++;return {ok:status===200,status,json:async()=>({})};},{sleep:async()=>assert.fail('must not retry')}));
+  assert.equal(calls,1);
+ }
+});

@@ -1,5 +1,6 @@
 import {readPass} from './simple-core.js';
 import {esc} from './art.js';
+import {retryUnavailableRead} from './request-retry.js';
 
 const KEY='popomo-order-access-v1';
 export function orderAccessKey(storage=localStorage){
@@ -33,8 +34,9 @@ export function checkoutEmailField(account){
  return '<label class="order-email">Email (optional)<input name="email" type="email" maxlength="254" autocomplete="email" placeholder="you@example.com"><small>Saved with your order for support and payment receipts.</small></label>';
 }
 
-export async function getPaymentConfig(fetcher=fetch){
- const response=await fetcher('/api/v1/store/payment-config/',{credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(10000)});
+export async function getPaymentConfig(fetcher=fetch,retryOptions){
+ const response=await retryUnavailableRead(()=>fetcher('/api/v1/store/payment-config/',{credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(10000)}),retryOptions);
+ if(response.status===503)throw Error('Checkout is temporarily unavailable after 3 retries. Your design is saved. Please try again later.');
  if(!response.ok)throw Error('Payment settings could not be loaded. Please reload and try again.');
  const data=await response.json();
  if(!['demo','stripe','airwallex'].includes(data.provider)||!['demo','test','live'].includes(data.mode)||typeof data.available!=='boolean')throw Error('Invalid payment settings.');

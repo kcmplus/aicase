@@ -63,7 +63,7 @@ test('AI requests carry customer session cookies',async()=>{
  const result=await aiRequest('ai-account/',{key:'a'.repeat(64),fetcher:async(url,options)=>{
   assert.equal(url,'/api/v1/store/ai-account/');assert.equal(options.credentials,'same-origin');assert.equal(options.cache,'no-store');assert.equal(options.headers['X-Order-Key'],undefined);return {ok:true,json:async()=>({server:true})};
  }});assert.equal(result.server,true);
- await assert.rejects(()=>aiRequest('ai-account/',{key:'a'.repeat(64),fetcher:async()=>({ok:false,status:503,json:async()=>({detail:'Service unavailable'})})}),/Service unavailable/);
+ await assert.rejects(()=>aiRequest('ai-account/',{key:'a'.repeat(64),retryOptions:{sleep:async()=>{}},fetcher:async()=>({ok:false,status:503,json:async()=>({detail:'Service unavailable'})})}),/after 3 retries/);
 });
 test('live image provenance survives a phone case order snapshot',()=>{
  const j=job();const pass=createPersonalPass({source:'photo',designId:'bloom',model:'iPhone 17',photo,effect:'original',intensity:65,zoom:100,x:50,y:50,ai:{mode:'live',styleId:j.styleId,jobId:j.id}});
@@ -124,5 +124,30 @@ test('ready previews retain slider endpoints and use each supplied phone mask',(
   assert.match(html,/--reveal:0%/);assert.match(html,/data-ai-view="compare" aria-pressed="true"/);
   assert.ok(html.includes(`data-phone-template="${template}"`));
   assert.match(html,/Original photo visibility/);assert.match(html,/data-ai-pane="case" hidden/);
+ }
+});
+
+test('account GET recovers from HTML 503 and stops after three retries',async()=>{
+ for(const failures of [1,3,4]){
+  let calls=0;const delays=[];const signals=[];
+  const request=aiRequest('ai-account/',{retryOptions:{sleep:async ms=>delays.push(ms)},fetcher:async(url,options)=>{
+   calls++;signals.push(options.signal);
+   return calls<=failures?{ok:false,status:503,json:async()=>{throw Error('HTML maintenance page');}}:{ok:true,status:200,json:async()=>({authenticated:true})};
+  }});
+  if(failures===4)await assert.rejects(request,error=>error.status===503&&/after 3 retries/.test(error.message));
+  else assert.equal((await request).authenticated,true);
+  assert.equal(calls,Math.min(failures+1,4));
+  assert.deepEqual(delays,[1000,2000,4000].slice(0,failures));
+  assert.equal(new Set(signals).size,calls);
+ }
+});
+test('account mutations and permission failures are never automatically retried',async()=>{
+ for(const method of ['GET','POST']){
+  let calls=0;
+  await assert.rejects(aiRequest('ai-account/',{method,retryOptions:{sleep:async()=>assert.fail('must not retry')},fetcher:async url=>{
+   if(url.endsWith('/csrf/'))return {ok:true,json:async()=>({csrfToken:'test'})};
+   calls++;return {ok:false,status:method==='GET'?403:503,json:async()=>({detail:'Not available'})};
+  }}),/Not available/);
+  assert.equal(calls,1);
  }
 });
