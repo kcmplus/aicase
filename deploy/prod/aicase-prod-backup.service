@@ -1,0 +1,17 @@
+[Unit]
+Description=Back up POPOMO production database, uploads and private configuration
+After=postgresql.service
+ConditionPathExists=/opt/aicase-prod/current/VERSION
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/aicase-prod-backup
+TimeoutStartSec=3600
+Nice=10
+IOSchedulingClass=idle
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/aicase-prod/daily-backups /var/lock
+UMask=0077

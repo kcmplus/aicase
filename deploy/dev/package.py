@@ -9,8 +9,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def allowed_source(name):
-    if name in {'deploy/dev/aicase-dev-ai-cleanup.service', 'deploy/dev/aicase-dev-ai-cleanup.timer'}:
+def allowed_source(name, environment='dev'):
+    units = {f'deploy/{environment}/aicase-{environment}-ai-cleanup.service',
+             f'deploy/{environment}/aicase-{environment}-ai-cleanup.timer'}
+    if environment == 'prod':
+        units.update({'deploy/prod/backup.sh', 'deploy/prod/aicase-prod-backup.service',
+                      'deploy/prod/aicase-prod-backup.timer'})
+    if name in units:
         return True
     path = Path(name)
     if not (name.startswith('backend/') or name.startswith('frontend/storefront/')):
@@ -21,7 +26,9 @@ def allowed_source(name):
     return path.suffix not in {'.pyc', '.sqlite3', '.pem', '.key', '.log'} and 'db.sqlite3' not in name
 
 
-def build(output=None):
+def build(output=None, environment='dev'):
+    if environment not in {'dev', 'prod'}:
+        raise ValueError('Unknown deployment environment')
     output = Path(output or ROOT / 'dist-release')
     admin = ROOT / 'frontend/admin/dist'
     if not (admin / 'index.html').is_file():
@@ -30,7 +37,7 @@ def build(output=None):
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT).decode().strip()
     tracked = subprocess.check_output(['git', 'ls-files', '-z'], cwd=ROOT).decode().split('\0')
     with tarfile.open(output / 'release.tar.gz', 'w:gz') as archive:
-        for name in sorted(filter(allowed_source, tracked)):
+        for name in sorted(name for name in tracked if allowed_source(name, environment)):
             source = ROOT / name
             if not source.is_file() or source.is_symlink():
                 raise SystemExit(f'Expected a regular source file: {name}')
@@ -44,7 +51,7 @@ def build(output=None):
         entry = tarfile.TarInfo('VERSION')
         entry.size, entry.mode = len(data), 0o644
         archive.addfile(entry, io.BytesIO(data))
-    shutil.copyfile(ROOT / 'deploy/dev/deploy.sh', output / 'deploy.sh')
+    shutil.copyfile(ROOT / f'deploy/{environment}/deploy.sh', output / 'deploy.sh')
     checksums = []
     for name in ['release.tar.gz', 'deploy.sh']:
         digest = hashlib.sha256((output / name).read_bytes()).hexdigest()
@@ -54,4 +61,7 @@ def build(output=None):
 
 
 if __name__ == '__main__':
-    build()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--environment', choices=['dev', 'prod'], default='dev')
+    build(environment=parser.parse_args().environment)

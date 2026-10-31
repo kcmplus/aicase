@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily POPOMO production backup at 04:40 China time
+
+[Timer]
+OnCalendar=*-*-* 04:40:00 Asia/Shanghai
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target
