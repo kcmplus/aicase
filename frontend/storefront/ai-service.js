@@ -1,3 +1,4 @@
+import {AI_PROVIDER} from './runtime-catalog.js';
 import {createAIOrder} from './ai-core.js';
 import {importPhoto} from './simple-upload.js';
 
@@ -29,13 +30,15 @@ export function mergeLiveRender(job,data){
  if(data.result!==result)throw Error('The AI service returned an invalid image.');
  return {...job,remoteId:data.id,mode:'live',status:data.status,payment:data.payment,
   allocation:data.allocation,paidAt:data.createdAt,startedAt:data.startedAt,completedAt:data.completedAt,
-  errorCode:data.errorCode,errorMessage:data.errorMessage,result};
+  errorCode:data.errorCode,errorMessage:data.errorMessage,result,imageExpired:Boolean(data.imageExpired),imageExpiresAt:data.imageExpiresAt||null};
 }
 export const getAIAccount=()=>aiRequest('ai-account/');
 export const changeAIAccount=(action,accepted)=>aiRequest('ai-account/',{method:'POST',body:{action,accepted}});
 export async function hydrateLiveImage(job){
- if(job.status==='ready'&&!job.resultPhoto){
-  const blob=await aiRequest(`ai-renders/${job.remoteId}/image/`,{image:true});
+ if(job.status==='ready'&&!job.resultPhoto&&!job.imageExpired){
+  let blob;
+  try{blob=await aiRequest(`ai-renders/${job.remoteId}/image/`,{image:true});}
+  catch(e){if(e.status===410)return {...job,imageExpired:true};throw e;}
   const photo=await importPhoto(new File([blob],'ai-result.png',{type:blob.type}),{maxEdge:2000,quality:.92});
   if(photo.length>=3_000_000)throw Error('The generated image is too large to apply. Please try again.');
   return {...job,resultPhoto:photo};
@@ -44,7 +47,7 @@ export async function hydrateLiveImage(job){
 }
 export async function submitLiveRender(job,accepted){
  const data=await aiRequest('ai-renders/',{method:'POST',body:{request_key:job.id.replace(/^AI-/,''),
-  accepted,photo:job.photo,style_id:job.styleId,model:job.model}});
+  accepted,photo:job.photo,style_id:job.styleId,model:job.model,provider:AI_PROVIDER}});
  return hydrateLiveImage(mergeLiveRender(job,data));
 }
 export async function refreshLiveRender(job){

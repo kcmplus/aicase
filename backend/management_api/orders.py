@@ -1,4 +1,4 @@
-"""Browser-owned test orders. Payment and station actions are explicitly simulated."""
+"""Browser-owned case orders; station actions remain explicitly simulated."""
 import base64
 import hashlib
 import json
@@ -15,12 +15,14 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from PIL import Image
 from rest_framework import serializers
+from rest_framework.authentication import SessionAuthentication
 from rest_framework.exceptions import APIException, PermissionDenied
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from .models import PrintOrder, PhoneModel, DesignTemplate, PricingPlan, Graphic, AuditLog
+from .customer_auth import customer_for
 
 # The renderer is versioned with the storefront. Validate against its fixed layer IDs,
 # rather than mutable admin layouts that the storefront does not yet consume.
@@ -143,14 +145,18 @@ class Snapshot(Layout):
         return data
 
 class Checkout(StrictSerializer):
+    payment_mode = serializers.ChoiceField(choices=['demo', 'test', 'live'], default='demo')
+    payment_provider = serializers.ChoiceField(choices=['demo', 'stripe'], default='demo')
     request_key = serializers.UUIDField()
     accepted = serializers.BooleanField()
     expected_amount = serializers.DecimalField(max_digits=8, decimal_places=2, min_value=Decimal('0'))
     customer_email = serializers.EmailField(allow_blank=True, required=False, default='')
+    # An expected session identity, not a customer ID that clients may assign.
+    customer_id = serializers.UUIDField(required=False, allow_null=True)
     snapshot = Snapshot()
     def validate_accepted(self, value):
         if not value:
-            raise serializers.ValidationError('Confirm your design and test payment first.')
+            raise serializers.ValidationError('Confirm your design and payment first.')
         return value
 
 class Revision(StrictSerializer):
@@ -186,12 +192,12 @@ def order_data(order, detail=True):
 
 def log(order, action):
     label = {'create':'确认订单','revise':'修改设计','start':'开始打印','ready':'打印完成，待取货','collect':'确认取货','cancel':'取消订单'}[action]
-    AuditLog.objects.create(actor_name='顾客（测试订单）', action=action, resource='management_api.printorder', object_id=str(order.pk), summary=f'测试订单 {order.reference} · {label}')
+    AuditLog.objects.create(actor_name='顾客', action=action, resource='management_api.printorder', object_id=str(order.pk), summary=f'{order.mode} 订单 {order.reference} · {label}')
 
 @method_decorator(never_cache, name='dispatch')
 class StoreOrders(APIView):
     permission_classes = [AllowAny]
-    authentication_classes = []  # A browser-specific bearer key, independent of admin cookies.
+    authentication_classes = []  # Browser key owns orders; customer session only supplies checkout identity.
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'orders'
     def get(self, request):
@@ -207,6 +213,9 @@ class StoreOrders(APIView):
     @transaction.atomic
     def post(self, request):
         owner_hash = owner(request)
+        customer = customer_for(request)
+        if customer:
+            SessionAuthentication().enforce_csrf(request)
         # Serialize checkout/retry against the same pricing record. PostgreSQL's
         # unique request_key also guards simultaneous requests across workers.
         plan = PricingPlan.objects.select_for_update().filter(kind='print', active=True).first()
@@ -217,16 +226,27 @@ class StoreOrders(APIView):
         if existing:
             if existing.owner_hash != owner_hash:
                 raise Conflict('This checkout key has already been used.')
+            if existing.status == 'pending' and existing.mode.startswith('stripe_'):
+                expected_mode = 'stripe_' + str(request.data.get('payment_mode', ''))
+                if request.data.get('payment_provider') != 'stripe' or expected_mode != existing.mode:
+                    raise Conflict('This order uses a different payment environment. Open it from My orders to review it.')
             # Later edits must not make a retry overwrite the order snapshot.
             return Response(order_data(existing))
-        serializer = Checkout(data=request.data)
+        payload = {**request.data, 'customer_email': customer.email} if customer else request.data
+        serializer = Checkout(data=payload)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        if 'customer_id' in data and data['customer_id'] != (customer.pk if customer else None):
+            raise Conflict('Your sign-in changed. Reload checkout to review your email.')
         if not plan:
             raise Conflict('Printing is unavailable. Please try again later.')
         if data['expected_amount'] != plan.price:
             raise Conflict(f'The print price changed to {plan.currency} {plan.price}. Reload to review the new price.')
-        order = PrintOrder.objects.create(owner_hash=owner_hash, request_key=data['request_key'], mode='demo', status='paid', model_name=data['snapshot']['model'], amount=plan.price, currency=plan.currency, customer_email=data['customer_email'], snapshot=data['snapshot'])
+        from .stripe_payments import checkout_settings
+        payment = checkout_settings(data['payment_provider'], data['payment_mode'])
+        if payment['mode'].startswith('stripe_') and plan.price < Decimal('0.50'):
+            raise Conflict('Stripe requires a print price of at least USD 0.50.')
+        order = PrintOrder.objects.create(owner_hash=owner_hash, request_key=data['request_key'], **payment, model_name=data['snapshot']['model'], amount=plan.price, currency=plan.currency, customer=customer, customer_email=data['customer_email'], snapshot=data['snapshot'])
         log(order, 'create')
         return Response(order_data(order), status=201)
 

@@ -1,3 +1,6 @@
+import {generationProgressState} from './ai-wait.js';
+import {t} from './simple-i18n.js';
+
 // Update just the preview: changing views and dragging never recreates the image or job.
 export function setAIView(root,value){
  const mode=['pair','compare','case'].includes(value)?value:'pair';
@@ -14,7 +17,7 @@ export function setAIComparison(root,value){
 }
 
 // Keep space for the actual dock height, including translated copy and large text.
-export function mountAIStudio(root){
+export function mountAIStudio(root,job,ui={}){
  const flow=root.querySelector('.studio-flow'),dock=flow?.querySelector('.studio-controls');
  if(!flow)return ()=>{};
  const dialog=flow.querySelector('.studio-photo-dialog');
@@ -22,6 +25,25 @@ export function mountAIStudio(root){
  const observer=new ResizeObserver(measure);
  if(dock)observer.observe(dock);
  measure();
+ const waitMessage=flow.querySelector('[data-ai-wait-message]');
+ const meter=flow.querySelector('[data-ai-progress]'),fill=flow.querySelector('[data-ai-progress-fill]'),value=flow.querySelector('[data-ai-progress-value]'),title=flow.querySelector('[data-ai-progress-title]'),card=flow.querySelector('[data-ai-progress-card]');
+ const updateWait=()=>{
+  const progress=generationProgressState(job);if(!progress||!meter)return;
+  const reconnecting=ui.reconnecting&&progress.estimated;
+  const percent=reconnecting?Number(meter.getAttribute('aria-valuenow')):Math.max(Number(meter.getAttribute('aria-valuenow')),progress.value);
+  const label=t(reconnecting?'Reconnecting…':progress.title);
+  const message=t(reconnecting?'We’re checking your connection. Your request is saved; no need to submit again.':progress.message);
+  card.classList.toggle('is-reconnecting',Boolean(reconnecting));
+  if(title.textContent!==label)title.textContent=label;
+  if(value.textContent!==percent+'%')value.textContent=percent+'%';
+  fill.style.width=percent+'%';meter.setAttribute('aria-valuenow',String(percent));meter.setAttribute('aria-valuetext',label+' · '+percent+'%');
+  if(waitMessage.textContent!==message)waitMessage.textContent=message;
+ };
+ let waitTimer;
+ if(meter&&generationProgressState(job)){
+  updateWait();
+  if(generationProgressState(job).estimated)waitTimer=setInterval(updateWait,500);
+ }
  const selectPhoto=value=>{
   const tab=value==='after'&&dialog.querySelector('[data-ai-photo-pane="after"]')?'after':'original';
   dialog.querySelectorAll('[data-ai-photo-tab]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.aiPhotoTab===tab)));
@@ -36,5 +58,5 @@ export function mountAIStudio(root){
   if(event.target===dialog){const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)dialog.close();}
  };
  flow.addEventListener('click',click);
- return ()=>{observer.disconnect();flow.removeEventListener('click',click);if(dialog?.open)dialog.close();};
+ return ()=>{clearInterval(waitTimer);observer.disconnect();flow.removeEventListener('click',click);if(dialog?.open)dialog.close();};
 }

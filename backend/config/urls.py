@@ -7,19 +7,30 @@ from management_api import views
 from management_api.orders import StoreOrders, StoreOrder, StoreOrderAction
 from management_api.ai_service import AIServiceSettingsView, AIServiceCheckView
 from management_api.ai_generation import AIAccountView, AIRenders, AIRenderDetail, AIRenderImage
-from management_api.customer_auth import CustomerView, SendCode, VerifyCode
-from management_api.mail_service import MailSettings, MailTest
+from management_api.ai_reporting import AIUsageView, AICallLogsView, AIRenderCostView, AIAdminImageView
+from management_api.customer_auth import CustomerView, SendCode, VerifyCode, CustomerCredits
+from management_api.mail_service import MailSettings, MailTest, RegistrationSettings
+
+from management_api.customers import CustomerViewSet
+from management_api.stripe_payments import StripeSettings, PublicPaymentConfig, StripeCheckout, StripeWebhook
 
 router = DefaultRouter()
+router.register("customers", CustomerViewSet)
 router.register("ai-examples", views.AIExampleViewSet)
 for name, view in [("brands", views.BrandViewSet), ("phone-models", views.PhoneModelViewSet), ("graphics", views.GraphicViewSet), ("designs", views.DesignTemplateViewSet), ("ai-styles", views.AIStyleViewSet), ("plans", views.PricingPlanViewSet), ("orders", views.OrderViewSet), ("users", views.UserViewSet), ("roles", views.RoleViewSet), ("audit-logs", views.AuditViewSet)]:
     router.register(name, view)
 urlpatterns = [
+    path("api/v1/store/customer/credits/", CustomerCredits.as_view()),
     path("api/v1/store/customer/", CustomerView.as_view()),
     path("api/v1/store/customer/send-code/", SendCode.as_view()),
     path("api/v1/store/customer/verify/", VerifyCode.as_view()),
+    path("api/v1/admin/registration/", RegistrationSettings.as_view()),
     path("api/v1/admin/mail/", MailSettings.as_view()),
     path("api/v1/admin/mail/test/", MailTest.as_view()),
+    path("api/v1/admin/stripe/", StripeSettings.as_view()),
+    path("api/v1/store/payment-config/", PublicPaymentConfig.as_view()),
+    path("api/v1/store/orders/<uuid:reference>/checkout/", StripeCheckout.as_view()),
+    path("api/v1/payments/stripe/webhook/", StripeWebhook.as_view()),
     path("api/v1/store/ai-account/", AIAccountView.as_view()),
     path("api/v1/store/ai-renders/", AIRenders.as_view()),
     path("api/v1/store/ai-renders/<uuid:reference>/", AIRenderDetail.as_view()),
@@ -35,6 +46,11 @@ urlpatterns = [
     path("api/v1/admin/dashboard/", views.DashboardView.as_view()),
     path("api/v1/admin/ai-service/", AIServiceSettingsView.as_view()),
     path("api/v1/admin/ai-service/check/", AIServiceCheckView.as_view()),
+    path("api/v1/admin/ai-usage/", AIUsageView.as_view()),
+    path("api/v1/admin/ai-renders/", AICallLogsView.as_view()),
+    path("api/v1/admin/ai-renders/<uuid:reference>/cost/", AIRenderCostView.as_view()),
+    path("api/v1/admin/ai-renders/<uuid:reference>/image/", AIAdminImageView.as_view()),
+    path("api/v1/admin/ai-renders/<uuid:reference>/original/", AIAdminImageView.as_view(original=True)),
     path("api/v1/admin/permissions/", views.PermissionsView.as_view()),
     path("api/v1/admin/uploads/", views.UploadView.as_view()),
     path("api/v1/admin/", include(router.urls)),

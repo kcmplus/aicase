@@ -10,6 +10,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def allowed_source(name):
+    if name in {'deploy/dev/aicase-dev-ai-cleanup.service', 'deploy/dev/aicase-dev-ai-cleanup.timer'}:
+        return True
     path = Path(name)
     if not (name.startswith('backend/') or name.startswith('frontend/storefront/')):
         return False

@@ -154,15 +154,16 @@ class PricingPlanSerializer(CatalogSerializer):
         return attrs
 
 class PrintOrderSerializer(serializers.ModelSerializer):
+    customer_id = serializers.UUIDField(read_only=True, allow_null=True)
     class Meta:
         model = PrintOrder
-        fields = ["id", "reference", "customer_email", "model_name", "status", "amount", "currency", "mode", "revision", "station_id", "notes", "created_at", "updated_at"]
+        fields = ["id", "reference", "customer_id", "customer_email", "model_name", "status", "amount", "currency", "mode", "revision", "station_id", "notes", "created_at", "updated_at"]
         read_only_fields = [f for f in fields if f != "notes"]
 
 class PrintOrderDetailSerializer(PrintOrderSerializer):
     class Meta(PrintOrderSerializer.Meta):
-        fields = PrintOrderSerializer.Meta.fields + ["snapshot"]
-        read_only_fields = PrintOrderSerializer.Meta.read_only_fields + ["snapshot"]
+        fields = PrintOrderSerializer.Meta.fields + ["snapshot", "stripe_session_id", "stripe_payment_intent", "paid_at"]
+        read_only_fields = PrintOrderSerializer.Meta.read_only_fields + ["snapshot", "stripe_session_id", "stripe_payment_intent", "paid_at"]
 
 class AuditLogSerializer(serializers.ModelSerializer):
     class Meta:

@@ -55,7 +55,11 @@ class AIStyle(CatalogItem):
 
 class AIServiceConfig(Timestamped):
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    provider = models.CharField(max_length=20, default="openai")
+    # Inactive provider profiles contain encrypted keys only. Never serialize this field.
+    provider_profiles = models.JSONField(default=dict, editable=False)
     model_name = models.CharField(max_length=100, default="gpt-image-2")
+    image_retention_days = models.PositiveSmallIntegerField(default=30)
     api_key_ciphertext = models.TextField(blank=True, editable=False)
     key_last_four = models.CharField(max_length=4, blank=True, editable=False)
     key_updated_at = models.DateTimeField(null=True, blank=True, editable=False)
@@ -100,10 +104,18 @@ class PrintOrder(Timestamped):
     reference = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     owner_hash = models.CharField(max_length=64, blank=True, db_index=True, editable=False)
     request_key = models.UUIDField(null=True, unique=True, editable=False)
-    mode = models.CharField(max_length=20, default="legacy", choices=[("legacy", "历史订单"), ("demo", "测试支付")])
+    mode = models.CharField(max_length=20, default="legacy", choices=[("legacy", "历史订单"), ("demo", "演示支付"), ("stripe_test", "Stripe 测试"), ("stripe_live", "Stripe 正式")])
+    stripe_session_id = models.CharField(max_length=255, null=True, blank=True, unique=True, editable=False)
+    stripe_checkout_url = models.TextField(blank=True, editable=False)
+    stripe_payment_intent = models.CharField(max_length=255, blank=True, editable=False)
+    payment_credentials = models.TextField(blank=True, editable=False)
+    payment_return_url = models.URLField(blank=True, editable=False)
+    paid_at = models.DateTimeField(null=True, blank=True, editable=False)
     revision = models.PositiveIntegerField(default=1)
     station_id = models.CharField(max_length=30, blank=True)
     customer_email = models.EmailField(blank=True)
+    customer = models.ForeignKey('Customer', null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name='print_orders', editable=False)
     model_name = models.CharField(max_length=120)
     status = models.CharField(max_length=30, default="pending", choices=[("pending", "待付款"), ("paid", "已确认"), ("printing", "打印中"), ("ready", "待取货"), ("completed", "已完成"), ("cancelled", "已取消")])
     amount = models.DecimalField(max_digits=8, decimal_places=2, validators=[MinValueValidator(0)])
@@ -112,6 +124,20 @@ class PrintOrder(Timestamped):
     notes = models.TextField(blank=True, max_length=2000)
     class Meta:
         ordering = ["-created_at"]
+
+
+class StripeConfig(Timestamped):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    enabled = models.BooleanField(default=False)
+    mode = models.CharField(max_length=4, default="test", choices=[("test", "测试"), ("live", "正式")])
+    storefront_url = models.URLField(blank=True)
+    test_credentials = models.TextField(blank=True, editable=False)
+    live_credentials = models.TextField(blank=True, editable=False)
+    revision = models.PositiveIntegerField(default=0, editable=False)
+
+    class Meta:
+        default_permissions = ()
+        constraints = [models.CheckConstraint(condition=models.Q(id=1), name="single_stripe_config")]
 
 class AuditLog(models.Model):
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
@@ -127,13 +153,18 @@ class AuditLog(models.Model):
 
 
 class Customer(Timestamped):
+    display_name = models.CharField(max_length=60, blank=True)
+    notes = models.CharField(max_length=1000, blank=True)
+    last_login_at = models.DateTimeField(null=True, blank=True)
+    revision = models.PositiveIntegerField(default=0)
+    session_version = models.PositiveIntegerField(default=0)
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True)
     active = models.BooleanField(default=True)
     verified_at = models.DateTimeField()
 
     class Meta:
-        default_permissions = ()
+        default_permissions = ("view", "change")
 
 
 class EmailChallenge(models.Model):
@@ -161,6 +192,7 @@ class CustomerAuthLimit(models.Model):
 
 
 class SMTPConfig(Timestamped):
+    signup_credits = models.PositiveIntegerField(default=1)
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     enabled = models.BooleanField(default=False)
     host = models.CharField(max_length=253, blank=True)
@@ -181,6 +213,7 @@ class AIAccount(Timestamped):
     owner_hash = models.CharField(primary_key=True, max_length=64, editable=False)
     customer = models.OneToOneField(Customer, null=True, blank=True, on_delete=models.PROTECT)
     trial_granted = models.PositiveIntegerField(default=0)
+    bonus_granted = models.PositiveIntegerField(default=0)
     trial_used = models.PositiveIntegerField(default=0)
     subscription = models.JSONField(null=True, blank=True)
 
@@ -195,6 +228,7 @@ class AIRender(Timestamped):
     status = models.CharField(max_length=20, default='queued', db_index=True)
     style_code = models.CharField(max_length=80)
     style_name = models.CharField(max_length=120)
+    provider = models.CharField(max_length=20, default="openai", editable=False)
     model_name = models.CharField(max_length=80)
     phone_model = models.CharField(max_length=120)
     phone_template_id = models.CharField(max_length=80)
@@ -203,6 +237,8 @@ class AIRender(Timestamped):
     input_mime = models.CharField(max_length=20)
     input_hash = models.CharField(max_length=64, editable=False)
     result_image = models.BinaryField(null=True, editable=False)
+    image_expires_at = models.DateTimeField(null=True, editable=False, db_index=True)
+    image_deleted_at = models.DateTimeField(null=True, editable=False)
     allocation = models.JSONField(default=dict)
     credit_restored = models.BooleanField(default=False)
     started_at = models.DateTimeField(null=True)
@@ -210,7 +246,40 @@ class AIRender(Timestamped):
     error_code = models.CharField(max_length=60, blank=True)
     error_message = models.CharField(max_length=300, blank=True)
     provider_request_id = models.CharField(max_length=150, blank=True, editable=False)
+    api_started_at = models.DateTimeField(null=True, editable=False)
+    api_finished_at = models.DateTimeField(null=True, editable=False)
+    api_duration_ms = models.PositiveIntegerField(null=True, editable=False)
+    http_status = models.PositiveSmallIntegerField(null=True, editable=False)
+    request_params = models.JSONField(default=dict, editable=False)
+    usage = models.JSONField(default=dict, editable=False)
+    cost_amount = models.DecimalField(max_digits=18, decimal_places=8, null=True, editable=False)
+    cost_currency = models.CharField(max_length=12, blank=True, editable=False)
+    cost_source = models.CharField(max_length=20, default='unknown', editable=False)
+    cost_details = models.JSONField(default=dict, editable=False)
+    cost_recorded_at = models.DateTimeField(null=True, editable=False)
 
     class Meta:
         ordering = ['-created_at']
         default_permissions = ()
+        indexes = [models.Index(fields=['-created_at'], name='ai_render_created_idx')]
+
+
+class CreditEntry(models.Model):
+    account = models.ForeignKey(AIAccount, on_delete=models.PROTECT, related_name='credit_entries')
+    event_key = models.CharField(max_length=150)
+    kind = models.CharField(max_length=30)
+    pool = models.CharField(max_length=10, choices=[('gift', '赠送额度'), ('monthly', '月度额度')])
+    amount = models.IntegerField()
+    balance_before = models.PositiveIntegerField()
+    balance_after = models.PositiveIntegerField()
+    period = models.BigIntegerField(null=True, blank=True)
+    render_id = models.UUIDField(null=True, blank=True)
+    reason = models.CharField(max_length=200, blank=True)
+    actor_name = models.CharField(max_length=150, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-id']
+        default_permissions = ()
+        constraints = [models.UniqueConstraint(fields=['account', 'event_key'], name='unique_credit_event'),
+                       models.CheckConstraint(condition=models.Q(balance_after=models.F('balance_before') + models.F('amount')), name='credit_balance_matches_delta')]

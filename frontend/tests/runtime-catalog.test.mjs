@@ -7,11 +7,28 @@ import {createAIOrder,payAIOrder,refreshAIOrder,canApplyAIOrder} from '../storef
 import {freshOrders,commitPrintOrder} from '../storefront/print-orders.js';
 import {createPersonalPass} from '../storefront/simple-core.js';
 import {stylePanel,membershipPage,aiPage} from '../storefront/ai-view.js';
+import {createLiveRender,submitLiveRender} from '../storefront/ai-service.js';
 const fixture=()=>({version:2,plans:[{kind:'print',price:'9.90',currency:'USD',monthly_credits:0,trial_credits:0},{kind:'ai_monthly',price:'5.99',currency:'USD',monthly_credits:15,trial_credits:1}],ai_styles:bundledStyles.map(s=>({code:s.id,name:s.name,image_path:s.image,description:s.description})),ai_examples:bundledExamples.map(e=>({code:e.id,name:e.name,subject:e.subject,original_path:e.original,results:Object.entries(e.results).map(([style_code,image_path])=>({style_code,image_path}))}))});
 const input={photo:'data:image/jpeg;base64,AQID',styleId:'anime',exampleId:'pets',sourceKind:'sample'};
 const now=Date.UTC(2026,0,31,12);
 const pass=()=>createPersonalPass({source:'collection',designId:'bloom',model:'iPhone 16 Pro',effect:'original',intensity:65,zoom:100,x:50,y:50});
 beforeEach(()=>applyCatalog(fixture()));
+test('consent and submission identify the configured relay without exposing credentials',async t=>{
+ const data={...fixture(),ai_generation_connected:true,ai_provider:'ai778'};applyCatalog(data);
+ const job=createLiveRender({...input,model:'iPhone 17'});
+ const html=aiPage(job,{...freshMembership(),server:true,authenticated:true,trialRemaining:1});
+ assert.match(html,/Your photo will be sent to 七七八 AI \(ai778\.cc\)/);
+ assert.doesNotMatch(html,/Your photo will be sent to OpenAI/);
+ t.mock.method(globalThis,'fetch',async(url,options)=>{
+  if(url.endsWith('auth/csrf/'))return {ok:true,json:async()=>({csrfToken:'test-csrf'})};
+  const body=JSON.parse(options.body);assert.equal(body.provider,'ai778');assert.equal(body.accepted,true);
+  assert.equal(body.photo,input.photo);assert.equal(body.api_key,undefined);
+  return {ok:true,json:async()=>({id:'a3333333-1111-4444-8888-abcdef123456',requestKey:job.id.slice(3),mode:'live',status:'queued',result:null})};
+ });
+ assert.equal((await submitLiveRender(job,true)).status,'queued');
+ applyCatalog({...data,ai_provider:'openai'});
+ assert.match(aiPage(job,{...freshMembership(),server:true,authenticated:true,trialRemaining:1}),/Your photo will be sent to OpenAI/);
+});
 test('server prices drive new orders while paid order revisions retain their confirmed price',()=>{
  const first=commitPrintOrder(freshOrders(),pass(),{accepted:true});assert.equal(first.order.priceCents,990);
  const next=fixture();next.plans[0].price='12.50';applyCatalog(next);
@@ -67,4 +84,12 @@ test('legacy completed renders and already active subscriptions retain their ori
  const legacy=subscribe(freshMembership(),{accepted:true,now:Date.now()});delete legacy.subscription.monthlyLimit;delete legacy.subscription.priceCents;
  assert.equal(credits(legacy).monthly,20);
  unavailableCatalog();assert.ok(canApplyAIOrder(refreshAIOrder(old,31000)));assert.match(membershipPage(legacy),/20 AI generations/);
+});
+
+// Registration promotions can change without editing subscription prices.
+test('independent signup allowance overrides legacy plan allowance, including zero',()=>{
+ const data=fixture();data.signupCredits=4;data.plans[1].trial_credits=99;applyCatalog(data);
+ assert.equal(credits(freshMembership(),now).trial,4);
+ data.signupCredits=0;applyCatalog(data);assert.equal(credits(freshMembership(),now).trial,0);
+ data.signupCredits=-1;assert.throws(()=>applyCatalog(data),/Invalid signup/);
 });

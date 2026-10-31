@@ -17,10 +17,10 @@ import warnings
 from datetime import datetime, timedelta, timezone as datetime_timezone
 from io import BytesIO
 
+from .credit_ledger import balance, ensure_opening, record, expire_monthly
 from django.conf import settings
 from django.db import transaction
 from django.db.models import F
-from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -34,7 +34,9 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from .ai_service import API_BASE, NoRedirect, current_config, decrypt_api_key, encryption_ready
+from .ai_service import PROVIDERS, NoRedirect, current_config, decrypt_api_key, encryption_ready, provider_profile
+from .ai_costs import CallTelemetry, safe_request_id, sync_relay_cost
+from .ai_images import image_expired, image_response, maybe_cleanup_images
 from .models import AIAccount, AIRender, AIServiceConfig, AIStyle, PhoneModel, PricingPlan
 from .orders import StrictSerializer
 from .customer_auth import customer_owner as owner, customer_for, public_customer, signup_credits
@@ -71,23 +73,30 @@ def period_boundary(anchor, months):
     return int(start.replace(year=year, month=month+1, day=day).timestamp()*1000)
 
 
+@transaction.atomic
 def refresh_account(account, plan):
+    AIAccount.objects.select_for_update().get(pk=account.pk)
+    account.refresh_from_db()
+    expire_monthly(account)
     s = account.subscription
     now = int(timezone.now().timestamp()*1000)
-    if s and s.get('renew') and now >= s['endsAt']:
+    if s and plan and s.get('renew') and now >= s['endsAt']:
         cycle = s['cycle']+1
         while now >= period_boundary(s['anchor'], cycle+1):
             cycle += 1
         account.subscription = {**s, 'cycle': cycle, 'startsAt': period_boundary(s['anchor'], cycle),
                                 'endsAt': period_boundary(s['anchor'], cycle+1), 'used': 0,
-                                'monthlyLimit': plan.monthly_credits, 'priceCents': int(plan.price*100)}
+                                'monthlyLimit': plan.monthly_credits, 'priceCents': int(plan.price*100), 'ledger_expired': False}
         account.save(update_fields=['subscription', 'updated_at'])
+        record(account, f"renew:{account.subscription['startsAt']}", 'renewal', 'monthly', 0, balance(account, 'monthly'), period=account.subscription['startsAt'])
     return account
 
 
 def account_data(account):
     return {'server': True, 'authenticated': True, 'customer': public_customer(account.customer),
-            'trialGranted': account.trial_granted, 'trialRemaining': max(0, account.trial_granted-account.trial_used),
+            'trialGranted': account.trial_granted + account.bonus_granted,
+            'welcomeGranted': account.trial_granted, 'bonusGranted': account.bonus_granted,
+            'trialRemaining': max(0, account.trial_granted + account.bonus_granted-account.trial_used),
             'trialCount': account.trial_used, 'trialUsed': account.trial_used > 0,
             'subscription': account.subscription, 'billingMode': 'demo',
             'demoSubscriptionsAvailable': settings.DEBUG}
@@ -100,8 +109,10 @@ def render_data(job):
             'createdAt': int(job.created_at.timestamp()*1000),
             'startedAt': int(job.started_at.timestamp()*1000) if job.started_at else None,
             'completedAt': int(job.completed_at.timestamp()*1000) if job.completed_at else None,
-            'payment': 'credit_restored' if job.credit_restored else 'credit_reserved',
+            'payment': 'credit_restored' if job.credit_restored else 'credit_expired' if job.error_code=='credit_period_expired' else 'credit_reserved',
             'errorCode': job.error_code, 'errorMessage': job.error_message,
+            'imageExpired': image_expired(job),
+            'imageExpiresAt': int(job.image_expires_at.timestamp()*1000) if job.image_expires_at else None,
             'result': f'/api/v1/store/ai-renders/{job.id}/image/' if job.status == 'ready' else None}
 
 
@@ -128,6 +139,7 @@ class RenderInput(StrictSerializer):
     photo = serializers.CharField(max_length=3_000_000, trim_whitespace=False)
     style_id = serializers.SlugField(max_length=80)
     model = serializers.CharField(max_length=120)
+    provider = serializers.ChoiceField(choices=tuple(PROVIDERS), required=False)
 
     def validate_accepted(self, value):
         if not value:
@@ -155,16 +167,28 @@ def restore_credit(job, status, code='', message=''):
         if locked.status not in ('queued','generating'):
             return locked
         account = AIAccount.objects.select_for_update().get(pk=locked.owner_hash)
+        expired = False
         if not locked.credit_restored:
             allocation = locked.allocation
-            if allocation.get('type') == 'trial':
+            pool = 'gift' if allocation.get('type') == 'trial' else 'monthly'
+            expire_monthly(account)
+            ensure_opening(account, pool)
+            before = balance(account, pool)
+            expired = pool == 'monthly' and (not account.subscription or account.subscription['startsAt'] != allocation.get('period') or account.subscription.get('ledger_expired'))
+            if pool == 'gift':
                 account.trial_used = max(0, account.trial_used-1)
-            elif account.subscription and account.subscription['startsAt'] == allocation.get('period'):
+            elif not expired:
                 account.subscription = {**account.subscription, 'used': max(0,account.subscription['used']-1)}
             account.save(update_fields=['trial_used','subscription','updated_at'])
+            record(account, 'refund:'+str(locked.pk), 'refund_expired' if expired else 'cancel_refund' if status=='cancelled' else 'failure_refund',
+                   pool, before, balance(account, pool), render_id=locked.pk, period=allocation.get('period'))
+        if expired:
+            code='credit_period_expired'
+            message='The original credit period has expired. Your current balance is unchanged.'
         locked.status=status; locked.error_code=code; locked.error_message=message
-        locked.credit_restored=True; locked.completed_at=timezone.now(); locked.input_image=b''
-        locked.save(update_fields=['status','error_code','error_message','credit_restored','completed_at','input_image','updated_at'])
+        locked.credit_restored=not expired; locked.completed_at=timezone.now()
+        locked.image_expires_at=locked.completed_at+timedelta(days=current_config().image_retention_days)
+        locked.save(update_fields=['status','error_code','error_message','credit_restored','completed_at','image_expires_at','updated_at'])
         return locked
 
 
@@ -202,7 +226,7 @@ class AIAccountView(AIPrivateView):
         key=owner(request); expire_stale_jobs(key)
         account=AIAccount.objects.get(owner_hash=key)
         plan=PricingPlan.objects.filter(kind='ai_monthly',active=True).first()
-        return Response(account_data(refresh_account(account, plan) if plan else account))
+        return Response(account_data(refresh_account(account, plan)))
 
     @transaction.atomic
     def post(self, request):
@@ -224,6 +248,7 @@ class AIAccountView(AIPrivateView):
         else:
             account.subscription={'anchor':now,'cycle':0,'startsAt':now,'endsAt':period_boundary(now,1),
                                   'used':0,'renew':True,'monthlyLimit':plan.monthly_credits,'priceCents':int(plan.price*100)}
+            record(account, f'subscribe:{now}', 'subscription', 'monthly', 0, balance(account, 'monthly'), period=now)
         account.save(update_fields=['subscription','updated_at'])
         return Response(account_data(account))
 
@@ -247,6 +272,8 @@ class AIRenders(AIPrivateView):
                 if existing.owner_hash!=key or (existing.input_hash,existing.style_code,existing.phone_model)!=(digest,data['style_id'],data['model']):
                     return Response({'detail':'This render request conflicts with an existing request.'},status=409)
                 return Response(render_data(existing))
+            if data.get('provider', 'openai') != config.provider:
+                return Response({'detail': 'The AI provider has changed. Reload the page and confirm generation again.'}, status=409)
             plan=ai_plan()
             style=AIStyle.objects.filter(code=data['style_id'],active=True).first()
             model=PhoneModel.objects.filter(name=data['model'],active=True,brand__active=True).first()
@@ -262,17 +289,22 @@ class AIRenders(AIPrivateView):
             if AIRender.objects.filter(status__in=['queued','generating']).count()>=settings.AI_CONCURRENT_RENDER_LIMIT:
                 return Response({'detail':'All AI render slots are busy. Please try again shortly.'},status=429)
             account,_=AIAccount.objects.select_for_update().get_or_create(owner_hash=key);refresh_account(account,plan)
-            if account.trial_used<account.trial_granted:
+            gift_before = balance(account, 'gift'); monthly_before = balance(account, 'monthly')
+            if account.trial_used<account.trial_granted + account.bonus_granted:
+                ensure_opening(account, 'gift')
                 account.trial_used+=1;allocation={'type':'trial'}
             elif account.subscription and int(timezone.now().timestamp()*1000)<account.subscription['endsAt'] and account.subscription['used']<account.subscription['monthlyLimit']:
+                ensure_opening(account, 'monthly')
                 account.subscription={**account.subscription,'used':account.subscription['used']+1}
                 allocation={'type':'monthly','period':account.subscription['startsAt']}
             else:
                 return Response({'detail':'No AI generations remaining. Subscribe or wait for your next monthly reset.'},status=409)
             account.save(update_fields=['trial_used','subscription','updated_at'])
             job=AIRender.objects.create(request_key=data['request_key'],owner_hash=key,style_code=style.code,
-                style_name=style.name,model_name=config.model_name,phone_model=model.name,phone_template_id=template['id'],
+                style_name=style.name,provider=config.provider,model_name=config.model_name,phone_model=model.name,phone_template_id=template['id'],
                 prompt=build_prompt(style,model,template),input_image=raw,input_mime=mime,input_hash=digest,allocation=allocation)
+            pool = 'gift' if allocation['type']=='trial' else 'monthly'
+            record(account, 'render:'+str(job.pk), 'generation', pool, gift_before if pool=='gift' else monthly_before, balance(account,pool), render_id=job.pk, period=allocation.get('period'))
             transaction.on_commit(lambda:dispatch_render(job.id))
         return Response(render_data(job),status=202)
 
@@ -280,6 +312,7 @@ class AIRenders(AIPrivateView):
 class AIRenderDetail(AIPrivateView):
     def get(self, request, reference):
         key=owner(request);expire_stale_jobs(key)
+        maybe_cleanup_images()
         return Response(render_data(get_object_or_404(AIRender.objects.defer('input_image','result_image'),pk=reference,owner_hash=key)))
 
     def post(self, request, reference):
@@ -296,32 +329,42 @@ class AIRenderDetail(AIPrivateView):
 
 class AIRenderImage(AIPrivateView):
     def get(self, request, reference):
-        job=get_object_or_404(AIRender,pk=reference,owner_hash=owner(request),status='ready')
-        response=HttpResponse(bytes(job.result_image),content_type='image/png')
-        response['Content-Disposition']=f'inline; filename="ai-{job.id}.png"'
-        response['Cache-Control']='private, no-store';response['X-Content-Type-Options']='nosniff'
-        return response
+        job=get_object_or_404(AIRender.objects.only('result_image','image_expires_at','image_deleted_at'),
+                             pk=reference,owner_hash=owner(request),status='ready')
+        return image_response(job)
 
 
 @sensitive_variables()
 def edit_image(api_key, job):
+    provider = PROVIDERS[job.provider]
     boundary='popomo-'+uuid.uuid4().hex
-    fields={'model':job.model_name,'prompt':job.prompt,'n':'1','size':'1024x1536',
-            'quality':'medium','output_format':'png','background':'opaque','safety_identifier':job.owner_hash}
+    fields={'model':job.model_name,'prompt':job.prompt,'n':'1','size':'1024x1536','quality':'medium'}
+    if job.provider == 'ai778':
+        # TT Image 2 does not accept background/output_format. Ask for inline
+        # bytes so private results never require fetching arbitrary remote URLs.
+        fields['response_format'] = 'b64_json'
+    else:
+        fields.update(output_format='png', background='opaque', safety_identifier=job.owner_hash)
     body=bytearray()
     for name,value in fields.items():
         body.extend(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode())
     ext={'image/jpeg':'jpg','image/png':'png','image/webp':'webp'}[job.input_mime]
-    body.extend(f'--{boundary}\r\nContent-Disposition: form-data; name="image[]"; filename="photo.{ext}"\r\nContent-Type: {job.input_mime}\r\n\r\n'.encode())
+    image_field = 'image' if job.provider == 'ai778' else 'image[]'
+    body.extend(f'--{boundary}\r\nContent-Disposition: form-data; name="{image_field}"; filename="photo.{ext}"\r\nContent-Type: {job.input_mime}\r\n\r\n'.encode())
     body.extend(bytes(job.input_image));body.extend(f'\r\n--{boundary}--\r\n'.encode())
-    request=urllib.request.Request(API_BASE+'/images/edits',data=bytes(body),headers={
+    request=urllib.request.Request(provider['base_url']+'/images/edits',data=bytes(body),headers={
         'Authorization':'Bearer '+api_key,'Content-Type':'multipart/form-data; boundary='+boundary,
         'Accept':'application/json'},method='POST')
+    telemetry = CallTelemetry(job, {key: fields[key] for key in ('n', 'size', 'quality')})
     try:
-        with urllib.request.build_opener(NoRedirect()).open(request,timeout=240) as response:
-            payload=response.read(32*1024*1024+1);request_id=response.headers.get('x-request-id','')[:150]
+        with urllib.request.build_opener(NoRedirect()).open(request,timeout=360 if job.provider == 'ai778' else 240) as response:
+            request_id=safe_request_id(response.headers.get('X-Task-Id' if job.provider == 'ai778' else 'x-request-id',''), api_key)
+            telemetry.response(response.status, request_id)
+            payload=response.read(32*1024*1024+1)
         if len(payload)>32*1024*1024:raise ValueError()
-        data=json.loads(payload);encoded=data['data'][0]['b64_json'];raw=base64.b64decode(encoded,validate=True)
+        data=json.loads(payload)
+        telemetry.response(telemetry.http_status, request_id, data)
+        encoded=data['data'][0]['b64_json'];raw=base64.b64decode(encoded,validate=True)
         with warnings.catch_warnings():
             warnings.simplefilter('error',Image.DecompressionBombWarning)
             with Image.open(BytesIO(raw)) as image:
@@ -330,7 +373,12 @@ def edit_image(api_key, job):
         return output.getvalue(),request_id
     except urllib.error.HTTPError as error:
         status=error.code
-        try:provider_code=json.loads(error.read(16384)).get('error',{}).get('code','')
+        request_id=safe_request_id((error.headers or {}).get('X-Task-Id' if job.provider == 'ai778' else 'x-request-id',''), api_key)
+        telemetry.response(status, request_id)
+        try:
+            data=json.loads(error.read(16384))
+            telemetry.response(status, request_id, data)
+            provider_code=data.get('error',{}).get('code','')
         except Exception:provider_code=''
         error.close()
         messages={401:('credentials','OpenAI rejected the API key. Please check the saved service configuration.'),
@@ -352,11 +400,17 @@ def edit_image(api_key, job):
         }
         if provider_code in billing_errors:
             code,message=provider_code,billing_errors[provider_code]
+        if job.provider == 'ai778':
+            message = message.replace('OpenAI', '七七八 AI')
+            if provider_code == 'ip_not_allowed':
+                code,message='permission','七七八 AI rejected the server IP. Check the API key IP allowlist in its console.'
         raise GenerationError(code,message) from None
     except (urllib.error.URLError,TimeoutError,OSError):
         raise GenerationError('network','The image service timed out or could not be reached. Please retry later.') from None
-    except (ValueError,KeyError,TypeError,IndexError):
+    except (ValueError,KeyError,TypeError,IndexError,AttributeError):
         raise GenerationError('invalid_response','The image service returned an unreadable image. Please retry later.') from None
+    finally:
+        telemetry.finish()
 
 
 @sensitive_variables()
@@ -364,15 +418,26 @@ def run_render(job_id):
     if not AIRender.objects.filter(pk=job_id,status='queued').update(status='generating',started_at=timezone.now()):
         return
     job=AIRender.objects.get(pk=job_id)
+    api_key = None
     try:
-        config=current_config()
+        config=provider_profile(current_config(), job.provider)
         if not config.api_key_ciphertext:
             raise GenerationError('credentials','AI generation is not configured. Please contact the store.')
-        result,request_id=edit_image(decrypt_api_key(config),job)
+        api_key = decrypt_api_key(config)
+        result,request_id=edit_image(api_key,job)
+        completed = timezone.now()
+        expires = completed + timedelta(days=current_config().image_retention_days)
         AIRender.objects.filter(pk=job_id,status='generating').update(status='ready',result_image=result,
-            input_image=b'',completed_at=timezone.now(),provider_request_id=request_id)
+            completed_at=completed,provider_request_id=request_id,image_expires_at=expires)
     except GenerationError as error:
         restore_credit(job,'failed',error.code,error.message)
     except Exception:
         # Never put provider bodies, credentials or uploaded photos into logs/UI.
         restore_credit(job,'failed','internal','The render could not finish. Your generation has been returned. Please retry.')
+    finally:
+        if job.provider == 'ai778' and api_key:
+            try:
+                job.refresh_from_db(fields=['provider_request_id','usage','cost_details','cost_source'])
+                sync_relay_cost(job, api_key)
+            except Exception:
+                pass  # Billing lookup must never delay delivery or refund a completed render.

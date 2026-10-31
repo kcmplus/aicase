@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {phoneTemplate,phoneTemplates} from '../storefront/phone-templates.js';
 import {phone} from '../storefront/art.js';
-import {coverRect,pngWithDpi,crc32,textLines} from '../storefront/print-export.js';
+import {coverRect,pngWithDpi,crc32,textLines,exportImageUrl} from '../storefront/print-export.js';
+import {orderArtwork} from '../admin/src/order-artwork.js';
 import {createPass,createPersonalPass,readPass} from '../storefront/simple-core.js';
 import {makePersonalDesign} from '../storefront/simple-personalize.js';
 
@@ -27,6 +28,31 @@ test('real template previews use the correct mask and overlay, without generic l
   assert.ok(!html.includes('class="camera"'));assert.ok(!html.includes('class="case-edge"'));
  }
  assert.ok(phone({},'iPhone 16 Pro').includes('class="camera"'));
+});
+test('order artwork uses its saved model and template revision, never a substitute',()=>{
+ for(const t of phoneTemplates){
+  const snapshot=createPersonalPass({source:'collection',designId:'bloom',model:t.model,effect:'original',intensity:65,zoom:100,x:50,y:50});
+  const order={snapshot,model_name:t.model,reference:crypto.randomUUID(),revision:3};
+  const artwork=orderArtwork(order);
+  assert.equal(artwork.template.id,snapshot.phoneTemplateId);
+  assert.equal(artwork.design.phoneTemplateId,snapshot.phoneTemplateId);
+  assert.equal(artwork.filename,`order-${order.reference}-r3-${t.id}-print-300dpi.png`);
+  const {phoneTemplateId,...historical}=snapshot;
+  assert.equal(orderArtwork({...order,snapshot:historical}).template,null);
+  assert.equal(orderArtwork({...order,snapshot:historical}).filename,'');
+  assert.throws(()=>orderArtwork({...order,model_name:'iPhone 16 Pro'}));
+  assert.throws(()=>orderArtwork({...order,snapshot:{...snapshot,phoneTemplateId:'unknown'}}));
+ }
+});
+test('print exports load original assets at the site root from the admin order page',()=>{
+ const base='https://shop.example.com/admin/orders';
+ for(const asset of ['./assets/designs/garden.png','./assets/stickers/1F431.svg','/assets/phone-templates/iphone-17-a-mask.png']){
+  const url=exportImageUrl(asset,base);assert.equal(new URL(url).pathname,asset.replace(/^\.\//,'/'));
+  assert.ok(!url.includes('/admin/'));assert.ok(!url.includes('/optimized/'));
+ }
+ const upload='data:image/png;base64,aGVsbG8=';assert.equal(exportImageUrl(upload,base),upload);
+ assert.throws(()=>exportImageUrl('https://other.example.com/photo.png',base));
+ assert.throws(()=>exportImageUrl('data:image/svg+xml;base64,aGVsbG8=',base));
 });
 function chunks(bytes){
  const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.length),out=[];
