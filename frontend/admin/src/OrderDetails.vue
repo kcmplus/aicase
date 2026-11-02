@@ -12,7 +12,7 @@ const printUrl=ref(''),printError=ref(''),printBusy=ref(false),effectiveDpi=ref(
 let renderVersion=0,disposed=false;
 function clearPrint(){if(printUrl.value)URL.revokeObjectURL(printUrl.value);printUrl.value='';}
 async function renderPrint(){
- if(!artwork.value?.template||printBusy.value)return;
+ if(!artwork.value?.template||artwork.value.template.previewOnly||printBusy.value)return;
  const version=++renderVersion;printBusy.value=true;printError.value='';clearPrint();effectiveDpi.value=null;
  try{
   const result=await exportCase(artwork.value.design,artwork.value.pass.model);
@@ -39,11 +39,11 @@ const preview=computed(()=>{try{return artwork.value?phone(artwork.value.design,
    <el-image v-if="printUrl" class="print-image" :src="printUrl" :preview-src-list="[printUrl]" preview-teleported fit="contain" :alt="order.model_name+' 打印图，镜头孔位透明'"/>
    <span v-else-if="printBusy" class="artwork-status" role="status">正在生成带孔位的打印图…</span>
    <div v-else-if="printError" class="artwork-status" role="alert"><p>{{printError}}</p><el-button @click="renderPrint">重试生成</el-button></div>
-   <span v-else class="artwork-status">该订单没有固定的打印模板版本，暂不能生成孔位文件。</span>
+   <span v-else-if="artwork.template?.previewOnly" class="artwork-status">已保存供应商预览模板，打印参数尚待确认。</span><span v-else class="artwork-status">该订单没有固定的打印模板版本，暂不能生成孔位文件。</span>
   </div><p>棋盘格表示透明区域；镜头孔和壳外区域均不打印。</p>
   <a v-if="printUrl" class="print-download" :href="printUrl" :download="artwork.filename">下载{{artwork.template.calibrated?'打印':'打样'}} PNG</a></article>
  </div>
- <template v-if="artwork.template"><p class="print-spec">{{order.model_name}} · {{artwork.template.printWidth}} × {{artwork.template.printHeight}} px · {{artwork.template.dpi}} DPI · 订单版本 {{order.revision}}</p>
+ <template v-if="artwork.template"><p class="print-spec">{{order.model_name}} · {{artwork.template.printWidth}} × {{artwork.template.printHeight}} px · {{artwork.template.dpi?artwork.template.dpi+' DPI':'原始像素 · 打印 DPI 待确认'}} · 订单版本 {{order.revision}}</p>
  <p v-if="!artwork.template.calibrated" class="print-calibration">待打样校准：孔位按当前机型模板留空，批量打印前请让供应商确认孔位、出血和偏移。{{artwork.template.sizeEvidence==='template-density-derived'?'此机型的输出尺寸也待供应商确认。':''}}</p>
  <p v-if="Number.isFinite(effectiveDpi)&&effectiveDpi>0&&effectiveDpi<150" class="print-calibration">图片有效分辨率约 {{Math.round(effectiveDpi)}} DPI。导出为 300 DPI 不会补充原图细节，请核对清晰度。</p></template>
  <p v-else class="print-calibration">历史订单需先确认对应机型模板，不能用相近机型代替。</p>

@@ -38,6 +38,11 @@ class BrandSerializer(CatalogSerializer):
 
 class PhoneModelSerializer(CatalogSerializer):
     brand_name = serializers.CharField(source="brand.name", read_only=True)
+    template_sources = serializers.SerializerMethodField()
+    def get_template_sources(self, instance):
+        from .supplier_templates import template_info
+        return [template_info(stock) for product in instance.supplierproduct_set.all()
+                for stock in product.device_products.all() if stock.present]
     class Meta:
         model = PhoneModel
         fields = "__all__"

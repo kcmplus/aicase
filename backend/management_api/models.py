@@ -24,6 +24,119 @@ class CatalogItem(Timestamped):
 class Brand(CatalogItem):
     pass
 
+
+class DeviceProviderConnection(Timestamped):
+    name = models.CharField(max_length=120)
+    base_url = models.URLField()
+    shop_id = models.CharField(max_length=40)
+    active = models.BooleanField(default=True)
+    api_key_ciphertext = models.TextField(editable=False)
+    key_last_four = models.CharField(max_length=4, editable=False)
+    revision = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        default_permissions = ()
+
+    def __str__(self):
+        return self.name
+
+
+class Device(Timestamped):
+    connection = models.ForeignKey(DeviceProviderConnection, on_delete=models.PROTECT)
+    vendor_device_id = models.CharField(max_length=40)
+    name = models.CharField(max_length=120)
+    location_note = models.CharField(max_length=200, blank=True)
+    active = models.BooleanField(default=True)
+    revision = models.PositiveIntegerField(default=1)
+    last_success_at = models.DateTimeField(null=True, editable=False)
+    sync_status = models.CharField(max_length=20, default='never', editable=False)
+    sync_message = models.CharField(max_length=300, blank=True, editable=False)
+    sync_token = models.UUIDField(null=True, editable=False)
+    sync_started_at = models.DateTimeField(null=True, editable=False)
+    provider_config = models.JSONField(default=dict, editable=False)
+
+    class Meta:
+        default_permissions = ('view', 'add', 'change')
+        permissions = [('sync_device', '同步设备库存')]
+        constraints = [models.UniqueConstraint(fields=['connection', 'vendor_device_id'], name='unique_provider_device')]
+
+    def __str__(self):
+        return self.name
+
+
+class SupplierProduct(Timestamped):
+    connection = models.ForeignKey(DeviceProviderConnection, on_delete=models.PROTECT)
+    goods_id = models.CharField(max_length=40)
+    product_id = models.CharField(max_length=40)
+    brand_name = models.CharField(max_length=120, blank=True)
+    name = models.CharField(max_length=200)
+    specs = models.JSONField(default=list)
+    phone_model = models.ForeignKey('PhoneModel', null=True, blank=True, on_delete=models.PROTECT)
+    display_name = models.CharField(max_length=200, blank=True)
+    active = models.BooleanField(default=False)
+
+    class Meta:
+        default_permissions = ('view', 'change')
+        constraints = [models.UniqueConstraint(fields=['connection', 'goods_id'], name='unique_supplier_goods')]
+
+
+class DeviceProduct(Timestamped):
+    device = models.ForeignKey(Device, on_delete=models.PROTECT, related_name='products')
+    product = models.ForeignKey(SupplierProduct, on_delete=models.PROTECT, related_name='device_products')
+    source_price = models.DecimalField(max_digits=12, decimal_places=2, null=True)
+    source_currency = models.CharField(max_length=10, blank=True)
+    template_url = models.URLField(max_length=2000, blank=True)
+    template_imported_url = models.URLField(max_length=2000, blank=True, editable=False)
+    template_image = models.CharField(max_length=300, blank=True, editable=False)
+    template_mask = models.CharField(max_length=300, blank=True, editable=False)
+    template_width = models.PositiveIntegerField(default=0, editable=False)
+    template_height = models.PositiveIntegerField(default=0, editable=False)
+    template_mask_note = models.CharField(max_length=300, blank=True, editable=False)
+    template_import_error = models.CharField(max_length=300, blank=True, editable=False)
+    template_imported_at = models.DateTimeField(null=True, blank=True, editable=False)
+    active = models.BooleanField(default=True)
+    present = models.BooleanField(default=True)
+    low_stock_threshold = models.PositiveSmallIntegerField(default=3)
+    stock = models.PositiveIntegerField(default=0)
+    observed_at = models.DateTimeField()
+
+    class Meta:
+        default_permissions = ('view', 'change')
+        constraints = [models.UniqueConstraint(fields=['device', 'product'], name='unique_device_product')]
+
+
+class DeviceLaneStock(Timestamped):
+    device = models.ForeignKey(Device, on_delete=models.PROTECT)
+    device_product = models.ForeignKey(DeviceProduct, on_delete=models.PROTECT, related_name='lanes')
+    vendor_record_id = models.CharField(max_length=40)
+    lane_number = models.CharField(max_length=40)
+    stock = models.PositiveIntegerField(default=0)
+    present = models.BooleanField(default=True)
+    source_status = models.CharField(max_length=40, blank=True)
+    observed_at = models.DateTimeField()
+    batch = models.UUIDField()
+
+    class Meta:
+        default_permissions = ()
+        constraints = [models.UniqueConstraint(fields=['device', 'vendor_record_id'], name='unique_device_lane_record')]
+
+
+class InventorySyncRun(models.Model):
+    device = models.ForeignKey(Device, on_delete=models.PROTECT)
+    batch = models.UUIDField(default=uuid.uuid4, unique=True)
+    actor_name = models.CharField(max_length=150, blank=True)
+    started_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True)
+    status = models.CharField(max_length=20, default='running')
+    message = models.CharField(max_length=300, blank=True)
+    row_count = models.PositiveIntegerField(default=0)
+    product_count = models.PositiveIntegerField(default=0)
+    changes = models.JSONField(default=list)
+
+    class Meta:
+        ordering = ['-started_at', '-id']
+        default_permissions = ('view',)
+
 class PhoneModel(CatalogItem):
     brand = models.ForeignKey(Brand, on_delete=models.PROTECT, related_name="models")
     preview_family = models.CharField(max_length=20, choices=[("iphone", "iPhone 示意壳"), ("samsung", "Samsung 示意壳")])

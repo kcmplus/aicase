@@ -11,6 +11,13 @@ export function setLocale(value){
 }
 export const localized=(record,field='name')=>current==='zh-CN'?(record?.[field+'_zh']||t(record?.[field]||'')):(record?.[field]||'');
 const entries=[
+ ['Inventory is being refreshed. Please try again shortly.','库存待更新，正在自动重试，请稍后再试。'],
+ ['Only in-stock models with available templates are shown.','仅显示有库存且模板齐全的机型。'],
+ ['Available models could not be loaded. Please try again.','可选机型加载失败，请重试。'],
+ ['No in-stock models are available right now.','暂无有库存的可选机型。'],
+ ['Refresh available models','刷新可选机型'],
+ ['This phone model is out of stock or unavailable. Please choose again.','该机型已缺货或暂不可用，请重新选择。'],
+ ['The phone template changed. Please review your design again.','机型底图已更新，请重新检查设计效果。'],
  ['Tap the image to choose a photo','点击图片，选择相册照片'],
  ['Your photo. Your own case.','用你的照片，做专属手机壳。'],
  ['Browse the gallery','逛逛图库'],

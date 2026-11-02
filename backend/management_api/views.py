@@ -8,12 +8,14 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.db import transaction
+from django.db.models import Prefetch
 from django.middleware.csrf import get_token
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.cache import never_cache
 from rest_framework import serializers, status, viewsets
-from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from rest_framework.decorators import api_view, permission_classes, authentication_classes, action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
@@ -110,9 +112,35 @@ class BrandViewSet(AuditedViewSet):
     search_fields = ["name", "code"]
 
 class PhoneModelViewSet(AuditedViewSet):
-    queryset = m.PhoneModel.objects.select_related("brand")
+    queryset = m.PhoneModel.objects.select_related("brand").prefetch_related(
+        Prefetch('supplierproduct_set__device_products', queryset=m.DeviceProduct.objects.select_related('product', 'device')))
     serializer_class = s.PhoneModelSerializer
     search_fields = ["name", "code", "brand__name"]
+
+    def get_permissions(self):
+        if self.action == 'import_template':
+            return [IsAdminUser()]
+        return super().get_permissions()
+
+    @action(detail=True, methods=['post'], url_path='import-template')
+    def import_template(self, request, pk=None):
+        from .supplier_templates import import_template, template_info, TemplateError
+        if not request.user.has_perms(['management_api.view_phonemodel', 'management_api.change_phonemodel']):
+            raise PermissionDenied('需要查看和修改机型权限。')
+        if not isinstance(request.data, dict) or set(request.data) - {'source', 'refresh'}:
+            raise serializers.ValidationError({'detail': '模板同步参数不正确。'})
+        source_id = serializers.IntegerField(min_value=1).run_validation(request.data.get('source'))
+        refresh = serializers.BooleanField().run_validation(request.data.get('refresh', False))
+        model = self.get_object()
+        if not m.DeviceProduct.objects.filter(pk=source_id, product__phone_model=model, present=True).exists():
+            raise serializers.ValidationError({'detail': '模板来源不属于此机型，或商品已移除。'})
+        try:
+            stock = import_template(source_id, model.pk, refresh=refresh)
+        except TemplateError as exc:
+            raise serializers.ValidationError({'detail': str(exc)}) from None
+        audit(request, 'sync', 'management_api.phonemodel', model,
+              f'导入供应商底图：设备商品 {stock.pk}；预览遮罩：{"已生成" if stock.template_mask else "待补充"}')
+        return Response(template_info(stock))
 
 class GraphicViewSet(AuditedViewSet):
     queryset = m.Graphic.objects.all()
@@ -233,6 +261,14 @@ class UploadView(APIView):
         audit(request, "upload", "asset", summary="上传图库图片")
         url = default_storage.url(path)
         return Response({"path": url, "image_variants": {url: previews}}, status=201)
+
+@never_cache
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def public_phone_models(request):
+    from .store_catalog import store_models
+    return Response(store_models(request.query_params))
 
 @never_cache
 @api_view(["GET"])

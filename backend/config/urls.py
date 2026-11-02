@@ -4,6 +4,8 @@ from django.http import JsonResponse
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from management_api import views
+from management_api.inventory import (ConnectionViewSet, DeviceViewSet, ProductViewSet,
+                                     StockViewSet, RunViewSet, InventoryOptions)
 from management_api.orders import StoreOrders, StoreOrder, StoreOrderAction
 from management_api.ai_service import AIServiceSettingsView, AIServiceCheckView
 from management_api.ai_generation import AIAccountView, AIRenders, AIRenderDetail, AIRenderImage
@@ -15,11 +17,18 @@ from management_api.customers import CustomerViewSet
 from management_api.stripe_payments import StripeSettings, PublicPaymentConfig, StripeCheckout, StripeWebhook
 
 router = DefaultRouter()
+router.register('device-connections', ConnectionViewSet)
+router.register('devices', DeviceViewSet)
+router.register('inventory/products', ProductViewSet)
+router.register('inventory/stocks', StockViewSet)
+router.register('inventory/sync-runs', RunViewSet)
 router.register("customers", CustomerViewSet)
 router.register("ai-examples", views.AIExampleViewSet)
 for name, view in [("brands", views.BrandViewSet), ("phone-models", views.PhoneModelViewSet), ("graphics", views.GraphicViewSet), ("designs", views.DesignTemplateViewSet), ("ai-styles", views.AIStyleViewSet), ("plans", views.PricingPlanViewSet), ("orders", views.OrderViewSet), ("users", views.UserViewSet), ("roles", views.RoleViewSet), ("audit-logs", views.AuditViewSet)]:
     router.register(name, view)
 urlpatterns = [
+    path('api/v1/store/phone-models/', views.public_phone_models),
+    path('api/v1/admin/inventory/options/', InventoryOptions.as_view()),
     path("api/v1/store/customer/credits/", CustomerCredits.as_view()),
     path("api/v1/store/customer/", CustomerView.as_view()),
     path("api/v1/store/customer/send-code/", SendCode.as_view()),

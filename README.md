@@ -1,5 +1,7 @@
 # POPOMO · 用户端与管理后台
 
+后台新增「商品与库存」（`/admin/inventory`）：支持设备连接、商品机型映射、库存汇总与货道明细、手动同步、预警阈值和同步记录。库存来自设备方，不在我方扣减；C 端与真实打印尚未接入此模块。使用与权限说明见 [商品库存管理](docs/inventory-management.md)，后续见 [TODO LIST](TODO.md)。
+
 图片已支持 WebP 多尺寸预览、懒加载及后台上传自动优化；原图独立保留。生成与维护方式见 [图片性能说明](docs/image-performance.md)。
 
 后台 AI 功能统一为「AI 中心」（`/admin/ai`），包含「内容管理」「生图配置」「统计与日志」三个页签；内容管理内提供「案例」「风格与提示词」「机型适配」。侧栏只保留一个 AI 入口，旧链接自动跳转到对应功能，原有权限与未保存提醒保留。支持查看、编辑、复制、模板填入、未保存提醒和并发修改保护；通用风格及机型规则仍在同页独立维护。旧 `/admin/ai-examples` 与 `/admin/ai-styles` 入口自动跳转到对应页签。已补充宠物手绘、情侣拼贴和山湖水彩三组案例及对应提示词，详见 [案例与生成记录](docs/ai-case-recipes.md)。修改提示词不会自动重新生成案例图片。用户端和后台按原图分组，并排展示同一照片的全部 AI 效果；点击效果图选择风格或编辑提示词，默认英文，页头可切换中文并记住选择；切换语言保留设计与订单表单。提示词只保存在后台，不随公开目录下发。迁移 `0007_ai_catalog_languages` 仅翻译匹配原始种子内容的字段，保留自定义修改。
@@ -87,3 +89,5 @@ backend/.venv/bin/python backend/manage.py makemigrations --check --dry-run
 管理界面构建输出 `frontend/admin/dist/`。用户端发布源改为 `frontend/storefront/`，**不要上传整个项目、数据库、凭据或 `.venv`**。根目录 `server.mjs` 保留为旧启动入口兼容层。
 
 详见 [后端说明](backend/README.md)、[架构与权限](docs/backend-architecture.md)、[用户端说明](frontend/README.md)、[后续部署模板](deploy/fullstack/README.md)。
+
+本地运行 `npm run backend` 会同时启动 API 与每 5 分钟执行的库存同步。已有 API 服务运行时，可用 `npm run inventory:watch` 单独启动同步；Ctrl+C 停止。

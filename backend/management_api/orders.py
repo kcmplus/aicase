@@ -107,12 +107,25 @@ class Snapshot(Layout):
             json.dumps(data, allow_nan=False)
         except ValueError:
             raise serializers.ValidationError('Invalid design numbers.')
-        if not PhoneModel.objects.filter(
+        from .models import Device
+        from .store_catalog import available_stocks, resolve_stock_template
+        supplied_template = data.get('phoneTemplateId', '')
+        if supplied_template.startswith('supplier-'):
+            stock, template = resolve_stock_template(data['model'], supplied_template)
+            if not stock:
+                raise serializers.ValidationError('This phone model is out of stock or unavailable. Please choose again.')
+            # Freeze server-owned asset paths for historical orders. The client
+            # cannot submit this internal metadata through StrictSerializer.
+            data['_template'] = template
+            data['_inventory_item'] = stock.pk
+        elif Device.objects.exists() and not available_stocks().filter(product__phone_model__name=data['model']).exists():
+            raise serializers.ValidationError('This phone model is out of stock or unavailable. Please choose again.')
+        if not supplied_template.startswith('supplier-') and not PhoneModel.objects.filter(
             Q(legacy_index__isnull=False) | Q(code__in=[t['code'] for t in PHONE_TEMPLATES]),
             name=data['model'], active=True, brand__active=True,
         ).exists():
             raise serializers.ValidationError('This phone model is unavailable.')
-        if 'phoneTemplateId' in data and not template_for(data['model'], data['phoneTemplateId']):
+        if 'phoneTemplateId' in data and not supplied_template.startswith('supplier-') and not template_for(data['model'], data['phoneTemplateId']):
             raise serializers.ValidationError('This phone template is unavailable.')
         template = template_for(data['model'])
         if template:
@@ -187,6 +200,8 @@ def order_data(order, detail=True):
     result['code'] = order.snapshot.get('code', '')
     if detail:
         result['snapshot'] = order.snapshot
+        if order.snapshot.get('_template'):
+            result['phone_template'] = order.snapshot['_template']
     return result
 
 
