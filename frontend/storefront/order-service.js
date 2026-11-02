@@ -1,6 +1,7 @@
 import {readPass} from './simple-core.js';
 import {esc} from './art.js';
 import {registerSupplierTemplates} from './phone-templates.js';
+import {retryUnavailableRead} from './request-retry.js';
 
 const KEY='popomo-order-access-v1';
 export function orderAccessKey(storage=localStorage){
@@ -23,7 +24,7 @@ export async function orderRequest(path='',{method='GET',body,fetcher=fetch,key=
 export function savedOrder(data,previous){
  if(data.phone_template)registerSupplierTemplates([data.phone_template]);
  const pass=readPass(data.snapshot.code,data.snapshot);
- return {id:data.reference,...(data.phone_template?{phoneTemplate:data.phone_template}:{}),server:true,mode:data.mode,status:data.status==='completed'?'collected':data.status,priceCents:Math.round(Number(data.amount)*100),currency:data.currency,revision:data.revision,stationId:data.station_id,customerEmail:data.customer_email,pass,oldCodes:[...new Set([...(previous?.oldCodes||[]),...(previous&&previous.pass.code!==pass.code?[previous.pass.code]:[])])],createdAt:Date.parse(data.created_at),updatedAt:Date.parse(data.updated_at)};
+ return {id:data.reference,...(data.phone_template?{phoneTemplate:data.phone_template}:{}),server:true,refund:data.refund||null,mode:data.mode,status:data.status==='completed'?'collected':data.status,priceCents:Math.round(Number(data.amount)*100),currency:data.currency,revision:data.revision,stationId:data.station_id,customerEmail:data.customer_email,pass,oldCodes:[...new Set([...(previous?.oldCodes||[]),...(previous&&previous.pass.code!==pass.code?[previous.pass.code]:[])])],createdAt:Date.parse(data.created_at),updatedAt:Date.parse(data.updated_at)};
 }
 export function checkoutBody(draft,{accepted,email='',account,amount,provider='demo',mode='demo'}){
  const customer=account?.authenticated?account.customer:null;
@@ -35,11 +36,12 @@ export function checkoutEmailField(account){
  return '<label class="order-email">Email (optional)<input name="email" type="email" maxlength="254" autocomplete="email" placeholder="you@example.com"><small>Saved with your order for support and payment receipts.</small></label>';
 }
 
-export async function getPaymentConfig(fetcher=fetch){
- const response=await fetcher('/api/v1/store/payment-config/',{credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(10000)});
+export async function getPaymentConfig(fetcher=fetch,retryOptions){
+ const response=await retryUnavailableRead(()=>fetcher('/api/v1/store/payment-config/',{credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(10000)}),retryOptions);
+ if(response.status===503)throw Error('Checkout is temporarily unavailable after 3 retries. Your design is saved. Please try again later.');
  if(!response.ok)throw Error('Payment settings could not be loaded. Please reload and try again.');
  const data=await response.json();
- if(!['demo','stripe'].includes(data.provider)||!['demo','test','live'].includes(data.mode)||typeof data.available!=='boolean')throw Error('Invalid payment settings.');
+ if(!['demo','stripe','airwallex'].includes(data.provider)||!['demo','test','live'].includes(data.mode)||typeof data.available!=='boolean')throw Error('Invalid payment settings.');
  return data;
 }
 export function stripeCheckoutUrl(value){

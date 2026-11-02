@@ -159,16 +159,34 @@ class PricingPlanSerializer(CatalogSerializer):
         return attrs
 
 class PrintOrderSerializer(serializers.ModelSerializer):
+    refund_status = serializers.SerializerMethodField()
+
+    def get_refund_status(self, order):
+        refund = getattr(order, 'refund', None)
+        return {'requested': '退款待核实', 'pending': '退款处理中', 'succeeded': '已退款', 'failed': '退款失败'}.get(refund.status, '') if refund else '—'
+
     customer_id = serializers.UUIDField(read_only=True, allow_null=True)
     class Meta:
         model = PrintOrder
-        fields = ["id", "reference", "customer_id", "customer_email", "model_name", "status", "amount", "currency", "mode", "revision", "station_id", "notes", "created_at", "updated_at"]
+        fields = ["id", "reference", "customer_id", "customer_email", "model_name", "status", "amount", "currency", "mode", "revision", "station_id", "notes", "created_at", "updated_at", "refund_status"]
         read_only_fields = [f for f in fields if f != "notes"]
 
 class PrintOrderDetailSerializer(PrintOrderSerializer):
+    refund = serializers.SerializerMethodField()
+    can_refund = serializers.SerializerMethodField()
+
+    def get_refund(self, order):
+        from .refunds import refund_data
+        return refund_data(order, private=True)
+
+    def get_can_refund(self, order):
+        from .refunds import eligible
+        request = self.context.get('request')
+        return bool(request and request.user.is_superuser and eligible(order) and not hasattr(order, 'refund'))
+
     class Meta(PrintOrderSerializer.Meta):
-        fields = PrintOrderSerializer.Meta.fields + ["snapshot", "stripe_session_id", "stripe_payment_intent", "paid_at"]
-        read_only_fields = PrintOrderSerializer.Meta.read_only_fields + ["snapshot", "stripe_session_id", "stripe_payment_intent", "paid_at"]
+        fields = PrintOrderSerializer.Meta.fields + ["snapshot", "stripe_session_id", "stripe_payment_intent", "airwallex_payment_intent", "paid_at", "refund", "can_refund"]
+        read_only_fields = PrintOrderSerializer.Meta.read_only_fields + ["snapshot", "stripe_session_id", "stripe_payment_intent", "airwallex_payment_intent", "paid_at", "refund", "can_refund"]
 
 class AuditLogSerializer(serializers.ModelSerializer):
     class Meta:

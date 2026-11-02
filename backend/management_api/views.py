@@ -168,7 +168,7 @@ class PricingPlanViewSet(AuditedViewSet):
     search_fields = ["name", "code"]
 
 class OrderViewSet(AuditedViewSet):
-    queryset = m.PrintOrder.objects.all()
+    queryset = m.PrintOrder.objects.select_related('refund')
     serializer_class = s.PrintOrderSerializer
     search_fields = ["customer_email", "model_name", "reference"]
     ordering_fields = ["created_at", "amount", "status"]

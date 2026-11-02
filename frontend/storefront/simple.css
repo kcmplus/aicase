@@ -188,3 +188,5 @@
  .home-gallery{padding-top:34px}
 }
 @media(max-width:370px){.photo-home-action{padding-inline:16px;column-gap:10px}.photo-home-action h1{font-size:13px}.album-snapshot figcaption{font-size:9px}.home-how .how-list{gap:10px}}
+
+.payment-environment{padding:12px 14px;border-radius:10px;background:#f1eee5;font-size:12px;line-height:1.7;color:#504b40}

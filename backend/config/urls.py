@@ -14,7 +14,11 @@ from management_api.customer_auth import CustomerView, SendCode, VerifyCode, Cus
 from management_api.mail_service import MailSettings, MailTest, RegistrationSettings
 
 from management_api.customers import CustomerViewSet
-from management_api.stripe_payments import StripeSettings, PublicPaymentConfig, StripeCheckout, StripeWebhook
+from management_api.stripe_payments import StripeSettings, StripeWebhook
+from management_api.payments import PublicPaymentConfig, PaymentCheckout
+from management_api.airwallex_payments import AirwallexSettings, AirwallexWebhook
+
+from management_api.refunds import AdminRefund
 
 router = DefaultRouter()
 router.register('device-connections', ConnectionViewSet)
@@ -29,6 +33,7 @@ for name, view in [("brands", views.BrandViewSet), ("phone-models", views.PhoneM
 urlpatterns = [
     path('api/v1/store/phone-models/', views.public_phone_models),
     path('api/v1/admin/inventory/options/', InventoryOptions.as_view()),
+    path("api/v1/admin/orders/<int:pk>/refund/", AdminRefund.as_view()),
     path("api/v1/store/customer/credits/", CustomerCredits.as_view()),
     path("api/v1/store/customer/", CustomerView.as_view()),
     path("api/v1/store/customer/send-code/", SendCode.as_view()),
@@ -36,9 +41,11 @@ urlpatterns = [
     path("api/v1/admin/registration/", RegistrationSettings.as_view()),
     path("api/v1/admin/mail/", MailSettings.as_view()),
     path("api/v1/admin/mail/test/", MailTest.as_view()),
+    path("api/v1/admin/airwallex/", AirwallexSettings.as_view()),
+    path("api/v1/payments/airwallex/webhook/", AirwallexWebhook.as_view()),
     path("api/v1/admin/stripe/", StripeSettings.as_view()),
     path("api/v1/store/payment-config/", PublicPaymentConfig.as_view()),
-    path("api/v1/store/orders/<uuid:reference>/checkout/", StripeCheckout.as_view()),
+    path("api/v1/store/orders/<uuid:reference>/checkout/", PaymentCheckout.as_view()),
     path("api/v1/payments/stripe/webhook/", StripeWebhook.as_view()),
     path("api/v1/store/ai-account/", AIAccountView.as_view()),
     path("api/v1/store/ai-renders/", AIRenders.as_view()),

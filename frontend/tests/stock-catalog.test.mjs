@@ -56,3 +56,13 @@ test('server orders restore their frozen template after current inventory disapp
  assert.equal(order.pass.phoneTemplateId,template.id);
  assert.equal(order.phoneTemplate.mask,template.mask);
 });
+test('Airwallex refund status survives alongside a frozen supplier template',()=>{
+ const snapshot={version:2,code:'POP-C-0123456789ABCDEF',source:'collection',designId:'bloom',model:template.model,phoneTemplateId:template.id,photo:'',effect:'original',intensity:0,zoom:100,x:50,y:50};
+ const refund={status:'succeeded',amount:'10.00',currency:'USD'};
+ const order=savedOrder({reference:'order-refunded',snapshot,phone_template:template,refund,status:'cancelled',mode:'airwallex_live',amount:'10.00',currency:'USD',revision:1});
+ assert.deepEqual(order.refund,refund);
+ assert.equal(order.mode,'airwallex_live');
+ assert.equal(order.status,'cancelled');
+ assert.equal(order.pass.phoneTemplateId,template.id);
+ assert.equal(order.phoneTemplate.mask,template.mask);
+});
