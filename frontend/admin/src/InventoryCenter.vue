@@ -84,7 +84,7 @@ onBeforeRouteLeave(()=>editOpen.value?closeEdit():true);
 <template>
  <section class="inventory-page">
   <div class="inventory-heading"><div><h1>商品与库存</h1><p>统一查看设备商品、维护机型对应关系和库存快照。</p></div><el-button v-if="session.user?.is_superuser" @click="showConnections">设备连接配置</el-button></div>
-  <el-alert title="库存以设备方为准。此处仅同步和查看，不调整库存、不下单或打印。" type="info" :closable="false" show-icon/>
+  <el-alert title="库存以设备方为准。同步库存时自动新增、关联机型；不调整库存、不下单或打印。" type="info" :closable="false" show-icon/>
   <el-tabs v-model="tab" @tab-change="switchTab"><el-tab-pane v-for="item in tabs" :key="item.key" :label="item.label" :name="item.key"/></el-tabs>
   <div class="inventory-toolbar">
    <el-input v-model="search" clearable :placeholder="tab==='devices'?'搜索设备名称、编号或位置':'搜索商品、机型或设备'" aria-label="搜索库存" @keyup.enter="filter" @clear="filter"/>
@@ -96,7 +96,7 @@ onBeforeRouteLeave(()=>editOpen.value?closeEdit():true);
    <el-button v-if="tab==='stocks'&&device&&permit('sync_device')" type="primary" :loading="syncing===device" :disabled="syncing!==null" @click="sync(device)">同步所选设备</el-button>
   </div>
   <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon/>
-  <p v-if="tab==='products'" class="inventory-hint">选择设备后可从已有库存快照同步该设备全部商品的机型，不受搜索或状态筛选限制。已有映射保留，缺少的机型自动建档并停用；模板图片仍需审核校准。</p>
+  <p v-if="tab==='products'" class="inventory-hint">库存同步成功时会自动关联机型。选择设备也可立即补齐已有商品的机型，不受当前筛选限制；保留人工映射，新机型默认停用。底图需在机型管理中导入。</p>
   <template v-if="tab==='products'&&modelSyncResult"><el-alert :title="`${modelSyncResult.device_name}：${modelSyncResult.message}`" :type="modelSyncResult.skipped?'warning':'success'" :closable="false" show-icon/><p v-for="item in modelSyncResult.items.filter(i=>i.status==='skipped')" :key="item.product" class="inventory-hint">商品 {{item.goods_id}}：{{item.message}}</p></template>
   <p v-if="tab==='stocks'" class="inventory-hint">数量为该商品各货道的库存合计，超过 15 分钟标记过期；有库存不代表设备在线或已开放打印。来源价格不影响当前销售套餐。</p>
   <el-table v-if="tab==='products'" v-loading="loading" :data="rows" empty-text="暂无商品，请先登记设备并同步库存。">

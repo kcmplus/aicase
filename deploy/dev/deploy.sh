@@ -90,6 +90,10 @@ trap cleanup EXIT
 
 # Nginx serves 503 while draining, backing up and switching releases.
 touch "$state/deploying"
+# Prevent an old inventory process from writing during backup or migration.
+if [[ -f "$unit_dir/aicase-dev-inventory.service" ]]; then
+    systemctl stop aicase-dev-inventory.service
+fi
 if [[ -n "$previous" && -f "$previous/backend/manage.py" ]]; then
     drained=0
     for ((attempt=0; attempt<60; attempt++)); do
@@ -127,7 +131,10 @@ systemctl start "$service"
 wait_healthy || { echo 'New release failed health checks.' >&2; exit 1; }
 install -m 644 "$release/deploy/dev/aicase-dev-ai-cleanup.service" "$unit_dir/"
 install -m 644 "$release/deploy/dev/aicase-dev-ai-cleanup.timer" "$unit_dir/"
+install -m 644 "$release/deploy/dev/aicase-dev-inventory.service" "$unit_dir/"
+install -m 644 "$release/deploy/dev/aicase-dev-inventory.timer" "$unit_dir/"
 systemctl daemon-reload
 systemctl enable --now aicase-dev-ai-cleanup.timer
+systemctl enable --now aicase-dev-inventory.timer
 rm -f "$state/deploying"
 printf 'Deployed %s to https://%s\n' "$release_id" "$domain"

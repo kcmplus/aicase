@@ -9,8 +9,9 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from .models import (Device, DeviceProviderConnection, SupplierProduct, DeviceProduct,
-                     DeviceLaneStock, InventorySyncRun)
+                     DeviceLaneStock, InventorySyncRun, Brand, AuditLog)
 from .device_provider import DeviceProvider, ProviderError, image_url
+from .inventory_catalog import sync_models
 
 
 class SyncBusy(ProviderError):
@@ -144,6 +145,9 @@ def sync_device(device_id, actor_name='管理命令'):
             if (current.sync_token != batch or current.revision != device.revision or not current.active
                     or not connection.active or connection.revision != device.connection.revision):
                 raise ProviderError('同步期间配置已变更，本批次未发布，请重新同步。')
+            # Match manual catalog sync's brand -> product lock order. Model
+            # creation and the stock snapshot must commit or roll back together.
+            list(Brand.objects.select_for_update().order_by('pk'))
             observed = timezone.now()
             changes = []
             for gid in sorted(groups):
@@ -168,10 +172,18 @@ def sync_device(device_id, actor_name='管理命令'):
                     DeviceLaneStock.objects.update_or_create(device=current, vendor_record_id=item['record_id'], defaults={
                         'device_product': dp, 'lane_number': item['lane'], 'stock': item['stock'], 'present': True,
                         'source_status': item['status'], 'observed_at': observed, 'batch': batch})
+            catalog = sync_models(current)
+            for item in catalog['items']:
+                if item['status'] in ('created', 'matched'):
+                    AuditLog.objects.create(
+                        actor_name=actor_name, action='sync', resource='management_api.supplierproduct',
+                        object_id=str(item['product']),
+                        summary=f"库存同步自动关联机型：商品 {item['goods_id']} → {item['message']}（机型 ID {item['phone_model']}）"[:300])
             outstanding = sum(not t for t in templates.values())
             message = f'已同步 {len(rows)} 条货道、{len(groups)} 个商品。'
             if outstanding:
                 message += f'{outstanding} 个商品模板待补充，可再次同步。'
+            message += catalog['message']
             current.last_success_at = observed
             current.sync_status, current.sync_message, current.sync_token = 'success', message, None
             current.provider_config = {k: config.get(k) for k in ('is_lock', 'print_type', 'currency')

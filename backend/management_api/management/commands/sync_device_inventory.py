@@ -14,6 +14,7 @@ class Command(BaseCommand):
         group.add_argument('--device', type=int, help='我方后台设备记录 ID（不是供应商设备编号）')
         group.add_argument('--all', action='store_true', help='同步所有启用设备')
         parser.add_argument('--watch', action='store_true', help='持续同步，失败后下轮重试')
+        parser.add_argument('--allow-empty', action='store_true', help='定时任务在尚未登记启用设备时正常退出')
         parser.add_argument('--interval', type=int, default=300, help='持续同步间隔秒数，30–600，默认 300')
 
     def handle(self, *args, **options):
@@ -41,7 +42,7 @@ class Command(BaseCommand):
             devices = devices.filter(pk=options['device'])
         ids = list(devices.values_list('id', flat=True))
         if not ids:
-            if options['watch']:
+            if options['watch'] or (options['allow_empty'] and options['all']):
                 return
             raise CommandError('没有匹配的启用设备。')
         failed = False

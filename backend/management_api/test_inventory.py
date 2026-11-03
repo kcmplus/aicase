@@ -92,6 +92,52 @@ class InventoryTests(TestCase):
         self.assertEqual(DeviceProduct.objects.get().template_url, '')
         self.assertEqual(DeviceProduct.objects.get().stock, 22)
 
+    def test_stock_sync_adds_and_links_models_without_publishing_or_duplicates(self):
+        for row in self.rows:
+            row.update(product_name='iPhone 17', product_brand_name='iPhone')
+            row['specs'][0]['spec_value'] = '17 Pro'
+        run = self.sync()
+        self.assertEqual(run.status, 'success', run.message)
+        product = SupplierProduct.objects.get(goods_id='171')
+        self.assertEqual(product.phone_model.name, 'iPhone 17 Pro')
+        self.assertFalse(product.phone_model.active)
+        self.assertFalse(product.phone_model.print_ready)
+        self.assertFalse(product.active)
+        self.assertIn('新增 1 个机型', run.message)
+        audits = AuditLog.objects.filter(resource='management_api.supplierproduct', object_id=str(product.pk))
+        self.assertEqual(audits.count(), 1)
+        model_count = PhoneModel.objects.count()
+        self.assertEqual(self.sync().status, 'success')
+        self.assertEqual(PhoneModel.objects.count(), model_count)
+        self.assertEqual(audits.count(), 1)
+        # A new SKU for an existing model links to the same model on the next refresh.
+        another = copy.deepcopy(self.rows[0])
+        another.update(id=102, device_box_num='10', goods_id=172)
+        self.rows.append(another)
+        self.assertEqual(self.sync().status, 'success')
+        self.assertEqual(SupplierProduct.objects.get(goods_id='172').phone_model_id, product.phone_model_id)
+        self.assertEqual(PhoneModel.objects.count(), model_count)
+
+    def test_unrecognized_models_keep_stock_and_report_manual_review(self):
+        run = self.sync()
+        self.assertEqual(run.status, 'success')
+        self.assertIn('待确认 1 个', run.message)
+        self.assertIsNone(SupplierProduct.objects.get().phone_model_id)
+        self.assertEqual(DeviceProduct.objects.get().stock, 22)
+
+    def test_catalog_failure_rolls_back_inventory_and_created_models(self):
+        for row in self.rows:
+            row.update(product_name='iPhone 17', product_brand_name='iPhone')
+            row['specs'][0]['spec_value'] = '17 Pro'
+        model_count = PhoneModel.objects.count()
+        with patch('management_api.inventory_sync.AuditLog.objects.create', side_effect=RuntimeError('private error')):
+            run = self.sync()
+        self.assertEqual(run.status, 'failed')
+        self.assertNotIn('private error', run.message)
+        self.assertEqual(PhoneModel.objects.count(), model_count)
+        self.assertFalse(SupplierProduct.objects.exists())
+        self.assertFalse(DeviceProduct.objects.exists())
+
     def test_reused_goods_id_cannot_silently_change_mapped_specification(self):
         self.sync()
         for row in self.rows:

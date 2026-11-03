@@ -1,0 +1,20 @@
+[Unit]
+Description=Refresh device stock and automatically link phone models
+After=network-online.target postgresql.service
+Wants=network-online.target
+ConditionPathExists=/opt/aicase-dev/current/backend/management_api/management/commands/sync_device_inventory.py
+ConditionPathExists=!/var/lib/aicase-dev/deploying
+
+[Service]
+Type=oneshot
+User=aicase-dev
+Group=aicase-dev
+WorkingDirectory=/opt/aicase-dev/current/backend
+EnvironmentFile=/etc/aicase-dev/backend.env
+ExecStart=/opt/aicase-dev/current/.venv/bin/python manage.py sync_device_inventory --all --allow-empty
+TimeoutStartSec=240
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+UMask=0027

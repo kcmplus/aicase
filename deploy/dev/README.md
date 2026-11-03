@@ -43,6 +43,7 @@ OpenAI Key、数据库密码、Django 密钥不进入 GitHub 构建包。应用�
 | 代码发布 | `/opt/aicase-dev/releases/<运行号>-<重试号>-<commit>/` |
 | 当前版本 | `/opt/aicase-dev/current` 软链接 |
 | 后端服务 | `aicase-dev.service`，仅监听 `127.0.0.1:18011` |
+| 库存与机型同步 | `aicase-dev-inventory.timer`，每 5 分钟同步已启用设备，并自动新增、关联机型；新机型默认停用，底图另行导入 |
 | 图片清理 | `aicase-dev-ai-cleanup.timer`，部署时自动启用，每小时清理到期生成图片，保留任务与费用 |
 | 后端配置 | `/etc/aicase-dev/backend.env`，仅 root 可读 |
 | 数据库 | PostgreSQL 17，数据库和用户均为 `aicase_dev` |
