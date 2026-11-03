@@ -54,6 +54,8 @@ class Device(Timestamped):
     sync_token = models.UUIDField(null=True, editable=False)
     sync_started_at = models.DateTimeField(null=True, editable=False)
     provider_config = models.JSONField(default=dict, editable=False)
+    provider_profile = models.JSONField(default=dict, editable=False)
+    provider_profile_at = models.DateTimeField(null=True, editable=False)
 
     class Meta:
         default_permissions = ('view', 'add', 'change')

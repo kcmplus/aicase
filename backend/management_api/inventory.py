@@ -93,7 +93,8 @@ class DeviceSerializer(StrictWriteSerializer):
     class Meta:
         model = Device
         fields = ['id', 'connection', 'connection_name', 'connection_active', 'shop_id', 'vendor_device_id', 'name', 'location_note',
-                  'active', 'revision', 'last_success_at', 'sync_status', 'sync_message', 'stale', 'provider_config']
+                  'active', 'revision', 'last_success_at', 'sync_status', 'sync_message', 'stale', 'provider_config',
+                  'provider_profile', 'provider_profile_at']
         read_only_fields = ['last_success_at', 'sync_status', 'sync_message', 'provider_config']
 
     def get_stale(self, obj):
@@ -217,6 +218,19 @@ class ConnectionViewSet(mixins.CreateModelMixin, InventoryWriteViewSet):
     serializer_class = ConnectionSerializer
     permission_classes = [IsAdminUser, SuperuserOnly]
     http_method_names = ['get', 'post', 'patch', 'head', 'options']
+
+    @action(detail=True, methods=['post'], url_path='sync-devices')
+    def sync_devices(self, request, pk=None):
+        from .device_discovery import discover_devices
+        if request.data:
+            raise serializers.ValidationError({'detail': '此操作不接受额外参数。'})
+        connection = self.get_object()
+        try:
+            result = discover_devices(connection)
+        except ProviderError as exc:
+            raise serializers.ValidationError({'detail': str(exc)})
+        audit(request, 'sync', 'management_api.deviceproviderconnection', connection, result['message'])
+        return Response(result)
 
     @transaction.atomic
     def perform_create(self, serializer):

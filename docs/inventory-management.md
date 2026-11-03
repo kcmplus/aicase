@@ -37,6 +37,10 @@ backend/.venv/bin/python backend/manage.py sync_device_inventory --all
 
 单次命令任一设备失败会返回非零退出码。`--all --watch --interval 300` 持续同步，失败后下一轮重试。`npm run backend` 同时启动本地 API 和同步进程并在退出时清理子进程；已有 API 进程可单独运行 `npm run inventory:watch`。dev 部署脚本会安装 `aicase-dev-inventory.timer`，每 5 分钟执行 `--all --allow-empty`；维护期间跳过，切换版本前停止旧同步进程。其他环境仍需部署同步服务或定时任务。API 同步在当前请求内执行，同设备有同步租约保护；反向代理 / 应用超时应留出至少 90 秒，后续大规模设备接入再改为持久任务队列。
 
+## 设备列表与信息页
+
+超级管理员可在「设备连接配置」点击「同步设备列表」，完整读取商家分页数据后登记设备；新设备默认停用，不覆盖已有名称、启用状态及位置。启用并同步库存后，从「设备管理 → 设备信息页」打开内嵌 H5。详见 [设备信息页](device-screen.md)。设备在线状态不从未定义的供应商状态码推断。
+
 ## 数据与权限
 
 - 迁移：`0019_device_inventory`，新增连接、设备、供应商商品、设备商品、货道快照和同步批次表。

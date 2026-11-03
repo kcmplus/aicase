@@ -19,6 +19,7 @@ from management_api.payments import PublicPaymentConfig, PaymentCheckout
 from management_api.airwallex_payments import AirwallexSettings, AirwallexWebhook
 
 from management_api.refunds import AdminRefund
+from management_api.device_info import public_device_info
 
 router = DefaultRouter()
 router.register('device-connections', ConnectionViewSet)
@@ -31,6 +32,7 @@ router.register("ai-examples", views.AIExampleViewSet)
 for name, view in [("brands", views.BrandViewSet), ("phone-models", views.PhoneModelViewSet), ("graphics", views.GraphicViewSet), ("designs", views.DesignTemplateViewSet), ("ai-styles", views.AIStyleViewSet), ("plans", views.PricingPlanViewSet), ("orders", views.OrderViewSet), ("users", views.UserViewSet), ("roles", views.RoleViewSet), ("audit-logs", views.AuditViewSet)]:
     router.register(name, view)
 urlpatterns = [
+    path('api/v1/store/device-info/', public_device_info),
     path('api/v1/store/phone-models/', views.public_phone_models),
     path('api/v1/admin/inventory/options/', InventoryOptions.as_view()),
     path("api/v1/admin/orders/<int:pk>/refund/", AdminRefund.as_view()),

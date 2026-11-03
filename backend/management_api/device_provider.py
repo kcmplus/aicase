@@ -35,14 +35,17 @@ class DeviceProvider:
         self.shop_id = connection.shop_id
         self.authorization = decrypt_api_key(connection)
 
-    def get(self, path, device_id, **params):
-        if path not in ('/shop/goods/list', '/mp/common/getDeviceInfo', '/Mp/Product/getDeviceGoodsInfo'):
+    def get(self, path, device_id=None, **params):
+        if path not in ('/shop/device/list', '/shop/goods/list', '/mp/common/getDeviceInfo', '/Mp/Product/getDeviceGoodsInfo'):
             raise ProviderError('不支持此设备查询。')
+        query = {'shop_id': self.shop_id, **params}
+        if device_id is not None:
+            query['device_id'] = device_id
         for attempt in range(2):
             try:
                 # Do not forward credentials on redirects or use browser cookies.
                 with requests.get(self.base_url + path,
-                                  params={'shop_id': self.shop_id, 'device_id': device_id, **params},
+                                  params=query,
                                   headers={'authorization': self.authorization, 'Accept': 'application/json'},
                                   timeout=(3, 5), allow_redirects=False, stream=True) as response:
                     if response.status_code in (502, 503, 504) and attempt == 0:
@@ -71,6 +74,9 @@ class DeviceProvider:
 
     def lanes(self, device_id):
         return self.get('/shop/goods/list', device_id)
+
+    def devices(self, page=1, limit=100):
+        return self.get('/shop/device/list', page=page, limit=limit)
 
     def config(self, device_id):
         return self.get('/mp/common/getDeviceInfo', device_id)
