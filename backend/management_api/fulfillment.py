@@ -21,5 +21,3 @@ def require_checkout(order):
 def cloud_release_available():
     # New cloud-only switch. The old terminal/IPC switch remains retired.
     return settings.SUPPLIER_ORDER_ENABLED and settings.SUPPLIER_PAYMENT_ENABLED
-
-ZERO_PAYMENT_UNCONFIRMED = 'Zero-amount print release has not been confirmed by the supplier. Your order can be sent, but printing is not yet available.'

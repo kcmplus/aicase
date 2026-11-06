@@ -210,6 +210,59 @@ class SupplierPaymentTests(TestCase):
         with self.assertRaises(ValueError):
             query_order(row)
 
+    def ready_free(self):
+        row=self.ready()
+        self.order.mode='free_test';self.order.amount=0;self.order.save()
+        return row
+
+    @patch('management_api.supplier_payments.requests.post')
+    @patch('management_api.supplier_payments.query_order')
+    def test_zero_payment_requires_paid_flag_and_handles_null_success_data(self,query,remote):
+        row=self.ready_free()
+        query.side_effect=[self.record(),self.record(pay_status=1)]
+        remote.return_value=self.provider({'code':200,'message':'success','data':None})
+        response=self.post('confirm-print/',{'confirm':True})
+        self.assertEqual(response.status_code,200,response.content)
+        self.assertEqual(remote.call_args.kwargs['json'],{'trade_no':'TRADE1','pay_money':'0.00'})
+        row.refresh_from_db()
+        self.assertTrue(row.cloud_status['payment_recorded'])
+        self.assertEqual(row.release_state,'observed')
+        self.assertEqual(self.post('confirm-print/',{'confirm':True}).status_code,200)
+        remote.assert_called_once()
+        self.order.refresh_from_db();self.assertEqual(self.order.status,'paid')
+
+    @patch('management_api.supplier_payments.requests.post')
+    @patch('management_api.supplier_payments.query_order')
+    def test_existing_zero_payment_is_observed_without_writing_again(self,query,remote):
+        row=self.ready_free();query.return_value=self.record(pay_status=1)
+        response=self.post('confirm-print/',{'confirm':True})
+        self.assertEqual(response.status_code,200,response.content)
+        row.refresh_from_db();self.assertEqual(row.release_state,'observed')
+        self.assertTrue(row.cloud_status['payment_recorded']);remote.assert_not_called()
+
+    @patch('management_api.supplier_payments.requests.post',side_effect=requests.Timeout())
+    @patch('management_api.supplier_payments.query_order')
+    def test_zero_timeout_only_queries_until_paid_flag_is_observed(self,query,remote):
+        row=self.ready_free();query.return_value=self.record()
+        self.assertEqual(self.post('confirm-print/',{'confirm':True}).status_code,200)
+        row.refresh_from_db();self.assertEqual(row.release_state,'unknown')
+        self.assertFalse(row.cloud_status['payment_recorded'])
+        self.assertEqual(self.post('confirm-print/',{'confirm':True}).status_code,200)
+        remote.assert_called_once()
+        query.return_value=self.record(pay_status=1)
+        self.assertTrue(sync_order(row.pk,force=True))
+        row.refresh_from_db();self.assertEqual(row.release_state,'observed')
+        self.assertTrue(row.cloud_status['payment_recorded']);remote.assert_called_once()
+
+    @patch('management_api.supplier_payments.requests.post')
+    @patch('management_api.supplier_payments.query_order')
+    def test_unknown_zero_payment_flag_cannot_authorize_or_overwrite_payment(self,query,remote):
+        row=self.ready_free();query.return_value=self.record(pay_status=2)
+        self.assertEqual(self.post('confirm-print/',{'confirm':True}).status_code,409)
+        row.refresh_from_db();self.assertFalse(row.cloud_status['payment_recorded'])
+        self.assertIsNone(row.print_confirmed_at);remote.assert_not_called()
+
+
     @override_settings(SUPPLIER_ORDER_STATUS_VERIFIED=True, SUPPLIER_ORDER_STATUS_MAP={'print': {'41': 'printing', '42': 'printed', '43': 'print_failed'},
                                                  'shipment': {'71': 'dispensed'}})
     @patch('management_api.supplier_payments.DeviceProvider.get')

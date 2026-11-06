@@ -86,8 +86,8 @@ def public_state(order):
             'release_state': row.release_state, 'print_status': row.native_print_status,
             'cloud_status': row.cloud_status, 'status_updated_at': row.cloud_synced_at,
             'enabled': settings.SUPPLIER_ORDER_ENABLED,
-            'release_available': cloud_release_available() and order.mode != 'free_test',
-            'zero_release_unconfirmed': order.mode == 'free_test',
+            'release_available': cloud_release_available(),
+            'zero_release_unconfirmed': False,
             'can_confirm_print': (order.fulfillment_type == PrintOrder.Fulfillment.PICKUP
                                   and row.state == 'submitted' and row.release_state == 'idle' and not row.print_confirmed_at
                                   and not row.cloud_status.get('payment_recorded')
@@ -95,7 +95,7 @@ def public_state(order):
                                   and row.cloud_status.get('status') != 4
                                   and row.cloud_status.get('phase') != 'cancelled'
                                   and cloud_release_available()
-                                  and row.device.active and row.device.connection.active and real_paid(order))}
+                                  and row.device.active and row.device.connection.active and can_dispatch_payment(order))}
 
 
 class Target(StrictSerializer):
@@ -244,10 +244,7 @@ class ConfirmSupplierPrint(StoreOrders):
             row = get_object_or_404(SupplierOrder.objects.select_for_update(), order=order)
             if not isinstance(request.data, dict) or set(request.data) != {'confirm'} or request.data['confirm'] is not True:
                 raise serializers.ValidationError('Confirm that you are at the selected device.')
-            if order.mode == 'free_test':
-                from .fulfillment import ZERO_PAYMENT_UNCONFIRMED
-                raise Conflict(ZERO_PAYMENT_UNCONFIRMED)
-            if (row.state != 'submitted' or not real_paid(order)
+            if (row.state != 'submitted' or not can_dispatch_payment(order)
                     or not row.device.active or not row.device.connection.active):
                 raise Conflict('This order is not ready for print confirmation.')
             pk = row.pk

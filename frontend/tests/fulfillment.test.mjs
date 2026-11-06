@@ -220,3 +220,12 @@ test('rejected dispatch preserves the order and requires an explicit attempt-bou
  assert.equal(fulfillmentView(uncertain).canRetry,false);
  assert.equal(await prepareDeviceOrder(uncertain,'device_id=401&shop_id=146',{request:()=>assert.fail('unknown is never replayed')}),uncertain);
 });
+
+
+test('zero-price print controls follow server authorization and show observed release once',()=>{
+ const current={...order(),mode:'free_test',priceCents:0,fulfillment:{state:'submitted',release_available:true,can_confirm_print:true}};
+ assert.equal(fulfillmentView(current).canPrint,true);
+ current.fulfillment={...current.fulfillment,print_confirmed:true,release_state:'observed',cloud_status:{payment_recorded:true,pay_money:'0.00',pay_status:1}};
+ assert.equal(fulfillmentView(current).state,'released');
+ assert.equal(fulfillmentView(current).canPrint,undefined);
+});

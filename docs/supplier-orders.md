@@ -137,7 +137,7 @@ python manage.py dispatch_supplier_orders
 
 此类订单可按原有设备、库存、模板及访问权校验绑定设备、交付图片并通过 `saveOrder` 推单。历史 `demo`、Stripe/Airwallex 测试订单仍不允许真机推单。0 元订单不调用在线收银台，也没有原路退款金额。
 
-供应商是否支持 `updatePayStatus(pay_money="0.00")` 以及成功的 `pay_status` 尚待确认。现在 `confirm-print` 对 `free_test` 明确返回 409，列表回查不把原有的 0.00 待支付金额解释为成功。不要使用虚假的 0.01 或其他金额代替实付 0 元，也不要仅按假设的状态枚举放行。
+经本日用户授权实测，供应商支持 `updatePayStatus(pay_money="0.00")`，回查同单 `pay_status` 从 0 变为 1。`confirm-print` 允许服务端确认的 free_test；仍使用持久化单次领取与查单补偿，不重复写入。只有金额为 0 且 pay_status=1、订单身份和退款／取消均正确才确认零元登记成功；不能把原有 0.00 待支付金额解释为成功，也不得用虚假 0.01 替代实付 0。
 
 
 ## 2026-11-06 图片兼容与推单失败恢复
@@ -147,3 +147,10 @@ python manage.py dispatch_supplier_orders
 新发送图片使用 `/api/v1/supplier-images/<随机UUID>/print.png` 与 `preview.png`：无签名字符串，无登录要求，短路径、PNG 后缀；只在提交中、已提交或结果不明时可读，提交后 72 小时失效，手动重试轮换 UUID。图片仍在私有数据库，禁止改为永久公开目录。旧的限时签名地址保留兼容已有订单。商家 Authorization 保留。
 
 新增 `rejected` 表示明确拒单或人工核实未创建。保留已选设备、业务号和冻结文件，页面回到「确认在打印机前并推单」。`retry-dispatch/` 校验访问权、付款／免付、退款、库存、模板及上一轮提交时间；重复点击不会重复排队，定时器不主动重试 rejected。仅已知的前置校验／鉴权错误直接进入 rejected；泛化的“系统异常”、超时、错误成功应答仍需核实，不因 HTTP 200 或业务 400 就假定远端没有写入。未知结果不得批量恢复。
+
+
+## 2026-11-06 零元放行实际请求
+
+用户明确要求直接测试设备 401 上原订单的零元放行。我方订单 `979d06d5-7c60-4256-a176-95f800ae63fa` 已由用户手动重新推送成功：供应商 id=31558、trade_no=WM2611061032438852、goods_id=266，使用新的短 PNG 地址。写入前核对身份、库存／模板、免付状态及无退款，并持久化领取记录。
+
+单次 `POST /shop/order/updatePayStatus`，`pay_money="0.00"`，约 0.55 秒返回 HTTP 200、code=200、message=success、data=null。紧接回查：pay_money=0.00、pay_status 从 0 变为 1，print_status=0、shipment_status=0、status=2；未重复请求。空 data 是供应商实际成功应答形态，程序接受确认应答后仍必须查单。该结果仅证明零元支付登记成功，不证明 Rust 队列已经执行、物理打印或出货。

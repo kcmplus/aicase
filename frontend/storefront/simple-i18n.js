@@ -15,7 +15,7 @@ const entries=[
  ['No payment is required. Confirm the station to send this test order.','无需付款，请确认设备后推送此联调订单。'],
  ['Zero-amount print release has not been confirmed by the supplier. Your order can be sent, but printing is not yet available.','供应商尚未确认 0 元放行规则，当前可推单，暂不能确认开印。'],
  ['Complete free test order','确认 0 元测试订单'],
- ['Create a no-charge integration order. Zero-amount printing awaits supplier confirmation.','创建 0 元免付联调订单，0 元开印待供应商确认。'],
+ ['Create a no-charge integration order. Confirm at the station to start a real print.','创建 0 元免付联调订单，到设备前确认后可开始真实打印。'],
  ['Save design changes','保存设计修改'],
  ['Update my existing design at no extra printing charge.','更新原设计，不另收打印费。'],
  ['The station payment currency is not configured. Please contact staff.','此设备的收款记账币种尚未确认，请联系工作人员。'],

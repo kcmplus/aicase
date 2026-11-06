@@ -18,7 +18,7 @@ from .fulfillment import cloud_release_available
 from .models import PrintOrder, SupplierOrder
 from .orders import Conflict
 from .store_catalog import available_stocks, stock_template
-from .supplier_orders import audit_state, digest, real_paid
+from .supplier_orders import audit_state, digest, can_dispatch_payment
 
 
 class SupplierPaymentUnavailable(APIException):
@@ -99,6 +99,13 @@ def query_order(row):
         'phase_verified': record['status'] == 4 or settings.SUPPLIER_ORDER_STATUS_VERIFIED}
 
 
+def payment_recorded(order, record):
+    # Zero price alone proves nothing. Live probe confirmed pay_status 0 -> 1.
+    return (record['currency'] == order.currency and money(record['pay_money']) == order.amount
+            and (order.amount > 0 or (order.mode == 'free_test' and order.amount == 0 and record['pay_status'] == 1))
+            and record['is_refund'] == 0 and record['is_deleted'] == 0 and record['status'] != 4)
+
+
 def _apply(row, order, record):
     """Called with the order and supplier row locked. Unknown codes remain unknown."""
     before = row.cloud_status
@@ -109,8 +116,7 @@ def _apply(row, order, record):
              or (new_phase in ('idle', 'unknown') and old_phase not in ('idle', 'unknown')))):
         new_phase = old_phase  # Delayed zero/unknown reads never undo observed progress.
         verified = True
-    matched = (record['currency'] == order.currency and money(record['pay_money']) == order.amount
-               and order.amount > 0 and record['is_refund'] == 0 and record['is_deleted'] == 0 and record['status'] != 4)
+    matched = payment_recorded(order, record)
     snapshot = {key: record[key] for key in ('pay_money', 'pay_status', 'print_status', 'shipment_status', 'status',
                 'is_refund', 'is_deleted', 'currency')}
     snapshot.update(phase=new_phase, phase_verified=verified, payment_recorded=matched)
@@ -129,7 +135,7 @@ def _apply(row, order, record):
         elif row.release_state == 'claimed' and row.print_confirmed_at < timezone.now()-timedelta(seconds=30):
             row.release_state, row.message = 'unknown', '开印确认结果待核实，请勿重复打印。'
     if (matched and verified and order.status in ('paid', 'printing') and order.paid_at
-            and order.mode in ('stripe_live', 'airwallex_live')):
+            and order.mode in ('stripe_live', 'airwallex_live', 'free_test')):
         if new_phase == 'dispensed':
             order.status = 'ready'
         elif new_phase in ('printing', 'printed', 'delivering'):
@@ -179,16 +185,13 @@ def record_merchant_payment(pk):
         from .supplier_orders import PrintReleaseUnavailable
         raise PrintReleaseUnavailable()
     row = SupplierOrder.objects.select_related('device__connection', 'order').defer('print_image', 'preview_image').get(pk=pk)
-    if row.order.mode == 'free_test':
-        from .fulfillment import ZERO_PAYMENT_UNCONFIRMED
-        raise Conflict(ZERO_PAYMENT_UNCONFIRMED)
     if row.release_state != 'idle' or row.print_confirmed_at:
         return  # Durable idempotency, including old/unknown native claims.
     try:
         record = query_order(row)
     except (ProviderError, ValueError):
         raise SupplierPaymentUnavailable() from None
-    if (record['status'] == 4 or money(record['pay_money']) > 0
+    if (record['status'] == 4 or money(record['pay_money']) > 0 or record['pay_status'] != 0
             or record['print_status'] != 0 or record['shipment_status'] != 0):
         with transaction.atomic():
             order = PrintOrder.objects.select_for_update().get(pk=row.order_id)
@@ -202,7 +205,7 @@ def record_merchant_payment(pk):
         current = SupplierOrder.objects.select_for_update().select_related('device__connection').get(pk=pk)
         if current.release_state != 'idle' or current.print_confirmed_at:
             return
-        if (order.fulfillment_type != 'pickup' or not real_paid(order) or current.state != 'submitted'
+        if (order.fulfillment_type != 'pickup' or not can_dispatch_payment(order) or current.state != 'submitted'
                 or not current.device.active or not current.device.connection.active
                 or identity(current) != identity(row)
                 or current.snapshot_sha256 != digest(order.snapshot)):
@@ -212,17 +215,18 @@ def record_merchant_payment(pk):
         if record['currency'] != order.currency or record['is_refund'] or record['is_deleted'] or record['status'] == 4:
             raise Conflict('The station order needs staff review before printing.')
         amount = money(record['pay_money'])
+        already_recorded = payment_recorded(order, record)
         if current.cloud_status.get('status') == 4 or current.cloud_status.get('phase') == 'cancelled':
             raise Conflict('The station order has been cancelled. Contact staff before printing.')
-        if amount == 0 and current.cloud_status.get('payment_recorded'):
+        if amount == 0 and not already_recorded and current.cloud_status.get('payment_recorded'):
             raise Conflict('The station order changed. Refresh its status before confirming again.')
         if amount > 0 and amount != order.amount:
             raise Conflict('The station payment amount needs staff review. Do not print again.')
         provider = DeviceProvider(current.device.connection)  # Credentials before claiming.
-        if amount == 0:
+        if not already_recorded:
             # Fresh cloud orders were observed with zero print/payment states.
             # Any changed execution field is treated as ambiguous, never overwritten.
-            if record['print_status'] != 0 or record['shipment_status'] != 0:
+            if record['pay_status'] != 0 or record['print_status'] != 0 or record['shipment_status'] != 0:
                 raise Conflict('The station order needs staff review before printing.')
             stock = available_stocks().filter(pk=current.inventory_item_id).first()
             if (not stock or stock.device_id != current.device_id
@@ -231,11 +235,11 @@ def record_merchant_payment(pk):
                     or stock_template(stock) != order.snapshot.get('_template')):
                 raise Conflict('The station inventory or template needs updating before printing.')
         current.print_confirmed_at, current.release_claim = timezone.now(), uuid.uuid4()
-        current.release_state = 'claimed' if amount == 0 else 'observed'
+        current.release_state = 'observed' if already_recorded else 'claimed'
         current.save(update_fields=['print_confirmed_at', 'release_claim', 'release_state', 'updated_at'])
         _apply(current, order, record)
         audit_state(current, 'merchant_payment_claim')
-    if amount > 0:
+    if already_recorded:
         return  # Already recorded by supplier. Do not overwrite it or pay twice.
     accepted = False
     try:
@@ -250,9 +254,10 @@ def record_merchant_payment(pk):
                     raise ValueError('Invalid response')
             result = json.loads(content)
             data = result.get('data') if isinstance(result, dict) else None
-            accepted = (response.status_code == 200 and isinstance(data, dict) and result.get('code') == 200
-                        and data.get('trade_no', row.trade_no) == row.trade_no
-                        and str(data.get('id', row.vendor_id)) == row.vendor_id)
+            accepted = (response.status_code == 200 and isinstance(result, dict) and result.get('code') == 200
+                        and (data is None or (isinstance(data, dict)
+                             and data.get('trade_no', row.trade_no) == row.trade_no
+                             and str(data.get('id', row.vendor_id)) == row.vendor_id)))
     except (requests.RequestException, ValueError, TypeError):
         pass
     SupplierOrder.objects.filter(pk=pk, release_state='claimed', release_claim=current.release_claim).update(

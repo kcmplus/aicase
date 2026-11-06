@@ -79,7 +79,7 @@ class FreeSupplierOrderTests(TestCase):
         self.order.save()
 
     @patch('management_api.supplier_orders.requests.post')
-    def test_free_order_can_be_pushed_once_but_zero_release_is_explicitly_blocked(self, remote):
+    def test_free_order_can_be_pushed_once_and_requires_explicit_print_confirmation(self, remote):
         self.free_order()
         row = self.prepare()
         remote.return_value = self.provider()
@@ -90,14 +90,9 @@ class FreeSupplierOrderTests(TestCase):
         row.refresh_from_db()
         self.assertEqual(row.state,'submitted')
         state = public_state(self.order)
-        self.assertTrue(state['zero_release_unconfirmed'])
-        self.assertFalse(state['release_available'])
-        self.assertFalse(state['can_confirm_print'])
-        with patch('management_api.supplier_payments.query_order') as query:
-            response = self.post('confirm-print/',{'confirm':True})
-            self.assertEqual(response.status_code,409)
-            self.assertIn('Zero-amount',str(response.content))
-            query.assert_not_called()
+        self.assertFalse(state['zero_release_unconfirmed'])
+        self.assertTrue(state['release_available'])
+        self.assertTrue(state['can_confirm_print'])
         row.refresh_from_db()
         self.assertIsNone(row.print_confirmed_at)
         self.assertEqual(row.release_state,'idle')
