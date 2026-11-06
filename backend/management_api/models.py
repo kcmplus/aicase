@@ -279,12 +279,13 @@ class SupplierOrder(Timestamped):
     snapshot_sha256 = models.CharField(max_length=64)
     state = models.CharField(max_length=20, default='draft', choices=[
         ('draft', '待打印文件'), ('prepared', '待推送'), ('submitting', '正在推送'),
-        ('submitted', '已推送'), ('unknown', '推送结果待核实')])
+        ('submitted', '已推送'), ('rejected', '推送失败，待用户确认重试'), ('unknown', '推送结果待核实')])
     vendor_id = models.CharField(max_length=80, blank=True)
     trade_no = models.CharField(max_length=120, blank=True)
     print_image = models.BinaryField(default=bytes, editable=False)
     preview_image = models.BinaryField(default=bytes, editable=False)
     image_sha256 = models.CharField(max_length=64, blank=True)
+    file_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     submitted_at = models.DateTimeField(null=True, editable=False)
     message = models.CharField(max_length=200, blank=True)
     print_confirmed_at = models.DateTimeField(null=True, editable=False)

@@ -7,6 +7,7 @@ from unittest.mock import patch, Mock
 import requests
 from PIL import Image
 from django.contrib.auth import get_user_model
+from django.core import signing
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -234,7 +235,8 @@ class SupplierOrderTests(TestCase):
 
     def test_private_files_require_signed_matching_token_and_submission_state(self):
         row = self.prepare()
-        url = file_url(row, 'print', '')
+        token = signing.dumps({'reference':str(row.order.reference),'sha':row.image_sha256,'kind':'print'}, salt='supplier-print-file-v1')
+        url = '/api/v1/supplier-order-files/'+token+'/'
         self.assertEqual(self.client.get(url).status_code, 404)
         row.state = 'submitting'
         row.save()
@@ -288,3 +290,74 @@ class SupplierOrderTests(TestCase):
         remote.assert_not_called()
         row.refresh_from_db()
         self.assertEqual(row.device_id, self.device.pk)
+
+
+    def test_short_png_urls_expire_and_do_not_expose_unsigned_order_ids(self):
+        import uuid
+        row = self.prepare()
+        url = file_url(row, 'print', '')
+        self.assertTrue(url.endswith('/print.png'))
+        self.assertLess(len('https://aicase.example'+url), 150)
+        self.assertNotIn(str(self.order.reference),url)
+        self.assertEqual(self.client.get(url).status_code,404)
+        row.state, row.submitted_at = 'submitting', timezone.now()
+        row.save()
+        response=self.client.get(url)
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.content,bytes(row.print_image))
+        self.assertIn('no-store',response['Cache-Control'])
+        self.assertEqual(self.client.get(url.replace('print.png','unknown.png')).status_code,404)
+        row.submitted_at=timezone.now()-timedelta(hours=73)
+        row.save()
+        self.assertEqual(self.client.get(url).status_code,404)
+        row.submitted_at=timezone.now(); row.file_token=uuid.uuid4(); row.save()
+        self.assertEqual(self.client.get(url).status_code,404)
+        self.assertEqual(self.client.get(file_url(row,'print','')).status_code,200)
+
+    @patch('management_api.supplier_orders.requests.post')
+    def test_clear_rejection_requires_explicit_retry_and_keeps_frozen_order(self,remote):
+        row=self.prepare(); self.pay()
+        remote.return_value=self.provider({'code':400,'message':'设备ID必须填写','data':None})
+        self.assertFalse(dispatch_order(row.pk)); row.refresh_from_db()
+        self.assertEqual(row.state,'rejected')
+        self.assertEqual(dispatch_pending(),0)
+        remote.assert_called_once()
+        original=(row.business_number,row.image_sha256,row.device_id)
+        body={'confirm':True,'submitted_at':row.submitted_at.isoformat()}
+        self.assertEqual(self.post('retry-dispatch/',body).status_code,200)
+        self.assertEqual(self.post('retry-dispatch/',body).status_code,200)
+        remote.return_value=self.provider()
+        self.assertEqual(dispatch_pending(),1)
+        row.refresh_from_db()
+        self.assertEqual((row.business_number,row.image_sha256,row.device_id),original)
+        self.assertEqual(self.post('retry-dispatch/',body).status_code,409)
+        self.assertEqual(dispatch_pending(),0)
+        self.assertEqual(remote.call_count,2)
+
+    @patch('management_api.supplier_orders.requests.post')
+    def test_system_exception_remains_unknown_and_cannot_be_replayed(self,remote):
+        row=self.prepare(); self.pay()
+        remote.return_value=self.provider({'code':400,'message':'系统异常','data':None})
+        self.assertFalse(dispatch_order(row.pk)); row.refresh_from_db()
+        self.assertEqual(row.state,'unknown')
+        self.assertEqual(self.post('retry-dispatch/',{'confirm':True,'submitted_at':row.submitted_at.isoformat()}).status_code,409)
+        self.assertEqual(dispatch_pending(),0)
+        remote.assert_called_once()
+
+    def test_retry_rechecks_owner_refund_and_stock(self):
+        row=self.prepare(); self.pay()
+        row.state='rejected';row.submitted_at=timezone.now();row.save()
+        body={'confirm':True,'submitted_at':row.submitted_at.isoformat()}
+        self.headers={'HTTP_X_ORDER_KEY':'b'*64}
+        self.assertEqual(self.post('retry-dispatch/',body).status_code,404)
+        self.headers={'HTTP_X_ORDER_KEY':self.key}
+        self.stock.stock=0;self.stock.save()
+        self.assertEqual(self.post('retry-dispatch/',body).status_code,409)
+        self.stock.stock=3;self.stock.save()
+        self.order.status='cancelled';self.order.save()
+        self.assertEqual(self.post('retry-dispatch/',body).status_code,409)
+        row.refresh_from_db();self.assertEqual(row.state,'rejected')
+        self.order.status='paid';self.order.save()
+        admin=get_user_model().objects.create_user(username='retry-admin')
+        PrintRefund.objects.create(order=self.order, amount=1, currency='USD', reason='test', requested_by=admin)
+        self.assertEqual(self.post('retry-dispatch/',body).status_code,409)

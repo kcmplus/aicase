@@ -20,7 +20,7 @@ from management_api.airwallex_payments import AirwallexSettings, AirwallexWebhoo
 
 from management_api.refunds import AdminRefund
 from management_api.device_info import public_device_info
-from management_api.supplier_orders import OrderTarget, OrderFiles, ConfirmSupplierPrint, SupplierFile, FulfillmentConfig
+from management_api.supplier_orders import OrderTarget, OrderFiles, ConfirmSupplierPrint, SupplierFile, SupplierImage, FulfillmentConfig, RetrySupplierOrder
 from management_api.terminal_orders import RetiredTerminalAPI
 
 router = DefaultRouter()
@@ -59,8 +59,10 @@ urlpatterns = [
     path("api/v1/store/fulfillment-config/", FulfillmentConfig.as_view()),
     path("api/v1/store/orders/<uuid:reference>/device/", OrderTarget.as_view()),
     path("api/v1/store/orders/<uuid:reference>/print-files/", OrderFiles.as_view()),
+    path("api/v1/store/orders/<uuid:reference>/retry-dispatch/", RetrySupplierOrder.as_view()),
     path("api/v1/store/orders/<uuid:reference>/confirm-print/", ConfirmSupplierPrint.as_view()),
     path("api/v1/supplier-order-files/<str:token>/", SupplierFile.as_view()),
+    path("api/v1/supplier-images/<uuid:token>/<str:kind>.png", SupplierImage.as_view()),
     path("api/v1/store/orders/<uuid:reference>/fulfillment/", OrderFulfillment.as_view()),
     path("api/v1/terminal/orders/", RetiredTerminalAPI.as_view()),
     path("api/v1/terminal/orders/<uuid:reference>/claim/", RetiredTerminalAPI.as_view()),

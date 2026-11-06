@@ -208,3 +208,15 @@ test('no-charge test orders retain dispatch states but cannot fabricate zero-pay
  assert.equal(fulfillmentView(current).state,'submitted');
  assert.equal(fulfillmentView(current).canPrint,false);assert.equal(fulfillmentView(current).releasePending,true);
 });
+
+test('rejected dispatch preserves the order and requires an explicit attempt-bound retry',async()=>{
+ const current={...order(),fulfillment:{state:'rejected',device_id:'401',shop_id:'146',can_retry_dispatch:true,submitted_at:'2026-11-06T10:00:00Z'}};
+ assert.equal(fulfillmentView(current).canRetry,true);
+ const calls=[];
+ const result=await prepareDeviceOrder(current,'device_id=401&shop_id=146',{save:async x=>x,render:()=>assert.fail('must reuse frozen files'),request:async(path,options)=>{calls.push([path,options]);return {...current,fulfillment:{...current.fulfillment,state:'prepared'}};}});
+ assert.equal(result.fulfillment.state,'prepared');
+ assert.deepEqual(calls[0],['order-1/retry-dispatch/',{method:'POST',body:{confirm:true,submitted_at:'2026-11-06T10:00:00Z'}}]);
+ const uncertain={...current,fulfillment:{...current.fulfillment,state:'unknown',can_retry_dispatch:false}};
+ assert.equal(fulfillmentView(uncertain).canRetry,false);
+ assert.equal(await prepareDeviceOrder(uncertain,'device_id=401&shop_id=146',{request:()=>assert.fail('unknown is never replayed')}),uncertain);
+});

@@ -66,7 +66,7 @@ export function fulfillmentView(order){
  if(order.status==='printing')return {state:'printing'};
  if(order.status!=='paid'&&order.status!=='pending')return {state:'closed'};
  if(!f)return {state:'unbound'};
- return {state:f.state,canPrint:order.status==='paid'&&f.can_confirm_print===true&&f.release_available===true,
+ return {state:f.state,canRetry:f.state==='rejected'&&order.status==='paid'&&f.can_retry_dispatch===true,canPrint:order.status==='paid'&&f.can_confirm_print===true&&f.release_available===true,
   releasePending:f.state==='submitted'&&f.release_available!==true};
 }
 export async function prepareDeviceOrder(order,scope,{save,request=orderRequest,render=exportCase,fetcher=fetch}={}){
@@ -75,6 +75,11 @@ export async function prepareDeviceOrder(order,scope,{save,request=orderRequest,
  if(!ids)return order;
  if(order.fulfillment&&(order.fulfillment.device_id!==ids.device_id||order.fulfillment.shop_id!==ids.shop_id))throw Error('This order has already been sent to another station.');
  let current=order;
+ if(current.fulfillment?.state==='rejected'){
+  if(!current.fulfillment.can_retry_dispatch)throw Error('The previous submission must be checked before sending again.');
+  await request(order.id+'/retry-dispatch/',{method:'POST',body:{confirm:true,submitted_at:current.fulfillment.submitted_at}});
+  return save(await request(order.id+'/'));
+ }
  if(!current.fulfillment){
   const response=await fetcher('/api/v1/store/phone-models/?'+new URLSearchParams(ids),{cache:'no-store',credentials:'omit',signal:AbortSignal.timeout(10000)});
   if(!response.ok)throw Error('This station’s phone models could not be loaded.');

@@ -5,6 +5,7 @@ import re
 import secrets
 import time
 import warnings
+import uuid
 from datetime import timedelta
 from io import BytesIO
 from urllib.parse import urlsplit
@@ -34,6 +35,18 @@ from .store_catalog import available_stocks, stock_template
 from .fulfillment import require_pickup, cloud_release_available
 
 SALT = 'supplier-print-file-v1'
+
+# Only pre-creation validation/authentication rejections are safe to offer again.
+# A generic "系统异常" may occur after a remote write and remains unknown.
+REJECTION_MESSAGES = frozenset(('未授权', '店铺ID必须填写', '设备ID必须填写'))
+
+
+def can_retry_dispatch(row, order):
+    return (row.state == 'rejected' and settings.SUPPLIER_ORDER_ENABLED
+            and order.fulfillment_type == 'pickup' and can_dispatch_payment(order)
+            and row.device.active and row.device.connection.active
+            and not row.trade_no and not row.vendor_id and not row.print_confirmed_at
+            and row.release_state == 'idle' and row.submitted_at is not None)
 
 
 def digest(snapshot):
@@ -66,6 +79,7 @@ def public_state(order):
     from .device_info import public_device_identity
     identity = public_device_identity(row.device)
     return {'state': row.state, 'device_id': identity['device_id'],
+            'can_retry_dispatch': can_retry_dispatch(row, order), 'submitted_at': row.submitted_at,
             'shop_id': identity['shop_id'], 'device_name': identity['name'],
             'device_location': identity['location'], 'device_number': identity['number'],
             'message': row.message, 'print_confirmed': bool(row.print_confirmed_at),
@@ -187,6 +201,39 @@ class OrderFiles(StoreOrders):
         return Response(public_state(order))
 
 
+class RetrySupplierOrder(StoreOrders):
+    http_method_names = ['post', 'options']
+
+    @transaction.atomic
+    def post(self, request, reference):
+        order = mutable_order(request, reference)
+        row = get_object_or_404(SupplierOrder.objects.select_for_update(), order=order)
+        class Retry(StrictSerializer):
+            confirm = serializers.BooleanField()
+            submitted_at = serializers.DateTimeField()
+        serializer = Retry(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        if not data['confirm'] or row.submitted_at != data['submitted_at']:
+            raise Conflict('Reload the order before confirming this submission.')
+        # An identical click before the worker claims it does not create more work.
+        if row.state == 'prepared':
+            return Response(public_state(order))
+        if not can_retry_dispatch(row, order):
+            raise Conflict('The previous submission must be checked before sending again.')
+        stock = available_stocks().filter(pk=row.inventory_item_id).first()
+        if (not stock or stock.device_id != row.device_id
+                or stock.product.connection_id != row.device.connection_id
+                or str(stock.product.goods_id) != str(row.goods_id)
+                or stock_template(stock) != order.snapshot.get('_template')
+                or row.snapshot_sha256 != digest(order.snapshot) or not row.image_sha256):
+            raise Conflict('The station stock or template changed. Contact staff before sending.')
+        row.state, row.message = 'prepared', ''
+        row.save(update_fields=['state', 'message', 'updated_at'])
+        audit_state(row, 'supplier_retry_confirmed')
+        return Response(public_state(order))
+
+
 @method_decorator(never_cache, name='dispatch')
 class ConfirmSupplierPrint(StoreOrders):
     http_method_names = ['post', 'options']
@@ -224,8 +271,28 @@ class FulfillmentConfig(StoreOrders):
 
 
 def file_url(row, kind, origin):
-    token = signing.dumps({'reference': str(row.order.reference), 'sha': row.image_sha256, 'kind': kind}, salt=SALT)
-    return origin + '/api/v1/supplier-order-files/' + token + '/'
+    if kind not in ('print', 'preview'):
+        raise ValueError('Invalid image kind')
+    return f'{origin}/api/v1/supplier-images/{row.file_token}/{kind}.png'
+
+
+@method_decorator(never_cache, name='dispatch')
+class SupplierImage(StoreOrders):
+    """Supplier-compatible PNG URL, unguessable and valid only for 72 hours."""
+    http_method_names = ['get', 'options']
+
+    def get(self, request, token, kind):
+        row = get_object_or_404(SupplierOrder, file_token=token,
+            state__in=('submitting', 'submitted', 'unknown'),
+            submitted_at__gte=timezone.now()-timedelta(hours=72))
+        content = {'print': row.print_image, 'preview': row.preview_image}.get(kind)
+        if not content:
+            raise NotFound('This print file is unavailable.')
+        response = HttpResponse(bytes(content), content_type='image/png')
+        response['Cache-Control'] = 'private, no-store'
+        response['Referrer-Policy'] = 'no-referrer'
+        response['X-Content-Type-Options'] = 'nosniff'
+        return response
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -276,13 +343,14 @@ def dispatch_order(pk):
             return False
         # Resolve credentials BEFORE claiming: local config errors are safe to retry.
         provider = DeviceProvider(row.device.connection)
+        row.file_token = uuid.uuid4()
         print_url = file_url(row, 'print', origin)
         payload = {'business_number': row.business_number, 'shop_id': provider.shop_id,
             'device_id': row.device.vendor_device_id, 'goods_id': row.goods_id, 'source': 1,
             'product_pic_url': print_url, 'picture_origin_url': print_url,
             'picture_effect_url': file_url(row, 'preview', origin), 'language': 'en'}
         row.state, row.submitted_at, row.message = 'submitting', timezone.now(), ''
-        row.save(update_fields=['state', 'submitted_at', 'message', 'updated_at'])
+        row.save(update_fields=['state', 'submitted_at', 'message', 'file_token', 'updated_at'])
         audit_state(row, 'supplier_submit')
     try:
         # POST is deliberately not part of the retrying GET transport. Do not log
@@ -298,6 +366,14 @@ def dispatch_order(pk):
                     raise ValueError()
             result = json.loads(content)
             data = result.get('data') if isinstance(result, dict) else None
+            if (response.status_code == 200 and isinstance(result, dict)
+                    and result.get('code') in (400, 401) and data is None
+                    and result.get('message') in REJECTION_MESSAGES):
+                SupplierOrder.objects.filter(pk=pk, state='submitting').update(
+                    state='rejected', message='推单未成功，订单和设备已保留。请联系工作人员修正配置后，再确认推单。',
+                    updated_at=timezone.now())
+                audit_state(row, 'supplier_rejected')
+                return False
             # Real saveOrder verification returned HTTP 200 + code=200. The
             # documentation's code=0 examples are placeholders, not a contract.
             if response.status_code != 200 or result.get('code') != 200 or not isinstance(data, dict):
