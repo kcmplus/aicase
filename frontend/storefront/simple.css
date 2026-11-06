@@ -227,3 +227,5 @@
 .delivery-options small{display:block;font-size:12px;font-weight:400;color:#646b61;margin-top:3px}
 .delivery-options label:focus-within{outline:2px solid #137d82;outline-offset:2px}
 .delivery-notice{padding:16px;background:#f3f0e8;border-radius:12px;font-size:14px;line-height:1.7}
+
+.station-context{margin:0 0 24px;padding:16px 20px;background:#edf3ef;border:1px solid #d6e2da;border-radius:12px;overflow-wrap:anywhere}.station-context .device-scan-notice{margin:8px 0 0;font-size:13px;line-height:1.5}

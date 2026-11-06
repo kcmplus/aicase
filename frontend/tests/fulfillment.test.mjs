@@ -121,3 +121,42 @@ test('refunded and closed orders do not ask customers to choose delivery',()=>{
  assert.match(deliveryStatusPanel({...order(),fulfillmentType:'unspecified',refund:{status:'failed'}}),/data-action="confirm-pickup"/);
  assert.match(deliveryStatusPanel({...order(),fulfillmentType:'courier'}),/separate delivery process/);
 });
+
+
+import {stationEntry} from '../storefront/station-entry.js';
+const scannedEntry={scope:'device_id=401&shop_id=146',hash:'',station:{device_id:'401',shop_id:'146'}};
+const soleRef='33333333-3333-4333-8333-333333333333';
+test('QR entry reads only the owner order list and routes zero, one or multiple orders',async()=>{
+ for(const hash of ['', '#home']){
+  for(const count of [0,1,2]){
+   const data={results:Array.from({length:count},()=>({reference:soleRef})),has_more:false,page:1};
+   const calls=[];
+   const entry=await stationEntry({...scannedEntry,hash,request:async(...args)=>{calls.push(args);return data;}});
+   assert.deepEqual(calls,[['?page=1']]);
+   assert.equal(entry.reference,count===1?soleRef:undefined);
+   assert.equal(entry.route,count===0?'choose?source=photo':count===2?'orders':undefined);
+  }
+ }
+});
+test('QR entry never intercepts checkout, payment returns, explicit lists or later editing',async()=>{
+ const fail=async()=>{throw Error('must not read or write');};
+ for(const hash of ['#orders','#choose','#checkout','#payment?order='+soleRef+'&result=success','#pass','#account']){
+  assert.equal(await stationEntry({...scannedEntry,hash,request:fail}),null);
+ }
+ for(const scope of ['', 'device_id=401', 'device_id=bad&shop_id=146']){
+  assert.equal(await stationEntry({...scannedEntry,scope,request:fail}),null);
+ }
+ for(const station of [null,{device_id:'402',shop_id:'146'},{device_id:'401',shop_id:'147'}]){
+  assert.deepEqual(await stationEntry({...scannedEntry,station,request:fail}),{route:'orders'});
+ }
+});
+test('QR entry does not mistake partial pages or failures for a single order or new customer',async()=>{
+ const partial={results:[{reference:soleRef}],has_more:true,page:1};
+ assert.equal((await stationEntry({...scannedEntry,request:async()=>partial})).route,'orders');
+ const error=await stationEntry({...scannedEntry,request:async()=>{throw Error('Unavailable');}});
+ assert.equal(error.route,'orders');assert.equal(error.error,'Unavailable');
+ for(const data of [{},{results:[]},{results:[],has_more:false,page:2},{results:[{reference:'bad'}],has_more:false,page:1}]){
+  const result=await stationEntry({...scannedEntry,request:async()=>data});
+  assert.equal(result.route,'orders');assert.ok(result.error);
+ }
+});
