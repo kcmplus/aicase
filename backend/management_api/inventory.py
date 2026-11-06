@@ -38,11 +38,11 @@ class StrictWriteSerializer(serializers.ModelSerializer):
 class ConnectionSerializer(StrictWriteSerializer):
     authorization = serializers.CharField(write_only=True, required=False, trim_whitespace=False, max_length=1000)
     masked_key = serializers.SerializerMethodField()
-    writable = {'name', 'base_url', 'shop_id', 'active', 'authorization', 'revision'}
+    writable = {'name', 'base_url', 'shop_id', 'payment_currency', 'active', 'authorization', 'revision'}
 
     class Meta:
         model = DeviceProviderConnection
-        fields = ['id', 'name', 'base_url', 'shop_id', 'active', 'revision', 'authorization', 'masked_key']
+        fields = ['id', 'name', 'base_url', 'shop_id', 'payment_currency', 'active', 'revision', 'authorization', 'masked_key']
 
     def get_masked_key(self, obj):
         return '••••' + obj.key_last_four

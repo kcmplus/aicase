@@ -83,7 +83,7 @@ elif name == 'curl' and fail == 'health':
         (tree / 'frontend/storefront/index.html').write_text('test')
         (tree / 'VERSION').write_text('a' * 40 + '\n')
         (tree / 'deploy/prod').mkdir(parents=True)
-        for name in ['aicase-prod-ai-cleanup.service', 'aicase-prod-ai-cleanup.timer', 'aicase-prod-backup.service', 'aicase-prod-backup.timer', 'backup.sh']:
+        for name in ['aicase-prod-ai-cleanup.service', 'aicase-prod-ai-cleanup.timer', 'aicase-prod-backup.service', 'aicase-prod-backup.timer', 'backup.sh', 'aicase-prod-supplier-orders.service', 'aicase-prod-supplier-orders.timer']:
             shutil.copyfile(Path(__file__).resolve().parents[1] / name, tree / 'deploy/prod' / name)
         with tarfile.open(self.root / 'release.tar.gz', 'w:gz') as archive:
             for path in tree.iterdir(): archive.add(path, arcname=path.name)

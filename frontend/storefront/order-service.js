@@ -10,13 +10,14 @@ export function orderAccessKey(storage=localStorage){
  return key;
 }
 export async function orderRequest(path='',{method='GET',body,fetcher=fetch,key=orderAccessKey()}={}){
- const headers={'Content-Type':'application/json','X-Order-Key':key};
+ const multipart=typeof FormData!=='undefined'&&body instanceof FormData;
+ const headers={...(!multipart?{'Content-Type':'application/json'}:{}),'X-Order-Key':key};
  if(!['GET','HEAD'].includes(method)){
   const csrf=await fetcher('/api/v1/auth/csrf/',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(20000)});
   if(!csrf.ok)throw Error('Your sign-in could not be checked. Please reload and try again.');
   headers['X-CSRFToken']=(await csrf.json()).csrfToken;
  }
- const response=await fetcher('/api/v1/store/orders/'+path,{method,credentials:'same-origin',cache:'no-store',headers,...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(20000)});
+ const response=await fetcher('/api/v1/store/orders/'+path,{method,credentials:'same-origin',cache:'no-store',headers,...(body===undefined?{}:{body:multipart?body:JSON.stringify(body)}),signal:AbortSignal.timeout(30000)});
  let data;try{data=await response.json();}catch{throw Error('Orders are temporarily unavailable. Your design is saved; please retry.');}
  if(!response.ok){const error=new Error(typeof data.detail==='string'?data.detail:Object.values(data).flat().map(v=>typeof v==='string'?v:JSON.stringify(v)).join(' ')||'Could not save your order.');error.status=response.status;throw error;}
  return data;
@@ -24,11 +25,11 @@ export async function orderRequest(path='',{method='GET',body,fetcher=fetch,key=
 export function savedOrder(data,previous){
  if(data.phone_template)registerSupplierTemplates([data.phone_template]);
  const pass=readPass(data.snapshot.code,data.snapshot);
- return {id:data.reference,...(data.phone_template?{phoneTemplate:data.phone_template}:{}),server:true,refund:data.refund||null,mode:data.mode,status:data.status==='completed'?'collected':data.status,priceCents:Math.round(Number(data.amount)*100),currency:data.currency,revision:data.revision,stationId:data.station_id,customerEmail:data.customer_email,pass,oldCodes:[...new Set([...(previous?.oldCodes||[]),...(previous&&previous.pass.code!==pass.code?[previous.pass.code]:[])])],createdAt:Date.parse(data.created_at),updatedAt:Date.parse(data.updated_at)};
+ return {id:data.reference,...(data.phone_template?{phoneTemplate:data.phone_template}:{}),server:true,fulfillmentType:data.fulfillment_type||'unspecified',fulfillment:data.fulfillment||null,refund:data.refund||null,mode:data.mode,status:data.status==='completed'?'collected':data.status,priceCents:Math.round(Number(data.amount)*100),currency:data.currency,revision:data.revision,stationId:data.station_id,customerEmail:data.customer_email,pass,oldCodes:[...new Set([...(previous?.oldCodes||[]),...(previous&&previous.pass.code!==pass.code?[previous.pass.code]:[])])],createdAt:Date.parse(data.created_at),updatedAt:Date.parse(data.updated_at)};
 }
 export function checkoutBody(draft,{accepted,email='',account,amount,provider='demo',mode='demo'}){
  const customer=account?.authenticated?account.customer:null;
- return {request_key:draft.requestKey,payment_provider:provider,payment_mode:mode,accepted,
+ return {request_key:draft.requestKey,fulfillment_type:draft.fulfillmentType||'pickup',payment_provider:provider,payment_mode:mode,accepted,
   customer_id:customer?.id||null,...(customer?{}:{customer_email:email}),expected_amount:amount,snapshot:draft.pass};
 }
 export function checkoutEmailField(account){

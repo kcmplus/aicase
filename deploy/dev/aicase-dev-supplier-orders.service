@@ -1,0 +1,20 @@
+[Unit]
+Description=Push customer-paid orders to their selected supplier device
+After=network-online.target postgresql.service
+Wants=network-online.target
+ConditionPathExists=/opt/aicase-dev/current/backend/management_api/management/commands/dispatch_supplier_orders.py
+ConditionPathExists=!/var/lib/aicase-dev/deploying
+
+[Service]
+Type=oneshot
+User=aicase-dev
+Group=aicase-dev
+WorkingDirectory=/opt/aicase-dev/current/backend
+EnvironmentFile=/etc/aicase-dev/backend.env
+ExecStart=/opt/aicase-dev/current/.venv/bin/python manage.py dispatch_supplier_orders
+TimeoutStartSec=300
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+UMask=0027

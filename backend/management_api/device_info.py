@@ -8,6 +8,14 @@ from .models import Device
 from .store_catalog import store_models
 
 
+def public_device_identity(device):
+    # Location is maintained as the public installation address in inventory.
+    # Never copy arbitrary supplier profile/contact fields to the customer page.
+    return {'device_id': device.vendor_device_id, 'shop_id': device.connection.shop_id,
+            'name': device.name, 'number': device.provider_profile.get('device_num', ''),
+            'location': device.location_note}
+
+
 @never_cache
 @api_view(['GET'])
 @permission_classes([AllowAny])
@@ -23,11 +31,10 @@ def public_device_info(request):
         raise NotFound('设备未开放或编号不明确，请检查设备链接。')
     device = matches[0]
     catalog = store_models({'device_id': device_id, 'shop_id': shop_id})
-    profile, config = device.provider_profile, device.provider_config
+    config = device.provider_config
     # Do not infer online/ready from stale, undocumented vendor status codes.
     return Response({
-        'device_id': device_id, 'shop_id': shop_id, 'name': device.name,
-        'number': profile.get('device_num', ''), 'online_status': 'unknown',
+        **public_device_identity(device), 'online_status': 'unknown',
         'currency': config.get('currency', ''), 'print_type': config.get('print_type', ''),
         'info_updated_at': device.last_success_at, 'identity_updated_at': device.provider_profile_at,
         'inventory': {'availability': catalog['availability'], 'updated_at': device.last_success_at,

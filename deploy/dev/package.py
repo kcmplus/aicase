@@ -11,7 +11,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def allowed_source(name, environment='dev'):
     units = {f'deploy/{environment}/aicase-{environment}-ai-cleanup.service',
-             f'deploy/{environment}/aicase-{environment}-ai-cleanup.timer'}
+             f'deploy/{environment}/aicase-{environment}-ai-cleanup.timer',
+             f'deploy/{environment}/aicase-{environment}-supplier-orders.service',
+             f'deploy/{environment}/aicase-{environment}-supplier-orders.timer'}
     if environment == 'dev':
         units.update({'deploy/dev/aicase-dev-inventory.service', 'deploy/dev/aicase-dev-inventory.timer'})
     if environment == 'prod':

@@ -168,12 +168,17 @@ class PrintOrderSerializer(serializers.ModelSerializer):
     customer_id = serializers.UUIDField(read_only=True, allow_null=True)
     class Meta:
         model = PrintOrder
-        fields = ["id", "reference", "customer_id", "customer_email", "model_name", "status", "amount", "currency", "mode", "revision", "station_id", "notes", "created_at", "updated_at", "refund_status"]
+        fields = ["id", "reference", "customer_id", "customer_email", "model_name", "status", "amount", "currency", "mode", "revision", "station_id", "fulfillment_type", "notes", "created_at", "updated_at", "refund_status"]
         read_only_fields = [f for f in fields if f != "notes"]
 
 class PrintOrderDetailSerializer(PrintOrderSerializer):
     refund = serializers.SerializerMethodField()
     can_refund = serializers.SerializerMethodField()
+    fulfillment = serializers.SerializerMethodField()
+
+    def get_fulfillment(self, order):
+        from .supplier_orders import public_state
+        return public_state(order)
 
     def get_refund(self, order):
         from .refunds import refund_data
@@ -185,8 +190,8 @@ class PrintOrderDetailSerializer(PrintOrderSerializer):
         return bool(request and request.user.is_superuser and eligible(order) and not hasattr(order, 'refund'))
 
     class Meta(PrintOrderSerializer.Meta):
-        fields = PrintOrderSerializer.Meta.fields + ["snapshot", "stripe_session_id", "stripe_payment_intent", "airwallex_payment_intent", "paid_at", "refund", "can_refund"]
-        read_only_fields = PrintOrderSerializer.Meta.read_only_fields + ["snapshot", "stripe_session_id", "stripe_payment_intent", "airwallex_payment_intent", "paid_at", "refund", "can_refund"]
+        fields = PrintOrderSerializer.Meta.fields + ["snapshot", "stripe_session_id", "stripe_payment_intent", "airwallex_payment_intent", "paid_at", "refund", "can_refund", "fulfillment"]
+        read_only_fields = PrintOrderSerializer.Meta.read_only_fields + ["snapshot", "stripe_session_id", "stripe_payment_intent", "airwallex_payment_intent", "paid_at", "refund", "can_refund", "fulfillment"]
 
 class AuditLogSerializer(serializers.ModelSerializer):
     class Meta:

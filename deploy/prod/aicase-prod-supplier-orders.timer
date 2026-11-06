@@ -1,0 +1,10 @@
+[Unit]
+Description=Check paid supplier orders five seconds after each batch
+
+[Timer]
+OnBootSec=15s
+OnUnitInactiveSec=5s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

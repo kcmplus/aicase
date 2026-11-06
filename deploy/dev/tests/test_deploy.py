@@ -79,7 +79,8 @@ elif name == 'curl' and fail == 'health':
         (tree / 'VERSION').write_text('a' * 40 + '\n')
         (tree / 'deploy/dev').mkdir(parents=True)
         for name in ['aicase-dev-ai-cleanup.service', 'aicase-dev-ai-cleanup.timer',
-                     'aicase-dev-inventory.service', 'aicase-dev-inventory.timer']:
+                     'aicase-dev-inventory.service', 'aicase-dev-inventory.timer',
+                     'aicase-dev-supplier-orders.service', 'aicase-dev-supplier-orders.timer']:
             shutil.copyfile(Path(__file__).resolve().parents[1] / name, tree / 'deploy/dev' / name)
         with tarfile.open(self.root / 'release.tar.gz', 'w:gz') as archive:
             for path in tree.iterdir(): archive.add(path, arcname=path.name)

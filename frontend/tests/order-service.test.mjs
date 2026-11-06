@@ -74,6 +74,21 @@ test('redirect only accepts Stripe hosted checkout',()=>{
 });
 
 import {airwallexOptions,openAirwallexCheckout} from '../storefront/airwallex-checkout.js';
+test('checkout freezes delivery choice while historical responses stay unclassified',()=>{
+ const draft={requestKey:crypto.randomUUID(),pass:pass(),fulfillmentType:'air'};
+ const body=checkoutBody(draft,{accepted:true,amount:'10.00'});
+ assert.equal(body.fulfillment_type,'air');
+ const data={reference:crypto.randomUUID(),snapshot:draft.pass,status:'paid',amount:'10.00',currency:'USD',mode:'airwallex_live',revision:1,created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+ assert.equal(savedOrder(data).fulfillmentType,'unspecified');
+ assert.equal(savedOrder({...data,fulfillment_type:'courier'}).fulfillmentType,'courier');
+});
+test('delivery payment status never gives station collection instructions',()=>{
+ for(const fulfillmentType of ['courier','air']){
+  const view=paymentState({status:'ready',fulfillmentType});
+  assert.equal(view.title,'Your delivery order.');
+  assert.doesNotMatch(view.message,/station|collect/i);
+ }
+});
 const airwallexData=()=>({provider:'airwallex',order:{reference:'b01737e5-c5ab-4765-8834-cbd92dfeaf81',mode:'airwallex_test',status:'pending',currency:'USD'},checkout:{env:'demo',mode:'payment',currency:'USD',intent_id:'int_test123',client_secret:'temporary-client-secret',successUrl:'https://shop.example.com/#payment?order=b01737e5-c5ab-4765-8834-cbd92dfeaf81&result=success'}});
 test('Airwallex config and order remain pending until backend confirmation',async()=>{
  assert.deepEqual(await getPaymentConfig(async()=>({ok:true,json:async()=>({provider:'airwallex',mode:'test',available:true})})),{provider:'airwallex',mode:'test',available:true});

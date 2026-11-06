@@ -85,7 +85,7 @@ class DeviceDiscoveryTests(TestCase):
 class PublicDeviceInfoTests(TestCase):
     def setUp(self):
         connection=DeviceProviderConnection.objects.create(name='secret merchant name',base_url='https://shop.widermatrix.cn',shop_id='146',api_key_ciphertext='secret-key')
-        self.device=Device.objects.create(connection=connection,vendor_device_id='401',name='Test station',
+        self.device=Device.objects.create(connection=connection,vendor_device_id='401',name='Test station',location_note='Mall · Level 1 east entrance',
             provider_profile={'device_num':'WM-401','device_password':'do-not-expose'},
             provider_config={'currency':'USD','print_type':'600dpi','last_login_ip':'private-ip'},last_success_at=timezone.now())
         brand=Brand.objects.create(code='test',name='Test')
@@ -100,6 +100,8 @@ class PublicDeviceInfoTests(TestCase):
         response=self.client.get(self.url)
         self.assertEqual(response.status_code,200)
         self.assertEqual(response.data['number'],'WM-401')
+        self.assertEqual(response.data['name'],'Test station')
+        self.assertEqual(response.data['location'],'Mall · Level 1 east entrance')
         self.assertEqual(response.data['inventory']['model_count'],1)
         self.assertEqual(response.data['online_status'],'unknown')
         self.assertFalse(response.data['fulfillment_connected'])

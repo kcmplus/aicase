@@ -21,6 +21,7 @@ class ReleaseBoundaryTests(unittest.TestCase):
         for name in ['backend/manage.py', 'backend/requirements.txt',
                      'deploy/dev/aicase-dev-ai-cleanup.service', 'deploy/dev/aicase-dev-ai-cleanup.timer',
                      'deploy/dev/aicase-dev-inventory.service', 'deploy/dev/aicase-dev-inventory.timer',
+                     'deploy/dev/aicase-dev-supplier-orders.service', 'deploy/dev/aicase-dev-supplier-orders.timer',
                      'backend/management_api/migrations/0008_ai_render.py',
                      'backend/management_api/seed/catalog.json',
                      'frontend/storefront/device.html',

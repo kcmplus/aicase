@@ -29,6 +29,7 @@ class DeviceProviderConnection(Timestamped):
     name = models.CharField(max_length=120)
     base_url = models.URLField()
     shop_id = models.CharField(max_length=40)
+    payment_currency = models.CharField(max_length=3, blank=True, default='USD', choices=[('', '未确认'), ('USD', 'USD')])
     active = models.BooleanField(default=True)
     api_key_ciphertext = models.TextField(editable=False)
     key_last_four = models.CharField(max_length=4, editable=False)
@@ -216,6 +217,15 @@ class PricingPlan(CatalogItem):
         constraints = [models.UniqueConstraint(fields=["kind"], condition=models.Q(active=True), name="one_active_plan_per_kind")]
 
 class PrintOrder(Timestamped):
+    class Fulfillment(models.TextChoices):
+        UNSPECIFIED = 'unspecified', '待确认配送方式'
+        PICKUP = 'pickup', '设备现场自取'
+        COURIER = 'courier', '快递配送'
+        AIR = 'air', '空运配送'
+
+    # No automatic classification of historical paid orders or supplier writes.
+    fulfillment_type = models.CharField(max_length=20, choices=Fulfillment.choices,
+                                        default=Fulfillment.UNSPECIFIED)
     reference = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     owner_hash = models.CharField(max_length=64, blank=True, db_index=True, editable=False)
     request_key = models.UUIDField(null=True, unique=True, editable=False)
@@ -253,6 +263,50 @@ class PrintRefund(Timestamped):
     reason = models.CharField(max_length=128)
     requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
     completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        default_permissions = ()
+
+
+class SupplierOrder(Timestamped):
+    """Durable cloud submission; never a second hardware print queue."""
+    order = models.OneToOneField(PrintOrder, on_delete=models.PROTECT, related_name='supplier_order')
+    device = models.ForeignKey(Device, on_delete=models.PROTECT)
+    inventory_item = models.ForeignKey(DeviceProduct, on_delete=models.PROTECT)
+    business_number = models.CharField(max_length=32, unique=True)
+    goods_id = models.PositiveBigIntegerField()
+    order_revision = models.PositiveIntegerField()
+    snapshot_sha256 = models.CharField(max_length=64)
+    state = models.CharField(max_length=20, default='draft', choices=[
+        ('draft', '待打印文件'), ('prepared', '待推送'), ('submitting', '正在推送'),
+        ('submitted', '已推送'), ('unknown', '推送结果待核实')])
+    vendor_id = models.CharField(max_length=80, blank=True)
+    trade_no = models.CharField(max_length=120, blank=True)
+    print_image = models.BinaryField(default=bytes, editable=False)
+    preview_image = models.BinaryField(default=bytes, editable=False)
+    image_sha256 = models.CharField(max_length=64, blank=True)
+    submitted_at = models.DateTimeField(null=True, editable=False)
+    message = models.CharField(max_length=200, blank=True)
+    print_confirmed_at = models.DateTimeField(null=True, editable=False)
+    release_state = models.CharField(max_length=20, default='idle', editable=False)
+    release_claim = models.UUIDField(null=True, editable=False)
+    native_print_status = models.CharField(max_length=30, blank=True, editable=False)
+    native_pay_status = models.CharField(max_length=30, blank=True, editable=False)
+    observed_at = models.DateTimeField(null=True, editable=False)
+    cloud_status = models.JSONField(default=dict, editable=False)
+    cloud_checked_at = models.DateTimeField(null=True, editable=False)
+    cloud_synced_at = models.DateTimeField(null=True, editable=False)
+    inventory_refresh_pending = models.BooleanField(default=False, editable=False)
+
+    class Meta:
+        default_permissions = ()
+
+
+class TerminalCredential(Timestamped):
+    """Retired credentials retained for history; no runtime authenticates them."""
+    device = models.OneToOneField(Device, on_delete=models.CASCADE, related_name='terminal_credential')
+    token_hash = models.CharField(max_length=64, unique=True, editable=False)
+    active = models.BooleanField(default=True)
 
     class Meta:
         default_permissions = ()

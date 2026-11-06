@@ -18,7 +18,7 @@ from rest_framework.views import APIView
 
 from .ai_service import SuperuserOnly
 from .audit import audit
-from .models import PrintOrder, PrintRefund, AuditLog
+from .models import PrintOrder, PrintRefund, AuditLog, SupplierOrder
 from .orders import StrictSerializer, Conflict
 from .stripe_payments import credentials
 
@@ -42,8 +42,30 @@ def refund_data(order, private=False):
     return data
 
 
+def printing_in_flight(order):
+    row = SupplierOrder.objects.filter(order=order).defer('print_image', 'preview_image').first()
+    if not row:
+        return False
+    try:
+        supplier_paid = Decimal(str(row.cloud_status.get('pay_money', '0'))) > 0
+    except InvalidOperation:
+        supplier_paid = True  # Malformed accounting history requires review.
+    cancelled_before_execution = bool(row and row.cloud_status.get('phase') == 'cancelled'
+        and row.cloud_status.get('phase_verified') and row.cloud_status.get('print_status') == 0
+        and row.cloud_status.get('shipment_status') == 0 and row.cloud_synced_at
+        and row.cloud_synced_at >= timezone.now()-timedelta(seconds=60))
+    supplier_progress = (row.cloud_status.get('print_status') not in (None, 0)
+                         or row.cloud_status.get('shipment_status') not in (None, 0))
+    return bool(((row.print_confirmed_at and row.release_state != 'idle') or supplier_paid or supplier_progress)
+        and row.native_print_status not in ('deliver_success', 'grab_failed', 'print_failed', 'deliver_failed')
+        and not cancelled_before_execution
+        and not row.cloud_status.get('dispensed_confirmed')
+        and not (row.cloud_status.get('phase_verified') and row.cloud_status.get('phase') in ('dispensed', 'print_failed', 'delivery_failed')))
+
+
 def eligible(order):
     return (order.status in PAID_STATES and order.paid_at is not None and order.amount > 0
+            and not printing_in_flight(order)
             and order.currency == 'USD' and
             ((order.mode in ('airwallex_test', 'airwallex_live') and bool(order.airwallex_payment_intent))
              or (order.mode in ('stripe_test', 'stripe_live') and bool(order.stripe_payment_intent))))
@@ -200,10 +222,15 @@ class AdminRefund(APIView):
             order = get_object_or_404(PrintOrder.objects.select_for_update(), pk=pk)
             refund = getattr(order, 'refund', None)
             if not refund:
+                if printing_in_flight(order):
+                    raise Conflict('顾客已确认打印，请先核对设备执行结果后再处理退款。')
                 if data['revision'] != order.revision:
                     raise Conflict('订单已更新，请刷新后再确认退款。')
                 if not eligible(order):
                     raise Conflict('仅已付款的 Stripe / Airwallex 订单支持原路退款。')
+                # Preserve historical in-flight claims above. Only an unclaimed
+                # legacy intent may be revoked; retired endpoints cannot release it.
+                SupplierOrder.objects.filter(order=order, release_state='idle').update(print_confirmed_at=None)
                 refund = PrintRefund.objects.create(order=order, amount=order.amount, currency=order.currency,
                     reason=data['reason'], requested_by=request.user)
                 order.revision += 1

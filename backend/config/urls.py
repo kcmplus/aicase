@@ -6,7 +6,7 @@ from rest_framework.routers import DefaultRouter
 from management_api import views
 from management_api.inventory import (ConnectionViewSet, DeviceViewSet, ProductViewSet,
                                      StockViewSet, RunViewSet, InventoryOptions)
-from management_api.orders import StoreOrders, StoreOrder, StoreOrderAction
+from management_api.orders import StoreOrders, StoreOrder, StoreOrderAction, OrderFulfillment
 from management_api.ai_service import AIServiceSettingsView, AIServiceCheckView
 from management_api.ai_generation import AIAccountView, AIRenders, AIRenderDetail, AIRenderImage
 from management_api.ai_reporting import AIUsageView, AICallLogsView, AIRenderCostView, AIAdminImageView
@@ -20,6 +20,8 @@ from management_api.airwallex_payments import AirwallexSettings, AirwallexWebhoo
 
 from management_api.refunds import AdminRefund
 from management_api.device_info import public_device_info
+from management_api.supplier_orders import OrderTarget, OrderFiles, ConfirmSupplierPrint, SupplierFile, FulfillmentConfig
+from management_api.terminal_orders import RetiredTerminalAPI
 
 router = DefaultRouter()
 router.register('device-connections', ConnectionViewSet)
@@ -54,6 +56,15 @@ urlpatterns = [
     path("api/v1/store/ai-renders/<uuid:reference>/", AIRenderDetail.as_view()),
     path("api/v1/store/ai-renders/<uuid:reference>/image/", AIRenderImage.as_view()),
     path("api/v1/store/orders/", StoreOrders.as_view()),
+    path("api/v1/store/fulfillment-config/", FulfillmentConfig.as_view()),
+    path("api/v1/store/orders/<uuid:reference>/device/", OrderTarget.as_view()),
+    path("api/v1/store/orders/<uuid:reference>/print-files/", OrderFiles.as_view()),
+    path("api/v1/store/orders/<uuid:reference>/confirm-print/", ConfirmSupplierPrint.as_view()),
+    path("api/v1/supplier-order-files/<str:token>/", SupplierFile.as_view()),
+    path("api/v1/store/orders/<uuid:reference>/fulfillment/", OrderFulfillment.as_view()),
+    path("api/v1/terminal/orders/", RetiredTerminalAPI.as_view()),
+    path("api/v1/terminal/orders/<uuid:reference>/claim/", RetiredTerminalAPI.as_view()),
+    path("api/v1/terminal/orders/<uuid:reference>/observe/", RetiredTerminalAPI.as_view()),
     path("api/v1/store/orders/<uuid:reference>/", StoreOrder.as_view()),
     path("api/v1/store/orders/<uuid:reference>/actions/", StoreOrderAction.as_view()),
     path("api/health/", lambda request: JsonResponse({"status": "ok"})),

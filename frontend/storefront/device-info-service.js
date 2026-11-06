@@ -11,6 +11,8 @@ export async function loadDeviceInfo(scope,fetcher=fetch){
  if(!response.ok)throw Error(response.status===404?'device-unavailable':'connection');
  const data=await response.json();
  if(data.device_id!==scope.deviceId||data.shop_id!==scope.shopId||typeof data.name!=='string'||
+    (data.location!==undefined&&(typeof data.location!=='string'||data.location.length>200))||
+    (data.number!==undefined&&(typeof data.number!=='string'||data.number.length>120))||
     !Array.isArray(data.models)||!data.models.every(m=>typeof m.name==='string'&&typeof m.brand==='string')||
     !['ready','updating','empty'].includes(data.inventory?.availability)||data.inventory.model_count!==data.models.length||
     data.fulfillment_connected!==false)throw Error('invalid-response');

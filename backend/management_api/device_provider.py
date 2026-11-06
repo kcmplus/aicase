@@ -36,9 +36,9 @@ class DeviceProvider:
         self.authorization = decrypt_api_key(connection)
 
     def get(self, path, device_id=None, **params):
-        if path not in ('/shop/device/list', '/shop/goods/list', '/mp/common/getDeviceInfo', '/Mp/Product/getDeviceGoodsInfo'):
+        if path not in ('/shop/device/list', '/shop/goods/list', '/shop/order/list', '/mp/common/getDeviceInfo', '/Mp/Product/getDeviceGoodsInfo'):
             raise ProviderError('不支持此设备查询。')
-        query = {'shop_id': self.shop_id, **params}
+        query = dict(params) if path == '/shop/order/list' else {'shop_id': self.shop_id, **params}
         if device_id is not None:
             query['device_id'] = device_id
         for attempt in range(2):

@@ -60,5 +60,10 @@ class PaymentCheckout(StoreOrders):
         from .stripe_payments import StripeCheckout
         from .airwallex_payments import AirwallexCheckout
         order = get_object_or_404(PrintOrder, reference=reference, owner_hash=owner(request))
+        from .fulfillment import require_checkout
+        require_checkout(order)
+        from .models import SupplierOrder
+        if SupplierOrder.objects.filter(order=order, state='draft').exists():
+            raise Conflict('Upload the final print files before continuing to payment.')
         view = AirwallexCheckout if order.mode.startswith('airwallex_') else StripeCheckout
         return view().post(request, reference)
