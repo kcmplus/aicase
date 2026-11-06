@@ -160,3 +160,51 @@ test('QR entry does not mistake partial pages or failures for a single order or 
   assert.equal(result.route,'orders');assert.ok(result.error);
  }
 });
+
+
+import {stationScanPrompt,previewStationPanel,stationScanDestination,acquireStationCamera} from '../storefront/station-scanner.js';
+import decodeQR from '../storefront/vendor/jsqr.js';
+import {create as encodeQR} from '../storefront/vendor/qr.js';
+test('phone orders use scan actions instead of displaying a design QR',()=>{
+ const plain=previewStationPanel({mode:'demo',status:'paid'},{lang:'zh-CN'});
+ assert.match(plain,/扫描设备二维码/);assert.match(plain,/没有实际收款/);assert.doesNotMatch(plain,/<img|download=|confirm-device-print|send-device-order/);
+ const scoped=previewStationPanel({mode:'demo',status:'paid'},{scope:'device_id=401&shop_id=146',station:{device_id:'401',shop_id:'146',name:'Test station'},lang:'en-US'});
+ assert.match(scoped,/Test station/);assert.doesNotMatch(scoped,/data-action="scan-station"|<img|confirm-device-print|send-device-order/);
+ for(const fulfillmentType of ['courier','air'])assert.equal(previewStationPanel({...order(),fulfillmentType}), '');
+ assert.equal(previewStationPanel({...order(),refund:{status:'succeeded'}}),'');
+ assert.match(stationScanPrompt('zh-CN'),/机器屏幕|打印机.*屏幕/);
+});
+test('scanning preserves the current order and rejects unrelated codes and destinations',()=>{
+ const current='https://shop.example/?lang=zh-CN#payment?order='+soleRef;
+ const target=stationScanDestination('https://shop.example/?device_id=401&shop_id=146#home',current);
+ assert.equal(new URL(target).hash,new URL(current).hash);
+ assert.equal(new URL(target).searchParams.get('lang'),'zh-CN');
+ assert.equal(new URL(target).searchParams.get('device_id'),'401');
+ for(const bad of ['POP-1117','https://evil.example/?device_id=401&shop_id=146','https://shop.example/?device_id=401','javascript:alert(1)'])assert.throws(()=>stationScanDestination(bad,current));
+});
+test('a camera grant after the scan dialog closes immediately stops its tracks',async()=>{
+ let stopped=0,options;
+ const stream={getTracks:()=>[{stop:()=>stopped++}]};
+ assert.equal(await acquireStationCamera({getUserMedia:async value=>{options=value;return stream;}},()=>true),null);
+ assert.equal(stopped,1);assert.equal(options.audio,false);assert.equal(options.video.facingMode.ideal,'environment');
+ assert.equal(await acquireStationCamera({getUserMedia:async()=>stream},()=>false),stream);
+ assert.equal(stopped,1);
+ await assert.rejects(acquireStationCamera({getUserMedia:async()=>{throw Error('permission denied');}},()=>false));
+});
+test('the bundled decoder reads a device QR without any remote service',()=>{
+ const value='https://shop.example/?device_id=401&shop_id=146',matrix=encodeQR(value,{errorCorrectionLevel:'M'}).modules;
+ const scale=6,width=(matrix.size+8)*scale,pixels=new Uint8ClampedArray(width*width*4).fill(255);
+ for(let y=0;y<matrix.size;y++)for(let x=0;x<matrix.size;x++)if(matrix.get(y,x)){
+  for(let dy=0;dy<scale;dy++)for(let dx=0;dx<scale;dx++){
+   const offset=(((y+4)*scale+dy)*width+(x+4)*scale+dx)*4;
+   pixels[offset]=pixels[offset+1]=pixels[offset+2]=0;
+  }
+ }
+ assert.equal(decodeQR(pixels,width,width).data,value);
+});
+
+test('no-charge test orders retain dispatch states but cannot fabricate zero-payment release',()=>{
+ const current={...order(),mode:'free_test',priceCents:0,fulfillment:{state:'submitted',release_available:false,can_confirm_print:false,zero_release_unconfirmed:true}};
+ assert.equal(fulfillmentView(current).state,'submitted');
+ assert.equal(fulfillmentView(current).canPrint,false);assert.equal(fulfillmentView(current).releasePending,true);
+});

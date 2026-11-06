@@ -163,3 +163,14 @@ test('refund states suppress payment and fulfillment code without rewriting orde
  }
  assert.equal(paymentState({status:'paid',refund:{status:'succeeded'}}).showNewOrder,true);
 });
+
+test('no-charge checkout is explicit and never claims money was collected',async()=>{
+ const config={provider:'free',mode:'test',available:true,zero_price_test:true};
+ assert.deepEqual(await getPaymentConfig(async()=>({ok:true,json:async()=>config})),config);
+ for(const value of [{...config,mode:'live'},{...config,zero_price_test:false}])await assert.rejects(getPaymentConfig(async()=>({ok:true,json:async()=>value})),/Invalid/);
+ const view=paymentState({mode:'free_test',status:'paid',fulfillmentType:'pickup'});
+ assert.equal(view.title,'No-charge order confirmed.');assert.equal(view.canPay,false);
+ assert.doesNotMatch(view.message,/payment is confirmed/i);
+ const body=checkoutBody({requestKey:crypto.randomUUID(),pass:pass()},{accepted:true,amount:'0.00',provider:'free',mode:'test'});
+ assert.equal(body.expected_amount,'0.00');assert.equal(body.payment_provider,'free');
+});

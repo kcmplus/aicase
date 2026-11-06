@@ -50,7 +50,7 @@ export function fulfillmentView(order){
  const f=order.fulfillment;
  if(order.refund&&order.refund.status!=='failed')return {state:'refund'};
  if(!isPickup(order))return {state:['courier','air'].includes(order.fulfillmentType)?'delivery':'unspecified'};
- if(!/_(live)$/.test(order.mode))return {state:'test'};
+ if(!/_(live)$/.test(order.mode)&&order.mode!=='free_test')return {state:'test'};
  if(order.status==='ready')return {state:'delivered'};
  const cloud=f?.cloud_status;
  if(cloud?.phase==='cancelled'||cloud?.status===4)return {state:'station_cancelled'};
@@ -70,7 +70,7 @@ export function fulfillmentView(order){
   releasePending:f.state==='submitted'&&f.release_available!==true};
 }
 export async function prepareDeviceOrder(order,scope,{save,request=orderRequest,render=exportCase,fetcher=fetch}={}){
- if(!isPickup(order)||!/^(stripe|airwallex)_live$/.test(order.mode))return order;
+ if(!isPickup(order)||(!/^(stripe|airwallex)_live$/.test(order.mode)&&order.mode!=='free_test'))return order;
  const ids=scopeIds(scope)||order.fulfillment&&{device_id:order.fulfillment.device_id,shop_id:order.fulfillment.shop_id};
  if(!ids)return order;
  if(order.fulfillment&&(order.fulfillment.device_id!==ids.device_id||order.fulfillment.shop_id!==ids.shop_id))throw Error('This order has already been sent to another station.');

@@ -179,6 +179,9 @@ def record_merchant_payment(pk):
         from .supplier_orders import PrintReleaseUnavailable
         raise PrintReleaseUnavailable()
     row = SupplierOrder.objects.select_related('device__connection', 'order').defer('print_image', 'preview_image').get(pk=pk)
+    if row.order.mode == 'free_test':
+        from .fulfillment import ZERO_PAYMENT_UNCONFIRMED
+        raise Conflict(ZERO_PAYMENT_UNCONFIRMED)
     if row.release_state != 'idle' or row.print_confirmed_at:
         return  # Durable idempotency, including old/unknown native claims.
     try:

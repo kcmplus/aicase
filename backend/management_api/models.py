@@ -229,7 +229,7 @@ class PrintOrder(Timestamped):
     reference = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     owner_hash = models.CharField(max_length=64, blank=True, db_index=True, editable=False)
     request_key = models.UUIDField(null=True, unique=True, editable=False)
-    mode = models.CharField(max_length=20, default="legacy", choices=[("legacy", "历史订单"), ("demo", "演示支付"), ("stripe_test", "Stripe 测试"), ("stripe_live", "Stripe 正式"), ("airwallex_test", "Airwallex 测试"), ("airwallex_live", "Airwallex 正式")])
+    mode = models.CharField(max_length=20, default="legacy", choices=[("legacy", "历史订单"), ("free_test", "0元免付联调"), ("demo", "演示支付"), ("stripe_test", "Stripe 测试"), ("stripe_live", "Stripe 正式"), ("airwallex_test", "Airwallex 测试"), ("airwallex_live", "Airwallex 正式")])
     stripe_session_id = models.CharField(max_length=255, null=True, blank=True, unique=True, editable=False)
     stripe_checkout_url = models.TextField(blank=True, editable=False)
     stripe_payment_intent = models.CharField(max_length=255, blank=True, editable=False)

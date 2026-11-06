@@ -46,6 +46,13 @@ def real_paid(order):
             and not PrintRefund.objects.filter(order=order).exclude(status='failed').exists())
 
 
+def can_dispatch_payment(order):
+    # Explicit server-issued no-charge orders are distinct from demo/channel tests.
+    return real_paid(order) or (order.mode == 'free_test' and order.amount == 0
+        and order.status == 'paid' and order.paid_at is not None
+        and not PrintRefund.objects.filter(order=order).exclude(status='failed').exists())
+
+
 def audit_state(row, action):
     AuditLog.objects.create(actor_name='Supplier orders', action=action,
         resource='management_api.printorder', object_id=str(row.order_id),
@@ -65,7 +72,8 @@ def public_state(order):
             'release_state': row.release_state, 'print_status': row.native_print_status,
             'cloud_status': row.cloud_status, 'status_updated_at': row.cloud_synced_at,
             'enabled': settings.SUPPLIER_ORDER_ENABLED,
-            'release_available': cloud_release_available(),
+            'release_available': cloud_release_available() and order.mode != 'free_test',
+            'zero_release_unconfirmed': order.mode == 'free_test',
             'can_confirm_print': (order.fulfillment_type == PrintOrder.Fulfillment.PICKUP
                                   and row.state == 'submitted' and row.release_state == 'idle' and not row.print_confirmed_at
                                   and not row.cloud_status.get('payment_recorded')
@@ -88,7 +96,7 @@ def mutable_order(request, reference):
         SessionAuthentication().enforce_csrf(request)
     order = get_object_or_404(PrintOrder.objects.select_for_update(), reference=reference, owner_hash=owner(request))
     require_pickup(order)
-    if order.status not in ('pending', 'paid') or not order.mode.startswith(('stripe_', 'airwallex_')):
+    if order.status not in ('pending', 'paid') or (not order.mode.startswith(('stripe_', 'airwallex_')) and order.mode != 'free_test'):
         raise Conflict('This order cannot be sent to a device.')
     if PrintRefund.objects.filter(order=order).exclude(status='failed').exists():
         raise Conflict('An order with an active refund cannot be printed.')
@@ -189,6 +197,9 @@ class ConfirmSupplierPrint(StoreOrders):
             row = get_object_or_404(SupplierOrder.objects.select_for_update(), order=order)
             if not isinstance(request.data, dict) or set(request.data) != {'confirm'} or request.data['confirm'] is not True:
                 raise serializers.ValidationError('Confirm that you are at the selected device.')
+            if order.mode == 'free_test':
+                from .fulfillment import ZERO_PAYMENT_UNCONFIRMED
+                raise Conflict(ZERO_PAYMENT_UNCONFIRMED)
             if (row.state != 'submitted' or not real_paid(order)
                     or not row.device.active or not row.device.connection.active):
                 raise Conflict('This order is not ready for print confirmation.')
@@ -251,7 +262,7 @@ def dispatch_order(pk):
         order = PrintOrder.objects.select_for_update().get(pk=order_pk)
         row = SupplierOrder.objects.select_for_update().select_related('device__connection').get(pk=pk)
         if (order.fulfillment_type != PrintOrder.Fulfillment.PICKUP
-                or row.state != 'prepared' or not real_paid(order)):
+                or row.state != 'prepared' or not can_dispatch_payment(order)):
             return False
         if (row.snapshot_sha256 != digest(order.snapshot) or not row.device.active
                 or not row.device.connection.active or not row.image_sha256):
@@ -314,7 +325,8 @@ def dispatch_pending(limit=20):
     SupplierOrder.objects.filter(state='submitting', submitted_at__lt=timezone.now()-timedelta(minutes=2)).update(
         state='unknown', message='推单结果待核实，请联系工作人员；请勿重复下单。')
     ids = SupplierOrder.objects.filter(state='prepared', order__fulfillment_type=PrintOrder.Fulfillment.PICKUP,
-        order__status='paid', order__paid_at__isnull=False, order__amount__gt=0,
-        order__mode__in=('stripe_live', 'airwallex_live')).filter(
+        order__status='paid', order__paid_at__isnull=False).filter(
+        Q(order__mode__in=('stripe_live', 'airwallex_live'), order__amount__gt=0) |
+        Q(order__mode='free_test', order__amount=0)).filter(
         Q(order__refund__isnull=True) | Q(order__refund__status='failed')).order_by('updated_at', 'pk').values_list('pk', flat=True)[:limit]
     return sum(dispatch_order(pk) for pk in list(ids))

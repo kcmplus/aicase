@@ -1,12 +1,13 @@
 """One active channel for new orders; existing orders retain their channel."""
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import AirwallexConfig, StripeConfig, PrintOrder
+from .models import AirwallexConfig, StripeConfig, PrintOrder, PricingPlan
 from .orders import StoreOrders, owner, Conflict
 from .audit import audit
 
@@ -28,6 +29,9 @@ def disable_other(request, config):
 
 def payment_config():
     from . import stripe_payments, airwallex_payments
+    # A zero-priced print plan is an explicit no-charge workflow test, never a live receipt.
+    if PricingPlan.objects.filter(kind='print', active=True, price=0).exists():
+        return {'provider': 'free', 'mode': 'test', 'available': True, 'zero_price_test': True}
     config = airwallex_payments.current_config()
     if config.enabled:
         return airwallex_payments.payment_config(config)
@@ -39,6 +43,8 @@ def checkout_settings(provider, mode):
     public = payment_config()
     if provider != public['provider'] or mode != public['mode']:
         raise Conflict('Payment settings changed. Reload to review the payment method.')
+    if public.get('zero_price_test'):
+        return {'mode': 'free_test', 'status': 'paid', 'paid_at': timezone.now()}
     if provider == 'airwallex':
         return airwallex_payments.checkout_settings(mode)
     return stripe_payments.checkout_settings(provider, mode)
@@ -62,6 +68,8 @@ class PaymentCheckout(StoreOrders):
         order = get_object_or_404(PrintOrder, reference=reference, owner_hash=owner(request))
         from .fulfillment import require_checkout
         require_checkout(order)
+        if order.mode == 'free_test':
+            raise Conflict('No payment is required for this order.')
         from .models import SupplierOrder
         if SupplierOrder.objects.filter(order=order, state='draft').exists():
             raise Conflict('Upload the final print files before continuing to payment.')

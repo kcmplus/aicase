@@ -42,7 +42,8 @@ export async function getPaymentConfig(fetcher=fetch,retryOptions){
  if(response.status===503)throw Error('Checkout is temporarily unavailable after 3 retries. Your design is saved. Please try again later.');
  if(!response.ok)throw Error('Payment settings could not be loaded. Please reload and try again.');
  const data=await response.json();
- if(!['demo','stripe','airwallex'].includes(data.provider)||!['demo','test','live'].includes(data.mode)||typeof data.available!=='boolean')throw Error('Invalid payment settings.');
+ if(!['demo','stripe','airwallex','free'].includes(data.provider)||!['demo','test','live'].includes(data.mode)||typeof data.available!=='boolean')throw Error('Invalid payment settings.');
+ if(data.provider==='free'&&(data.mode!=='test'||data.zero_price_test!==true))throw Error('Invalid payment settings.');
  return data;
 }
 export function stripeCheckoutUrl(value){

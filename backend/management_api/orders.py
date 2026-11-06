@@ -160,7 +160,7 @@ class Snapshot(Layout):
 class Checkout(StrictSerializer):
     fulfillment_type = serializers.ChoiceField(choices=['pickup', 'courier', 'air'], default='pickup')
     payment_mode = serializers.ChoiceField(choices=['demo', 'test', 'live'], default='demo')
-    payment_provider = serializers.ChoiceField(choices=['demo', 'stripe', 'airwallex'], default='demo')
+    payment_provider = serializers.ChoiceField(choices=['demo', 'stripe', 'airwallex', 'free'], default='demo')
     request_key = serializers.UUIDField()
     accepted = serializers.BooleanField()
     expected_amount = serializers.DecimalField(max_digits=8, decimal_places=2, min_value=Decimal('0'))

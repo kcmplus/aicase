@@ -229,3 +229,7 @@
 .delivery-notice{padding:16px;background:#f3f0e8;border-radius:12px;font-size:14px;line-height:1.7}
 
 .station-context{margin:0 0 24px;padding:16px 20px;background:#edf3ef;border:1px solid #d6e2da;border-radius:12px;overflow-wrap:anywhere}.station-context .device-scan-notice{margin:8px 0 0;font-size:13px;line-height:1.5}
+
+.station-scanner{width:min(440px,calc(100vw - 32px));max-height:calc(100dvh - 32px);box-sizing:border-box;overflow:auto;border:1px solid #d6e2da;border-radius:20px;padding:22px;color:#242822;background:#faf9f6}.station-scanner::backdrop{background:#16221bc0}.scanner-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.scanner-heading h2{font-size:22px;margin:0}.station-scanner video{display:block;width:100%;max-height:40dvh;aspect-ratio:1;object-fit:cover;background:#17231f;border-radius:12px}.station-scanner p{font-size:14px;line-height:1.6}.station-scanner details{margin-top:18px}.station-scanner summary{cursor:pointer}.station-scanner form{display:grid;gap:14px;margin-top:14px}.station-scanner input{display:block;width:100%;box-sizing:border-box;min-height:44px;margin-top:8px}.station-scanner .scanner-close{min-height:44px;white-space:nowrap}
+
+.station-scanner [hidden]{display:none!important}
