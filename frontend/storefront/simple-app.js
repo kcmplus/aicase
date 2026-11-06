@@ -1,5 +1,5 @@
 import {loadDeviceInfo} from './device-info-service.js';
-import {fulfillmentConfig,prepareDeviceOrder,fulfillmentView,scopeIds,scanScope,stationIdentity,isPickup,deliveryOptions,deliveryLabel} from './fulfillment-service.js';
+import {fulfillmentConfig,prepareDeviceOrder,fulfillmentView,scopeIds,scanScope,stationIdentity,isPickup,deliveryOptions,deliveryLabel,deliveryStatusPanel} from './fulfillment-service.js';
 import {paymentState} from './payment-state.js';
 import {openAirwallexCheckout} from './airwallex-checkout.js';
 import {t,locale,setLocale,localized,languageControl,localize} from './simple-i18n.js';
@@ -491,12 +491,6 @@ function deviceFulfillmentPanel(order){
  ids?`${scannedStation?stationIdentity(scannedStation,{lang:locale()}):`<p>${say('Station details are unavailable. Please refresh before confirming.','设备信息暂时无法获取，请刷新后确认。')}</p><small>${say('Device ID','设备编号')}：${esc(ids.device_id)}</small><button class="text-button" data-action="refresh-device-info" ${passBusy?'disabled':''}>${say('Refresh station details','刷新设备信息')}</button>`}${selection&&scannedStation?`<div class="checkout-case">${passPreview({...order.pass,phoneTemplateId:selection.templateId})}</div><p>${say('Check this station’s template before sending.','请确认此设备的机型预览，再发送订单。')}</p><button class="button secondary full" data-action="send-device-order" ${passBusy?'disabled':''}>${say('Confirm station and send order','确认设备并发送订单')}</button>`:`<p>${scannedStation?say('This station has no stock for this phone model. Scan another station.','此设备暂无该机型库存，请扫描其他设备。'):''}</p>`}`:
  `<p>${say('Go to a printing station and scan its QR code with your phone camera.','请到打印设备前，用手机相机扫描设备二维码。')}</p><form id="bind-device-form"><label>${say('Or paste the station QR link','也可粘贴设备二维码链接')}<input name="device_url" type="url" required autocomplete="off" placeholder="https://…/?device_id=…&shop_id=…"></label><button class="button secondary full" type="submit">${say('Find station','确认设备')}</button></form>`}</section>`;
 }
-function deliveryStatusPanel(order){
- const zh=locale()==='zh-CN',say=(en,cn)=>zh?cn:en;
- if(isPickup(order))return '';
- if(['courier','air'].includes(order.fulfillmentType))return `<section class="device-fulfillment"><h3>${deliveryLabel(order.fulfillmentType,locale())}</h3><p>${say('This order follows a separate delivery process. Contact support for its fulfillment status.','此订单走独立配送流程，请联系客服确认履约进度。')}</p></section>`;
- return `<section class="device-fulfillment"><h3>${deliveryLabel('unspecified',locale())}</h3><p>${order.fulfillment?say('This existing order needs staff review. No new print command will be sent.','此历史订单需要工作人员核对，不会重新下发打印指令。'):say('Confirm how you will receive this order before payment or printing.','付款或打印前，请先确认这笔订单的配送方式。')}</p>${!order.fulfillment&&['pending','paid'].includes(order.status)&&(!order.refund||order.refund.status==='failed')?`<button class="button secondary full" data-action="confirm-pickup" ${passBusy?'disabled':''}>${say('Confirm on-site pickup','确认设备现场自取')}</button>`:''}</section>`;
-}
 function providerOrderPage(order){
  const provider=providerName(order.mode.split('_')[0]);
  const returned=new URLSearchParams(location.hash.split('?')[1]||'').get('result')==='success';
@@ -511,7 +505,7 @@ function providerOrderPage(order){
  ${order.mode.endsWith('_test')?`<p class="payment-environment">${provider} test mode · No real charge.</p>`:view.pending?'<p class="payment-environment">Live payment · Your payment method will be charged.</p>':''}
  ${paymentError?`<p class="error" role="alert">${esc(paymentError)}</p>`:''}
  ${view.canPay&&isPickup(order)?`<button class="button primary full" data-action="pay-provider" data-id="${esc(order.id)}" ${passBusy?'disabled':''}>${passBusy?'Opening secure checkout…':`Continue to ${provider}`}</button>`:''}
- ${deliveryStatusPanel(order)}${deviceFulfillmentPanel(order)}
+ ${deliveryStatusPanel(order,{lang:locale(),busy:passBusy})}${deviceFulfillmentPanel(order)}
  ${needsRefresh?`<button class="text-button payment-refresh" data-action="refresh-payment" ${passBusy?'disabled':''}>Refresh payment status</button>`:''}
  ${view.showCode&&isPickup(order)&&!(devicePrinting.enabled&&order.mode.endsWith('_live'))?`<img class="qr" src="${qr}" alt="Design QR code" width="208" height="208"><p class="human-code">${esc(order.pass.code)}</p><a class="button secondary full" href="${qr}" download="${esc(order.pass.code)}.svg">Save QR code</a>${order.status==='paid'&&!devicePrinting.enabled?'<p class="field-note">Your order is saved. Physical printing is not connected yet.</p>':''}`:''}
  <details class="payment-receipt" data-order="${esc(order.id)}" ${receiptOpen?'open':''}><summary><span>Order details</span><span>${view.fulfilled?`${esc(order.currency)} ${money(order.priceCents)}`:''}</span></summary><div class="payment-receipt-body"><dl><div><dt>Order number</dt><dd>${esc(order.id)}</dd></div><div><dt>Delivery method</dt><dd>${deliveryLabel(order.fulfillmentType,locale())}</dd></div><div><dt>Payment method</dt><dd>${provider}</dd></div><div><dt>Order status</dt><dd>${esc(orderStatus(order.status,order.refund))}</dd></div></dl><a class="text-button" href="#orders">View all my orders →</a><p class="field-note">Keep this browser’s site data to retain access to your order.</p></div></details>

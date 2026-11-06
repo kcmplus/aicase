@@ -6,7 +6,7 @@ import uuid
 
 
 class FulfillmentMigrationTests(TransactionTestCase):
-    def test_old_orders_stay_unclassified_and_old_claims_are_not_replayed(self):
+    def test_old_orders_default_to_pickup_without_replaying_old_claims(self):
         before = [('management_api', '0024_terminal_print_release')]
         after = MigrationExecutor(connection).loader.graph.leaf_nodes('management_api')
         executor = MigrationExecutor(connection)
@@ -34,7 +34,7 @@ class FulfillmentMigrationTests(TransactionTestCase):
             executor.migrate(after)
             apps = executor.loader.project_state(after).apps
             migrated = apps.get_model('management_api', 'PrintOrder').objects.get(pk=order.pk)
-            self.assertEqual(migrated.fulfillment_type, 'unspecified')
+            self.assertEqual(migrated.fulfillment_type, 'pickup')
             self.assertEqual(migrated.status, 'paid')
             self.assertFalse(apps.get_model('management_api', 'TerminalCredential').objects.get(pk=credential.pk).active)
             history = apps.get_model('management_api', 'SupplierOrder').objects.get(pk=row.pk)
@@ -42,5 +42,34 @@ class FulfillmentMigrationTests(TransactionTestCase):
             self.assertEqual(history.release_claim, claim)
             self.assertEqual(history.state, 'submitted')
             self.assertIsNotNone(history.print_confirmed_at)
+        finally:
+            MigrationExecutor(connection).migrate(after)
+
+
+class DefaultPickupMigrationTests(TransactionTestCase):
+    def test_only_unclassified_delivery_is_changed_without_touching_order_history(self):
+        before = [('management_api', '0027_supplier_payment_currency')]
+        after = MigrationExecutor(connection).loader.graph.leaf_nodes('management_api')
+        executor = MigrationExecutor(connection)
+        executor.migrate(before)
+        try:
+            Order = executor.loader.project_state(before).apps.get_model('management_api', 'PrintOrder')
+            ids = []
+            for delivery in ['unspecified', 'pickup', 'courier', 'air']:
+                for status in ['pending', 'paid', 'cancelled', 'printing', 'ready', 'completed']:
+                    ids.append(Order.objects.create(fulfillment_type=delivery, status=status,
+                        model_name='Historical phone', amount='0.50', revision=7,
+                        station_id='401' if status == 'printing' else '').pk)
+            snapshots = {o.pk: {f.attname: getattr(o, f.attname) for f in o._meta.fields}
+                         for o in Order.objects.filter(pk__in=ids)}
+            executor = MigrationExecutor(connection)
+            executor.migrate(after)
+            Order = executor.loader.project_state(after).apps.get_model('management_api', 'PrintOrder')
+            for order in Order.objects.filter(pk__in=ids):
+                expected = snapshots[order.pk]
+                if expected['fulfillment_type'] == 'unspecified':
+                    expected['fulfillment_type'] = 'pickup'
+                self.assertEqual({f.attname: getattr(order, f.attname) for f in order._meta.fields}, expected)
+            self.assertEqual(Order.objects.create(model_name='New phone', amount='0.50').fulfillment_type, 'pickup')
         finally:
             MigrationExecutor(connection).migrate(after)

@@ -30,7 +30,7 @@
 | `POST /api/v1/store/orders/{reference}/confirm-print/` | JSON：`{"confirm":true}`。先校验现场自取、归属、付款、退款与推单状态；开关关闭时返回 503；开启后以服务端订单号／金额进行单次自营支付登记，重复或超时不重放。客户端不可传 `pay_money`、`trade_no` 或 `pay_type`。 |
 | `POST /api/v1/store/orders/{reference}/fulfillment/` | JSON：`{"fulfillment_type":"pickup","confirmed":true}`。仅将未绑定供应商订单、未进入设备流程、无有效退款的 pending／paid 历史未分类订单明确确认为自取；同值重复返回原记录。已推单等历史订单须人工核实。 |
 
-新订单保存 `fulfillment_type=pickup`；为兼容旧客户端，新创建请求未传该字段时仍按 pickup 创建，但迁移绝不将历史订单批量改为 pickup。模型的历史默认值为 `unspecified`，必须先明确确认。新建 courier／air 及非 pickup 订单进入收银台均返回 409。
+新订单保存 `fulfillment_type=pickup`；为兼容旧客户端，新创建请求未传该字段时仍按 pickup 创建，按用户 2026-11-06 最新确认，迁移 0028 将历史 `unspecified` 补为 `pickup`，模型也默认 pickup。明确选过 courier／air 的记录不变，迁移不改付款／退款、设备绑定、订单版本和打印放行记录。默认现场自取不等于已经确认目标设备或允许开印。已退款／取消订单不再显示配送方式选择提示。新建 courier／air 及非 pickup 订单进入收银台均返回 409。
 
 绑定后缺少文件时不允许进入付款收银台。已明确现场自取但尚未绑定设备的订单仍允许先付款。演示及支付渠道测试订单均不自动发送至真实设备。
 

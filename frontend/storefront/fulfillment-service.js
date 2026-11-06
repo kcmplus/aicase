@@ -39,6 +39,13 @@ export function deliveryOptions(selected='pickup',lang='en-US'){
  const zh=lang==='zh-CN';
  return `<fieldset class="delivery-options"><legend>${zh?'选择配送方式':'Delivery method'}</legend>${['pickup','courier','air'].map(type=>`<label><input type="radio" name="fulfillment_type" value="${type}" ${selected===type?'checked':''}><span>${deliveryLabel(type,lang)}${type==='pickup'?`<small>${zh?'到设备前扫码，打印后自取':'Scan a station and collect your printed case.'}</small>`:`<small>${zh?'暂未开放，下单前不会收款':'Coming soon. Checkout is not available yet.'}</small>`}</span></label>`).join('')}</fieldset>`;
 }
+export function deliveryStatusPanel(order,{lang='en-US',busy=false}={}){
+ const zh=lang==='zh-CN',say=(en,cn)=>zh?cn:en;
+ if(isPickup(order)||['cancelled','completed','collected'].includes(order.status)||(order.refund&&order.refund.status!=='failed'))return '';
+ if(['courier','air'].includes(order.fulfillmentType))return `<section class="device-fulfillment"><h3>${deliveryLabel(order.fulfillmentType,lang)}</h3><p>${say('This order follows a separate delivery process. Contact support for its fulfillment status.','此订单走独立配送流程，请联系客服确认履约进度。')}</p></section>`;
+ if(!['pending','paid'].includes(order.status))return '';
+ return `<section class="device-fulfillment"><h3>${deliveryLabel('unspecified',lang)}</h3><p>${order.fulfillment?say('This existing order needs staff review. No new print command will be sent.','此历史订单需要工作人员核对，不会重新下发打印指令。'):say('Confirm how you will receive this order before payment or printing.','付款或打印前，请先确认这笔订单的配送方式。')}</p>${!order.fulfillment&&['pending','paid'].includes(order.status)&&(!order.refund||order.refund.status==='failed')?`<button class="button secondary full" data-action="confirm-pickup" ${busy?'disabled':''}>${say('Confirm on-site pickup','确认设备现场自取')}</button>`:''}</section>`;
+}
 export function fulfillmentView(order){
  const f=order.fulfillment;
  if(order.refund&&order.refund.status!=='failed')return {state:'refund'};

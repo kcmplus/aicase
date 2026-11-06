@@ -223,9 +223,9 @@ class PrintOrder(Timestamped):
         COURIER = 'courier', '快递配送'
         AIR = 'air', '空运配送'
 
-    # No automatic classification of historical paid orders or supplier writes.
+    # On-site pickup is the default; device binding and print authorization remain separate.
     fulfillment_type = models.CharField(max_length=20, choices=Fulfillment.choices,
-                                        default=Fulfillment.UNSPECIFIED)
+                                        default=Fulfillment.PICKUP)
     reference = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     owner_hash = models.CharField(max_length=64, blank=True, db_index=True, editable=False)
     request_key = models.UUIDField(null=True, unique=True, editable=False)

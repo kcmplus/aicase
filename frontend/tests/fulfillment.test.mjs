@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {prepareDeviceOrder,fulfillmentView,scanScope,scopeIds,fulfillmentConfig,stationIdentity,isPickup,deliveryLabel,deliveryOptions} from '../storefront/fulfillment-service.js';
+import {prepareDeviceOrder,fulfillmentView,scanScope,scopeIds,fulfillmentConfig,stationIdentity,isPickup,deliveryLabel,deliveryOptions,deliveryStatusPanel} from '../storefront/fulfillment-service.js';
 import {orderRequest} from '../storefront/order-service.js';
 
 const template={id:'supplier-1-'+'a'.repeat(20),model:'iPhone 16 Pro',inventoryItemId:1,
@@ -105,4 +105,19 @@ test('cloud payment proof is separate from mapped print and shipment progress',(
  assert.equal(fulfillmentView({...current,fulfillment:{...current.fulfillment,release_state:'unknown'}}).state,'unknown');
  assert.equal(fulfillmentView({...current,fulfillment:{...current.fulfillment,cloud_status:{payment_recorded:true,phase:'dispensed',phase_verified:false}}}).state,'released');
  assert.equal(fulfillmentView({...current,fulfillment:{...current.fulfillment,cloud_status:{status:4,phase:'cancelled',phase_verified:true}}}).state,'station_cancelled');
+});
+
+test('refunded and closed orders do not ask customers to choose delivery',()=>{
+ for(const fulfillmentType of ['unspecified','pickup','courier','air']){
+  for(const status of ['pending','submitted','succeeded','unknown']){
+   assert.equal(deliveryStatusPanel({...order(),fulfillmentType,refund:{status}}),'');
+  }
+  for(const status of ['cancelled','completed','collected']){
+   assert.equal(deliveryStatusPanel({...order(),fulfillmentType,status}),'');
+  }
+ }
+ assert.equal(deliveryStatusPanel(order()),'');
+ assert.match(deliveryStatusPanel({...order(),fulfillmentType:'unspecified'}),/data-action="confirm-pickup"/);
+ assert.match(deliveryStatusPanel({...order(),fulfillmentType:'unspecified',refund:{status:'failed'}}),/data-action="confirm-pickup"/);
+ assert.match(deliveryStatusPanel({...order(),fulfillmentType:'courier'}),/separate delivery process/);
 });
