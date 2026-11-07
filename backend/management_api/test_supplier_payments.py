@@ -210,6 +210,44 @@ class SupplierPaymentTests(TestCase):
         with self.assertRaises(ValueError):
             query_order(row)
 
+    @patch('management_api.supplier_payments.DeviceProvider.get')
+    def test_dollar_symbol_requires_explicit_usd_configuration(self, get):
+        row = self.ready()
+        get.return_value = {'list': [self.record(currency='$')], 'items': [self.record(currency='$')]}
+        observed = query_order(row)
+        self.assertEqual(observed['currency'], 'USD')
+        self.assertEqual(observed['currency_source'], 'merchant_configuration_symbol')
+        self.assertEqual(observed['pay_money'], '0.00')
+        for configured in ('', 'CAD', 'AUD', 'THB'):
+            row.device.connection.payment_currency = configured
+            with self.subTest(configured=configured), self.assertRaises(ValueError):
+                query_order(row)
+        row.device.connection.payment_currency = 'USD'
+        for supplied in ('US$', '€', 'usd'):
+            get.return_value = {'list': [self.record(currency=supplied)]}
+            with self.subTest(supplied=supplied), self.assertRaises(ValueError):
+                query_order(row)
+        get.return_value = {'list': [self.record(currency='$')], 'items': [self.record(currency='USD')]}
+        with self.assertRaises(ValueError):
+            query_order(row)
+
+    @patch('management_api.supplier_payments.requests.post')
+    @patch('management_api.supplier_payments.DeviceProvider.get')
+    def test_zero_print_with_dollar_symbol_still_claims_once_and_verifies_paid_flag(self, get, remote):
+        row = self.ready_free()
+        get.side_effect = [
+            {'list': [self.record(currency='$')]},
+            {'list': [self.record(currency='$', pay_status=1)]},
+        ]
+        remote.return_value = self.provider({'code': 200, 'data': None})
+        self.assertEqual(self.post('confirm-print/', {'confirm': True}).status_code, 200)
+        self.assertEqual(self.post('confirm-print/', {'confirm': True}).status_code, 200)
+        remote.assert_called_once()
+        self.assertEqual(remote.call_args.kwargs['json']['pay_money'], '0.00')
+        row.refresh_from_db()
+        self.assertEqual(row.release_state, 'observed')
+        self.assertTrue(row.cloud_status['payment_recorded'])
+
     def ready_free(self):
         row=self.ready()
         self.order.mode='free_test';self.order.amount=0;self.order.save()

@@ -89,13 +89,20 @@ def query_order(row):
     for name in ('pay_status', 'print_status', 'shipment_status', 'status', 'is_refund', 'is_deleted'):
         if type(record.get(name)) is not int or not 0 <= record[name] <= 10000:
             raise ValueError('Invalid supplier status')
-    currency = record.get('currency') or row.device.connection.payment_currency
+    supplied_currency = record.get('currency')
+    currency = supplied_currency or row.device.connection.payment_currency
+    currency_source = 'supplier' if supplied_currency else 'merchant_configuration'
+    # Autovend returns a display symbol. Only the explicitly configured USD
+    # contract disambiguates it; never infer USD from '$' alone or convert money.
+    if supplied_currency == '$' and row.device.connection.payment_currency == 'USD':
+        currency = 'USD'
+        currency_source = 'merchant_configuration_symbol'
     if not isinstance(currency, str) or (currency and not re.fullmatch('[A-Z]{3}', currency)):
         raise ValueError('Supplier order currency is not confirmed')
     amount = money(record.get('pay_money'))
     return {name: record[name] for name in fields if name in record} | {
         'pay_money': format(amount, '.2f'), 'currency': currency, 'phase': phase(record),
-        'currency_source': 'supplier' if record.get('currency') else 'merchant_configuration',
+        'currency_source': currency_source,
         'phase_verified': record['status'] == 4 or settings.SUPPLIER_ORDER_STATUS_VERIFIED}
 
 
