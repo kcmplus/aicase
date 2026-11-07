@@ -4,7 +4,7 @@ from urllib.parse import urlsplit
 import requests
 from .ai_service import decrypt_api_key
 
-ALLOWED_BASE_URLS = ('https://shop.widermatrix.cn', 'https://shop.autovendpro.com')
+ALLOWED_BASE_URLS = ('https://api.autovendpro.com', 'https://shop.widermatrix.cn', 'https://shop.autovendpro.com')
 
 
 class ProviderError(Exception):

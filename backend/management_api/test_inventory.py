@@ -206,8 +206,8 @@ class InventoryTests(TestCase):
 
     def test_connection_encryption_redaction_and_revision(self):
         key = 'only-test-key-never-a-real-credential'
-        r = self.client.post('/api/v1/admin/device-connections/', {'name': 'New', 'base_url': 'https://shop.autovendpro.com',
-            'shop_id': '999', 'authorization': key}, format='json')
+        r = self.client.post('/api/v1/admin/device-connections/', {'name': 'New', 'base_url': 'https://api.autovendpro.com',
+            'shop_id': '351', 'authorization': key}, format='json')
         self.assertEqual(r.status_code, 201, r.data)
         self.assertNotIn(key, json.dumps(r.data))
         c = DeviceProviderConnection.objects.get(pk=r.data['id'])
