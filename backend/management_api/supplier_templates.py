@@ -26,7 +26,7 @@ def download_template(url):
         raise TemplateError('模板地址格式不正确。') from None
     # Never forward vendor authorization to object storage, follow redirects or
     # accept arbitrary URLs. Upgrade the supplier's HTTP links to HTTPS.
-    if (parsed.scheme not in ('https', 'http') or parsed.netloc != 'oss.widermatrix.cn'
+    if (parsed.scheme not in ('https', 'http') or parsed.netloc not in ('oss.widermatrix.cn', 'file.autovendpro.com')
             or parsed.fragment or not parsed.path.lower().endswith('.png')):
         raise TemplateError('模板地址不在已支持的供应商图片域名内。')
     url = urlunsplit(('https', parsed.netloc, parsed.path, parsed.query, ''))

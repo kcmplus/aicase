@@ -108,7 +108,7 @@ class SupplierTemplateTests(TestCase):
             self.stock.refresh_from_db(); self.assertFalse(self.stock.template_image)
 
     def test_download_only_trusted_https_without_redirects_or_credentials(self):
-        for url in ('http://127.0.0.1/a.png', 'https://oss.widermatrix.cn.evil.com/a.png',
+        for url in ('https://file.autovendpro.com.evil.com/a.png', 'http://127.0.0.1/a.png', 'https://oss.widermatrix.cn.evil.com/a.png',
                     'https://u:p@oss.widermatrix.cn/a.png', 'https://oss.widermatrix.cn:444/a.png'):
             with patch('management_api.supplier_templates.requests.get') as get:
                 with self.assertRaises(TemplateError): download_template(url)
@@ -118,6 +118,10 @@ class SupplierTemplateTests(TestCase):
         with patch('management_api.supplier_templates.requests.get', return_value=response) as get:
             download_template(self.stock.template_url)
             self.assertTrue(get.call_args.args[0].startswith('https://'))
+            self.assertFalse(get.call_args.kwargs['allow_redirects'])
+            self.assertNotIn('headers', get.call_args.kwargs)
+            download_template('http://file.autovendpro.com/template.png')
+            self.assertEqual(get.call_args.args[0], 'https://file.autovendpro.com/template.png')
             self.assertFalse(get.call_args.kwargs['allow_redirects'])
             self.assertNotIn('headers', get.call_args.kwargs)
         response.status_code = 302
