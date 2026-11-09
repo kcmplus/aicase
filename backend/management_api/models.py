@@ -22,7 +22,7 @@ class CatalogItem(Timestamped):
         return self.name
 
 class Brand(CatalogItem):
-    pass
+    auto_publish_pending = models.BooleanField(default=False, editable=False)
 
 
 class DeviceProviderConnection(Timestamped):
@@ -68,6 +68,7 @@ class Device(Timestamped):
 
 
 class SupplierProduct(Timestamped):
+    auto_publish_pending = models.BooleanField(default=False, editable=False)
     connection = models.ForeignKey(DeviceProviderConnection, on_delete=models.PROTECT)
     goods_id = models.CharField(max_length=40)
     product_id = models.CharField(max_length=40)
@@ -141,6 +142,7 @@ class InventorySyncRun(models.Model):
         default_permissions = ('view',)
 
 class PhoneModel(CatalogItem):
+    auto_publish_pending = models.BooleanField(default=False, editable=False)
     brand = models.ForeignKey(Brand, on_delete=models.PROTECT, related_name="models")
     preview_family = models.CharField(max_length=20, choices=[("iphone", "iPhone 示意壳"), ("samsung", "Samsung 示意壳")])
     legacy_index = models.PositiveSmallIntegerField(unique=True, null=True, blank=True, editable=False)

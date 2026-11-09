@@ -122,6 +122,13 @@ class DeviceSerializer(StrictWriteSerializer):
 
 
 class ProductSerializer(StrictWriteSerializer):
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        instance = SupplierProduct.objects.select_for_update().get(pk=instance.pk)
+        if 'active' in validated_data or 'phone_model' in validated_data:
+            validated_data['auto_publish_pending'] = False
+        return super().update(instance, validated_data)
+
     connection_name = serializers.CharField(source='connection.name', read_only=True)
     phone_model_name = serializers.CharField(source='phone_model.name', read_only=True, default='')
     print_ready = serializers.BooleanField(source='phone_model.print_ready', read_only=True, default=False)

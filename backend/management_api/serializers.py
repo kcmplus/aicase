@@ -18,6 +18,13 @@ def validate_image_path(value):
 class CatalogSerializer(serializers.ModelSerializer):
     active = serializers.BooleanField(default=True)
     image_variants = serializers.SerializerMethodField()
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        instance = type(instance).objects.select_for_update().get(pk=instance.pk)
+        if 'active' in validated_data and hasattr(instance, 'auto_publish_pending'):
+            validated_data['auto_publish_pending'] = False
+        return super().update(instance, validated_data)
+
     def get_image_variants(self, instance):
         paths = [getattr(instance, field, "") for field in ("image_path", "preview_path", "original_path")]
         if isinstance(instance, AIExample):
