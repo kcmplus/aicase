@@ -176,12 +176,26 @@ class OrderViewSet(AuditedViewSet):
     def get_serializer_class(self):
         return s.PrintOrderDetailSerializer if self.action == "retrieve" else s.PrintOrderSerializer
     def get_queryset(self):
-        qs = super().get_queryset()
+        from .order_progress import with_order_progress, GROUPS
+        qs = with_order_progress(super().get_queryset())
+        group = self.request.query_params.get("progress")
+        if group:
+            if group not in GROUPS:
+                raise serializers.ValidationError({"progress": "未知打印进度筛选。"})
+            qs = qs.filter(_progress_code__in=GROUPS[group])
         if self.action == "list":
             qs = qs.defer("snapshot", "owner_hash", "request_key")
         if self.request.query_params.get("status"):
             qs = qs.filter(status=self.request.query_params["status"])
         return qs
+    @action(detail=True, methods=['get'])
+    def progress(self, request, pk=None):
+        from .order_progress import progress_payload
+        order = self.get_object()
+        data = progress_payload(order, private=True)
+        data['can_refund'] = s.PrintOrderDetailSerializer(context={'request': request}).get_can_refund(order)
+        return Response(data)
+
     def update(self, request, *args, **kwargs):
         if set(request.data) - {"notes"}:
             raise serializers.ValidationError({"detail": "只能修改客服备注；付款和打印状态由业务服务更新。"})

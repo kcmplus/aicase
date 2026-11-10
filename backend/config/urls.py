@@ -6,7 +6,7 @@ from rest_framework.routers import DefaultRouter
 from management_api import views
 from management_api.inventory import (ConnectionViewSet, DeviceViewSet, ProductViewSet,
                                      StockViewSet, RunViewSet, InventoryOptions)
-from management_api.orders import StoreOrders, StoreOrder, StoreOrderAction, OrderFulfillment
+from management_api.orders import StoreOrders, StoreOrder, StoreOrderAction, OrderFulfillment, StoreOrderProgress
 from management_api.ai_service import AIServiceSettingsView, AIServiceCheckView
 from management_api.ai_generation import AIAccountView, AIRenders, AIRenderDetail, AIRenderImage
 from management_api.ai_reporting import AIUsageView, AICallLogsView, AIRenderCostView, AIAdminImageView
@@ -67,6 +67,7 @@ urlpatterns = [
     path("api/v1/terminal/orders/", RetiredTerminalAPI.as_view()),
     path("api/v1/terminal/orders/<uuid:reference>/claim/", RetiredTerminalAPI.as_view()),
     path("api/v1/terminal/orders/<uuid:reference>/observe/", RetiredTerminalAPI.as_view()),
+    path("api/v1/store/orders/<uuid:reference>/progress/", StoreOrderProgress.as_view()),
     path("api/v1/store/orders/<uuid:reference>/", StoreOrder.as_view()),
     path("api/v1/store/orders/<uuid:reference>/actions/", StoreOrderAction.as_view()),
     path("api/health/", lambda request: JsonResponse({"status": "ok"})),

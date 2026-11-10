@@ -1,3 +1,6 @@
+import {progressPanel,progressPaymentText} from './order-progress.js';
+import {startVisiblePolling} from './visible-polling.js';
+import {mergeOrderProgress} from './order-service.js';
 import {stationScanPrompt,previewStationPanel,openStationScanner} from './station-scanner.js';
 import {stationEntry} from './station-entry.js';
 import {loadDeviceInfo,deviceInfoErrorMessage} from './device-info-service.js';
@@ -55,7 +58,7 @@ let checkoutDraft=await readDesign('checkout-draft');
 for(const order of Object.values(orderBook.orders||{}))if(order.phoneTemplate)try{registerSupplierTemplates([order.phoneTemplate]);}catch{}
 if(checkoutDraft?.phoneTemplate)try{registerSupplierTemplates([checkoutDraft.phoneTemplate]);}catch{}
 let orderRows=[],orderPage=1,orderHasMore=false,orderError='',entryOrders=null,entryOrderError='';
-let paymentConfig=null,paymentError='',paymentOrder=null,paymentPollTimer,paymentPollCount=0,paymentLoading=false,navigationId=0;
+let paymentConfig=null,paymentError='',paymentOrder=null,stopPaymentPolling=()=>{},paymentPollCount=0,paymentLoading=false,navigationId=0;
 try {
   const saved = JSON.parse(localStorage.getItem(KEY));
   if (saved) {
@@ -478,7 +481,7 @@ async function savedOrderRoute(id){
  if(isProviderOrder(order))paymentOrder=order;
  save();return isProviderOrder(order)?'payment?order='+order.id:'pass';
 }
-function ordersPage(){return `<section class="flow wrap">${stationContext()}<div class="ai-heading"><p class="eyebrow">YOUR DESIGNS, ALL TOGETHER.</p><h1>My orders.</h1><p>Your orders are saved on the server and accessible from this browser.</p></div><button class="text-button" data-action="refresh-orders">Refresh orders ↻</button>${orderError?`<p class="error" role="alert">${esc(orderError)}</p>`:orderRows.length?`<div class="order-list">${orderRows.map(o=>`<article class="order-row"><div><span class="eyebrow">${esc(orderStatus(o.status,o.refund))} · ${paymentLabel(o.mode)}</span><h2>${esc(o.model_name)}</h2><p>${deliveryLabel(o.fulfillment_type,locale())}</p><p>${esc(o.reference)}</p><small>${new Date(o.created_at).toLocaleString(locale())}</small></div><div><strong>${esc(o.currency)} ${Number(o.amount).toFixed(2)}</strong><button class="button secondary" data-action="view-order" data-id="${esc(o.reference)}">${o.status==='pending'?'Continue payment →':'View design →'}</button></div></article>`).join('')}</div><div class="pass-actions">${orderPage>1?`<button class="text-button" data-action="orders-page" data-page="${orderPage-1}">← Previous</button>`:''}${orderHasMore?`<button class="text-button" data-action="orders-page" data-page="${orderPage+1}">Next →</button>`:''}</div>`:'<div class="empty"><h2>Your first design is waiting.</h2><p>Confirm a print order to see it here.</p><a class="button primary" href="#choose">Create a design →</a></div>'}<p class="demo-note">Keep this browser’s site data to retain access to your orders. Test payments and demo payments do not charge money.</p></section>`;}
+function ordersPage(){return `<section class="flow wrap">${stationContext()}<div class="ai-heading"><p class="eyebrow">YOUR DESIGNS, ALL TOGETHER.</p><h1>My orders.</h1><p>Your orders are saved on the server and accessible from this browser.</p></div><button class="text-button" data-action="refresh-orders">Refresh orders ↻</button>${orderError?`<p class="error" role="alert">${esc(orderError)}</p>`:''}${orderRows.length?`<div class="order-list">${orderRows.map(o=>`<article class="order-row"><div><span class="eyebrow">${esc(progressPaymentText(o.progress,locale()))} · ${paymentLabel(o.mode)}</span><h2>${esc(o.model_name)}</h2><p>${deliveryLabel(o.fulfillment_type,locale())}</p>${progressPanel(o.progress,{lang:locale(),compact:true})}${o.refund?`<p>${esc(orderStatus(o.status,o.refund))}</p>`:''}<p>${esc(o.reference)}</p><small>${new Date(o.created_at).toLocaleString(locale())}</small></div><div><strong>${esc(o.currency)} ${Number(o.amount).toFixed(2)}</strong><button class="button secondary" data-action="view-order" data-id="${esc(o.reference)}">${o.status==='pending'?(locale()==='zh-CN'?'继续付款 →':'Continue payment →'):(locale()==='zh-CN'?'查看打印进度 →':'View print progress →')}</button></div></article>`).join('')}</div><div class="pass-actions">${orderPage>1?`<button class="text-button" data-action="orders-page" data-page="${orderPage-1}">← Previous</button>`:''}${orderHasMore?`<button class="text-button" data-action="orders-page" data-page="${orderPage+1}">Next →</button>`:''}</div>`:'<div class="empty"><h2>Your first design is waiting.</h2><p>Confirm a print order to see it here.</p><a class="button primary" href="#choose">Create a design →</a></div>'}<p class="demo-note">Keep this browser’s site data to retain access to your orders. Test payments and demo payments do not charge money.</p></section>`;}
 function isProviderOrder(order){return (/^(stripe|airwallex)_(test|live)$/.test(order?.mode||'')||order?.mode==='free_test');}
 function providerName(provider){return provider==='free'?(locale()==='zh-CN'?'0 元免付联调':'No-charge test'):provider==='airwallex'?'Airwallex':'Stripe';}
 function paymentLabel(mode){return ({free_test:locale()==='zh-CN'?'0 元免付联调':'NO-CHARGE TEST',stripe_test:'STRIPE TEST',stripe_live:'STRIPE',airwallex_test:'AIRWALLEX TEST',airwallex_live:'AIRWALLEX',demo:'DEMO PAYMENT'})[mode]||'ORDER';}
@@ -495,9 +498,8 @@ function deviceFulfillmentPanel(order){
  if(['refund','closed'].includes(v.state))return '';
  if(!f&&!scopeIds(stockScope))return `<section class="device-fulfillment"><h3>${say('Print at a station','设备打印')}</h3>${stationScanPrompt(locale())}</section>`;
  if(!devicePrinting.enabled)return `<section class="device-fulfillment"><h3>${say('Print at a station','设备打印')}</h3>${f?stationIdentity({name:f.device_name,location:f.device_location,number:f.device_number,device_id:f.device_id,coordinates:f.device_coordinates},{lang:locale()}):scannedStation?stationIdentity(scannedStation,{lang:locale()}):''}<p role="status">${say('Sending orders to this station is not available yet. Your order is saved. Please contact staff.','设备推单暂未开放，订单已保存，请联系工作人员。')}</p>${order.status==='paid'?`<button class="button primary full" disabled>${say('I’m at this printer — send order','确认在打印机前并推单')}</button>`:''}</section>`;
- const labels={rejected:say('Order was not sent. Your design and station are saved. Confirm to send again.','推单未成功，设计和设备已保留，请确认后重新推单。'),station_cancelled:say('The station order was cancelled. Contact staff about a refund; do not print again.','设备订单已取消，请联系工作人员核实退款，勿重复打印。'),confirming:say('Checking your print confirmation. Do not submit again.','正在核实开印确认，请勿重复操作。'),released:say('Print confirmation recorded. Updating station progress…','开印确认已记录，正在更新设备进度…'),failed:say('Printing or dispensing needs attention. Please contact staff.','打印或出货异常，请联系工作人员。'),draft:say('Preparing print files','正在准备打印文件'),prepared:say('Waiting to send to the station','等待发送到设备'),submitting:say('Sending your order…','正在发送订单…'),submitted:say('Order sent. Ready for your confirmation.','订单已发送，请确认开始打印。'),confirmed:say('Checking the station. Please wait.','已确认打印，正在等待设备处理。'),queued:say('Queued at the station','已进入设备打印队列'),printing:say('Printing at the station','设备正在打印'),delivered:say('Dispensed. Please collect your case.','已出货，请取走手机壳。'),unknown:say('The result needs checking. Contact staff and do not submit again.','结果待核实，请联系工作人员，勿重复下单。')};
  const ids=scopeIds(stockScope),selection=stockSelection(order.pass.model);
- return `<section class="device-fulfillment" aria-label="${say('Station printing','设备打印')}"><h3>${say('Print at a station','设备打印')}</h3>${f?`${stationIdentity({name:f.device_name,location:f.device_location,number:f.device_number,device_id:f.device_id,coordinates:f.device_coordinates},{lang:locale()})}<p role="status">${esc(f.message||labels[v.state]||'')}</p>${f.status_updated_at?`<small>${say('Last updated','最近更新')}：${esc(new Date(f.status_updated_at).toLocaleString(locale()))}</small>`:''}${v.releasePending?`<button class="button primary full" disabled>${say('Print now','立即打印')}</button><small role="status">${f.zero_release_unconfirmed?say('Your order was sent. Zero-amount printing is awaiting supplier confirmation.','订单已推送，0 元开印仍待供应商确认支持。'):say('Immediate printing is unavailable at this station. Your order is saved; please contact staff.','此设备暂不能确认开印，订单已保存，请联系工作人员。')}</small>`:''}${v.canPrint?`<button class="button primary full" data-action="confirm-device-print" ${passBusy?'disabled':''}>${say('Print now','立即打印')}</button><small>${say('Confirm that you are at this station before printing.','请确认你已在这台设备前。')}</small>`:''}${(v.state==='draft'||v.canRetry)?`<button class="button primary full" data-action="send-device-order" ${passBusy?'disabled':''}>${order.status==='paid'?say('I’m at this printer — send order','确认在打印机前并推单'):say('Prepare print files','准备打印文件')}</button>`:''}`:
+ return `<section class="device-fulfillment" aria-label="${say('Station printing','设备打印')}"><h3>${say('Print at a station','设备打印')}</h3>${f?`${stationIdentity({name:f.device_name,location:f.device_location,number:f.device_number,device_id:f.device_id,coordinates:f.device_coordinates},{lang:locale()})}${v.releasePending?`<button class="button primary full" disabled>${say('Print now','立即打印')}</button><small role="status">${f.zero_release_unconfirmed?say('Your order was sent. Zero-amount printing is awaiting supplier confirmation.','订单已推送，0 元开印仍待供应商确认支持。'):say('Immediate printing is unavailable at this station. Your order is saved; please contact staff.','此设备暂不能确认开印，订单已保存，请联系工作人员。')}</small>`:''}${v.canPrint?`<button class="button primary full" data-action="confirm-device-print" ${passBusy?'disabled':''}>${say('Print now','立即打印')}</button><small>${say('Confirm that you are at this station before printing.','请确认你已在这台设备前。')}</small>`:''}${(v.state==='draft'||v.canRetry)?`<button class="button primary full" data-action="send-device-order" ${passBusy?'disabled':''}>${order.status==='paid'?say('I’m at this printer — send order','确认在打印机前并推单'):say('Prepare print files','准备打印文件')}</button>`:''}`:
  ids?`${scannedStation?stationIdentity(scannedStation,{lang:locale()}):`<p>${esc(deviceInfoErrorMessage(stationError,locale()))}</p><small>${say('Device ID','设备编号')}：${esc(ids.device_id)}</small><button class="text-button" data-action="refresh-device-info" ${passBusy?'disabled':''}>${say('Refresh station details','刷新设备信息')}</button>`}${selection&&scannedStation?`<div class="checkout-case">${passPreview({...order.pass,phoneTemplateId:selection.templateId})}</div><p>${say('Check this station’s template before sending.','请确认此设备的机型预览，再发送订单。')}</p><button class="button primary full" data-action="send-device-order" ${passBusy?'disabled':''}>${order.status==='paid'?say('I’m at this printer — send order','确认在打印机前并推单'):say('Use this printer','使用此打印设备')}</button>`:`<p>${scannedStation?say('This station has no stock for this phone model. Scan another station.','此设备暂无该机型库存，请扫描其他设备。'):''}</p>`}`:
  stationScanPrompt(locale())}</section>`;
 }
@@ -507,29 +509,42 @@ function providerOrderPage(order){
  const view=paymentState(order,{returned,exhausted:paymentPollCount>=12});
  const oldReceipt=document.querySelector('.payment-receipt');
  const receiptOpen=oldReceipt?.dataset.order===order.id&&oldReceipt.open;
- const needsRefresh=view.pending||Boolean(paymentError)||fulfillmentView(order).state==='unknown';
+ const headline=order.progress&&!order.refund&&!view.pending?progressPaymentText(order.progress,locale()):view.title;
+ const headingMessage=order.progress&&!order.refund&&!view.pending?(locale()==='zh-CN'?'订单已保存，打印与出货进度见下方。':'Your order is saved. See printing and dispensing progress below.'):view.message;
  const canStartNew=['ready','completed','collected','cancelled'].includes(order.status)||order.refund?.status==='succeeded';
- return `<section class="flow wrap review-flow payment-flow ${view.fulfilled?'payment-fulfilled':''}"><div class="ai-heading">${view.fulfilled?'':`<p class="eyebrow">${paymentLabel(order.mode)}</p>`}<h1>${view.title}</h1><p role="status">${view.message}</p></div>
+ return `<section class="flow wrap review-flow payment-flow ${view.fulfilled?'payment-fulfilled':''}"><div class="ai-heading">${view.fulfilled?'':`<p class="eyebrow">${paymentLabel(order.mode)}</p>`}<h1>${esc(headline)}</h1><p role="status">${esc(headingMessage)}</p></div>${progressPanel(order.progress,{lang:locale()})}
  <div class="ai-order-layout"><div class="checkout-preview"><div class="checkout-case">${passPreview(order.pass)}</div><h2>${passName(order.pass)}</h2><p>${esc(order.pass.model)}</p></div>
  <div class="ai-order-card" aria-busy="${passBusy}">${view.fulfilled?'':`<p class="eyebrow">${esc(orderStatus(order.status,order.refund))}</p><h2>${esc(order.currency)} ${money(order.priceCents)}</h2>`}
  ${order.mode==='free_test'?`<p class="payment-environment">${locale()==='zh-CN'?'0 元免付联调，不产生实际收款。':'No-charge test order. No payment was collected.'}</p>`:order.mode.endsWith('_test')?`<p class="payment-environment">${provider} test mode · No real charge.</p>`:view.pending?'<p class="payment-environment">Live payment · Your payment method will be charged.</p>':''}
  ${paymentError?`<p class="error" role="alert">${esc(paymentError)}</p>`:''}
  ${view.canPay&&isPickup(order)?`<button class="button primary full" data-action="pay-provider" data-id="${esc(order.id)}" ${passBusy?'disabled':''}>${passBusy?'Opening secure checkout…':`Continue to ${provider}`}</button>`:''}
  ${deliveryStatusPanel(order,{lang:locale(),busy:passBusy})}${deviceFulfillmentPanel(order)}
- ${needsRefresh?`<button class="text-button payment-refresh" data-action="refresh-payment" ${passBusy?'disabled':''}>Refresh payment status</button>`:''}
+ <button class="text-button payment-refresh" data-action="refresh-payment" ${passBusy?'disabled':''}>${locale()==='zh-CN'?'刷新订单进度':'Refresh order progress'}</button>
 
  <details class="payment-receipt" data-order="${esc(order.id)}" ${receiptOpen?'open':''}><summary><span>Order details</span><span>${view.fulfilled?`${esc(order.currency)} ${money(order.priceCents)}`:''}</span></summary><div class="payment-receipt-body"><dl><div><dt>Order number</dt><dd>${esc(order.id)}</dd></div><div><dt>Delivery method</dt><dd>${deliveryLabel(order.fulfillmentType,locale())}</dd></div><div><dt>Payment method</dt><dd>${provider}</dd></div><div><dt>Order status</dt><dd>${esc(orderStatus(order.status,order.refund))}</dd></div></dl><a class="text-button" href="#orders">View all my orders →</a><p class="field-note">Keep this browser’s site data to retain access to your order.</p></div></details>
  ${canStartNew?'<a class="button secondary full payment-next-design" href="#choose">Create a new design →</a>':''}</div></div></section>`;
 }
 function paymentPage(){return paymentOrder?providerOrderPage(paymentOrder):`<section class="empty wrap"><h1>Payment status</h1><p class="error" role="alert">${esc(paymentError||'Loading your order…')}</p><button class="text-button" data-action="refresh-payment">Refresh payment status</button><a class="text-button" href="#orders">View all my orders →</a></section>`;}
 function schedulePaymentPoll(){
- clearTimeout(paymentPollTimer);
+ stopPaymentPolling();
  if(!paymentOrder)return;
- const printing=isPickup(paymentOrder)&&devicePrinting.enabled&&paymentOrder.fulfillment&&['paid','printing'].includes(paymentOrder.status)&&(!paymentOrder.refund||paymentOrder.refund.status==='failed');
- if(!printing&&(paymentOrder.status!=='pending'||paymentPollCount>=12))return;
  const hash=location.hash,id=paymentOrder.id;
- paymentPollTimer=setTimeout(async()=>{if(location.hash!==hash)return;paymentPollCount++;try{const latest=await refreshOrder(id);if(location.hash!==hash)return;paymentOrder=latest;paymentError='';render(true);schedulePaymentPoll();}catch(e){if(location.hash===hash){paymentError=e.message;render(true);schedulePaymentPoll();}}},printing?5000:2500);
+ stopPaymentPolling=startVisiblePolling({interval:5000,
+  enabled:()=>location.hash===hash&&!passBusy&&!photoBusy&&!aiBusy&&(!['dispensed','cancelled','closed','refunded','test','delivery','unspecified'].includes(paymentOrder?.progress?.code)||['requested','pending'].includes(paymentOrder?.refund?.status)),
+  refresh:async alive=>{const before=paymentOrder;try{
+   const data=await orderRequest(id+'/progress/');
+   if(!alive()||location.hash!==hash||passBusy||paymentOrder!==before||paymentOrder?.id!==id)return;
+   paymentOrder=mergeOrderProgress(paymentOrder,data);paymentPollCount++;paymentError='';render(true);
+  }catch{if(alive()&&location.hash===hash){paymentError=locale()==='zh-CN'?'进度暂时无法刷新，已保留上次结果。':'Progress could not be refreshed. Showing the last known result.';render(true);}}}
+ });
 }
+startVisiblePolling({interval:15000,enabled:()=>location.hash.split('?')[0]==='#orders'&&!passBusy&&!photoBusy&&!aiBusy,
+ refresh:async alive=>{const hash=location.hash,page=orderPage,nav=navigationId;try{
+  const data=await orderRequest('?page='+page);
+  if(!alive()||location.hash!==hash||orderPage!==page||navigationId!==nav)return;
+  orderRows=data.results;orderHasMore=data.has_more;orderError='';render(true);
+ }catch{if(alive()&&location.hash===hash&&navigationId===nav){orderError=locale()==='zh-CN'?'订单进度暂时无法刷新，已保留上次结果。':'Order progress could not be refreshed. Showing the last known results.';render(true);}}}
+});
 function quoteBreakdown(pass,price,editing){
  const provider=providerName(paymentConfig?.provider),paidCheckout=['stripe','airwallex'].includes(paymentConfig?.provider)&&!editing;
  const hasAI=pass.source==='photo'&&Boolean(pass.ai);
@@ -886,7 +901,7 @@ async function navigate(){
  const [route,query='']=location.hash.slice(1).split('?');const params=new URLSearchParams(query),code=params.get('code');
  if(route==='choose')await refreshStockChoices();
  if(route==='account'||route==='membership')try{await syncAIAccount();if(route==='account'&&membership.authenticated)await loadCustomerCredits(true);}catch(error){customerUI.error=error.message;}
- clearTimeout(paymentPollTimer);paymentPollCount=0;
+ stopPaymentPolling();paymentPollCount=0;
  if(route==='checkout'){
   paymentConfig=null;paymentError='';paymentLoading=true;render(true);
   const [config,account]=await Promise.allSettled([getPaymentConfig(),syncAIAccount()]);

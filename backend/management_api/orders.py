@@ -202,6 +202,8 @@ def order_data(order, detail=True):
     result['refund'] = refund_data(order)
     from .supplier_orders import public_state
     result['fulfillment'] = public_state(order)
+    from .order_progress import order_progress
+    result['progress'] = order_progress(order)
     result['code'] = order.snapshot.get('code', '')
     if detail:
         result['snapshot'] = order.snapshot
@@ -221,7 +223,9 @@ class StoreOrders(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'orders'
     def get(self, request):
-        qs = PrintOrder.objects.filter(owner_hash=owner(request)).defer('snapshot').order_by('-created_at')
+        from .order_progress import with_order_progress, order_progress
+        from .refunds import refund_data
+        qs = with_order_progress(PrintOrder.objects.filter(owner_hash=owner(request))).defer('snapshot').order_by('-created_at')
         try:
             page = max(1, min(10000, int(request.query_params.get('page', '1'))))
         except ValueError:
@@ -229,6 +233,9 @@ class StoreOrders(APIView):
         rows = list(qs[(page-1)*20:page*20+1])
         # List responses exclude private photos and design codes.
         data = [{key: getattr(o, key) for key in ('reference','model_name','status','amount','currency','mode','fulfillment_type','created_at')} for o in rows[:20]]
+        for item, order in zip(data, rows[:20]):
+            item['progress'] = order_progress(order)
+            item['refund'] = refund_data(order)
         return Response({'results':data, 'has_more':len(rows)>20, 'page':page})
     @transaction.atomic
     def post(self, request):
@@ -303,6 +310,16 @@ class StoreOrder(StoreOrders):
         return Response(order_data(order))
     def post(self, request, reference):
         return Response(status=405)
+
+class StoreOrderProgress(StoreOrders):
+    http_method_names = ['get', 'head', 'options']
+
+    def get(self, request, reference):
+        from .order_progress import with_order_progress, progress_payload
+        order = get_object_or_404(with_order_progress(PrintOrder.objects.all()).defer('snapshot'),
+                                 reference=reference, owner_hash=owner(request))
+        return Response(progress_payload(order))
+
 
 class OrderFulfillment(StoreOrders):
     """Explicitly classify an untouched historical order; never move a supplier job."""
