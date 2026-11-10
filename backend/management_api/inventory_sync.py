@@ -204,7 +204,7 @@ def sync_device(device_id, actor_name='管理命令'):
     if run.status == 'success':
         from .inventory_publish import publish_device_catalog
         summary = publish_device_catalog(device_id, actor_name)
-        run.message += summary
+        run.message = (run.message + summary)[:300]
         run.save(update_fields=['message'])
         Device.objects.filter(pk=device_id, last_success_at=observed).update(sync_message=run.message)
     return run

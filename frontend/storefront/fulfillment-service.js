@@ -3,13 +3,14 @@ import {makePersonalDesign} from './simple-personalize.js';
 import {registerSupplierTemplates} from './phone-templates.js';
 import {exportCase} from './print-export.js';
 import {esc} from './art.js';
+import {stationNavigation} from './station-navigation.js';
 
 export function stationIdentity(device,{lang='en-US'}={}){
  const text=value=>typeof value==='string'?value.trim():'';
  const zh=lang==='zh-CN',name=text(device?.name)||(zh?'打印设备':'Print station');
  const location=text(device?.location)||(zh?'位置暂未填写，请核对现场设备。':'Location not provided. Check the station on site.');
  const number=text(device?.number),id=device?.device_id;
- return `<div class="station-identity"><strong class="station-identity-name">${esc(name)}</strong><p class="station-identity-location">${esc(location)}</p><small>${zh?'设备编号':'Device ID'}：${esc(id||'—')}${number&&number!==id?` · ${esc(number)}`:''}</small></div>`;
+ return `<div class="station-identity"><strong class="station-identity-name">${esc(name)}</strong><p class="station-identity-location">${esc(location)}</p><small>${zh?'设备编号':'Device ID'}：${esc(id||'—')}${number&&number!==id?` · ${esc(number)}`:''}</small>${stationNavigation(device,{lang})}</div>`;
 }
 
 export async function fulfillmentConfig(fetcher=fetch){

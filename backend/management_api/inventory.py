@@ -17,6 +17,7 @@ from .audit import audit
 from .device_provider import ALLOWED_BASE_URLS, validate_base_url, ProviderError
 from .inventory_sync import sync_device, SyncBusy
 from .inventory_catalog import sync_models
+from .device_location import display_identity
 
 CATALOG_SYNC_PERMISSIONS = tuple('management_api.' + p for p in (
     'view_device', 'view_supplierproduct', 'change_supplierproduct', 'add_brand', 'add_phonemodel'))
@@ -42,7 +43,9 @@ class ConnectionSerializer(StrictWriteSerializer):
 
     class Meta:
         model = DeviceProviderConnection
-        fields = ['id', 'name', 'base_url', 'shop_id', 'payment_currency', 'active', 'revision', 'authorization', 'masked_key']
+        fields = ['id', 'name', 'base_url', 'shop_id', 'payment_currency', 'active', 'revision', 'authorization', 'masked_key',
+                  'profile_sync_at', 'profile_sync_status', 'profile_sync_message']
+        read_only_fields = ['profile_sync_at', 'profile_sync_status', 'profile_sync_message']
 
     def get_masked_key(self, obj):
         return '••••' + obj.key_last_four
@@ -84,21 +87,29 @@ class ConnectionSerializer(StrictWriteSerializer):
 
 
 class DeviceSerializer(StrictWriteSerializer):
+    display_identity = serializers.SerializerMethodField()
+    profile_sync_message = serializers.CharField(source='connection.profile_sync_message', read_only=True)
+    profile_sync_status = serializers.CharField(source='connection.profile_sync_status', read_only=True)
     connection_name = serializers.CharField(source='connection.name', read_only=True)
     shop_id = serializers.CharField(source='connection.shop_id', read_only=True)
     connection_active = serializers.BooleanField(source='connection.active', read_only=True)
     stale = serializers.SerializerMethodField()
-    writable = {'connection', 'vendor_device_id', 'name', 'location_note', 'active', 'revision'}
+    writable = {'connection', 'vendor_device_id', 'name', 'location_note', 'active', 'revision',
+                'name_source', 'location_source', 'installation_note', 'supplier_coordinate_type'}
 
     class Meta:
         model = Device
         fields = ['id', 'connection', 'connection_name', 'connection_active', 'shop_id', 'vendor_device_id', 'name', 'location_note',
                   'active', 'revision', 'last_success_at', 'sync_status', 'sync_message', 'stale', 'provider_config',
-                  'provider_profile', 'provider_profile_at']
+                  'provider_profile', 'provider_profile_at', 'name_source', 'location_source', 'installation_note',
+                  'supplier_coordinate_type', 'display_identity', 'profile_sync_message', 'profile_sync_status']
         read_only_fields = ['last_success_at', 'sync_status', 'sync_message', 'provider_config']
 
     def get_stale(self, obj):
         return stale(obj.last_success_at)
+
+    def get_display_identity(self, obj):
+        return display_identity(obj)
 
     def validate_vendor_device_id(self, value):
         if not value.isascii() or not value.isdigit():
@@ -132,12 +143,22 @@ class ProductSerializer(StrictWriteSerializer):
     connection_name = serializers.CharField(source='connection.name', read_only=True)
     phone_model_name = serializers.CharField(source='phone_model.name', read_only=True, default='')
     print_ready = serializers.BooleanField(source='phone_model.print_ready', read_only=True, default=False)
+    publication_notes = serializers.SerializerMethodField()
     writable = {'phone_model', 'display_name', 'active'}
+
+    def get_publication_notes(self, obj):
+        if not obj.phone_model:
+            return ['尚未关联机型']
+        notes = []
+        for label, item in [('品牌', obj.phone_model.brand), ('机型', obj.phone_model), ('商品', obj)]:
+            if not item.active:
+                notes.append(f'{label}待自动上架' if item.auto_publish_pending else f'{label}已停用，需人工启用')
+        return notes
 
     class Meta:
         model = SupplierProduct
         fields = ['id', 'connection', 'connection_name', 'goods_id', 'product_id', 'brand_name', 'name', 'specs',
-                  'phone_model', 'phone_model_name', 'print_ready', 'display_name', 'active', 'updated_at']
+                  'phone_model', 'phone_model_name', 'print_ready', 'display_name', 'active', 'publication_notes', 'updated_at']
         read_only_fields = ['connection', 'goods_id', 'product_id', 'brand_name', 'name', 'specs', 'updated_at']
 
     def validate(self, attrs):
@@ -228,12 +249,12 @@ class ConnectionViewSet(mixins.CreateModelMixin, InventoryWriteViewSet):
 
     @action(detail=True, methods=['post'], url_path='sync-devices')
     def sync_devices(self, request, pk=None):
-        from .device_discovery import discover_devices
+        from .connection_sync import sync_connection
         if request.data:
             raise serializers.ValidationError({'detail': '此操作不接受额外参数。'})
         connection = self.get_object()
         try:
-            result = discover_devices(connection)
+            result = sync_connection(connection, request.user.username)
         except ProviderError as exc:
             raise serializers.ValidationError({'detail': str(exc)})
         audit(request, 'sync', 'management_api.deviceproviderconnection', connection, result['message'])
@@ -252,7 +273,7 @@ class DeviceViewSet(mixins.CreateModelMixin, InventoryWriteViewSet):
     search_fields = ['name', 'vendor_device_id', 'location_note']
 
     def get_permissions(self):
-        if self.action == 'sync':
+        if self.action in ('sync', 'sync_profile'):
             return [IsAdminUser()]
         return super().get_permissions()
 
@@ -260,6 +281,21 @@ class DeviceViewSet(mixins.CreateModelMixin, InventoryWriteViewSet):
     def perform_create(self, serializer):
         obj = serializer.save()
         audit(self.request, 'create', obj._meta.label_lower, obj, '登记设备')
+
+    @action(detail=True, methods=['post'], url_path='sync-profile')
+    def sync_profile(self, request, pk=None):
+        if not request.user.has_perm('management_api.sync_device'):
+            raise PermissionDenied()
+        if request.data:
+            raise serializers.ValidationError({'detail': '此操作不接受额外参数。'})
+        from .device_discovery import discover_devices
+        device = self.get_object()
+        try:
+            result = discover_devices(device.connection)
+        except ProviderError as exc:
+            raise serializers.ValidationError({'detail': str(exc)})
+        audit(request, 'sync', 'management_api.deviceproviderconnection', device.connection, result['message'])
+        return Response(result)
 
     @action(detail=True, methods=['post'])
     def sync(self, request, pk=None):
@@ -277,7 +313,7 @@ class DeviceViewSet(mixins.CreateModelMixin, InventoryWriteViewSet):
 
 
 class ProductViewSet(InventoryWriteViewSet):
-    queryset = SupplierProduct.objects.select_related('connection', 'phone_model').order_by('id')
+    queryset = SupplierProduct.objects.select_related('connection', 'phone_model__brand').order_by('id')
     serializer_class = ProductSerializer
     search_fields = ['name', 'display_name', 'goods_id', 'brand_name', 'phone_model__name']
     http_method_names = ['get', 'post', 'patch', 'head', 'options']

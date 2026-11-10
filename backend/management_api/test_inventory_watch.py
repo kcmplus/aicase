@@ -23,9 +23,9 @@ class InventoryWatchTests(SimpleTestCase):
 
     def test_scheduled_empty_catalog_is_allowed_but_missing_specific_device_is_not(self):
         command='management_api.management.commands.sync_device_inventory'
-        with patch(command+'.Device.objects.filter') as devices:
-            devices.return_value.values_list.return_value=[]
-            devices.return_value.filter.return_value.values_list.return_value=[]
+        with patch(command+'.DeviceProviderConnection.objects.filter') as connections:
+            connections.return_value.__iter__.return_value=iter([])
+            connections.return_value.filter.return_value.__iter__.return_value=iter([])
             call_command('sync_device_inventory', all=True, allow_empty=True)
             with self.assertRaises(CommandError):
                 call_command('sync_device_inventory', all=True)

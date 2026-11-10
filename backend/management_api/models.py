@@ -34,6 +34,11 @@ class DeviceProviderConnection(Timestamped):
     api_key_ciphertext = models.TextField(editable=False)
     key_last_four = models.CharField(max_length=4, editable=False)
     revision = models.PositiveIntegerField(default=1)
+    profile_sync_at = models.DateTimeField(null=True, editable=False)
+    profile_sync_status = models.CharField(max_length=20, default='never', editable=False)
+    profile_sync_message = models.CharField(max_length=300, blank=True, editable=False)
+    profile_sync_token = models.UUIDField(null=True, editable=False)
+    profile_sync_started_at = models.DateTimeField(null=True, editable=False)
 
     class Meta:
         default_permissions = ()
@@ -47,6 +52,10 @@ class Device(Timestamped):
     vendor_device_id = models.CharField(max_length=40)
     name = models.CharField(max_length=120)
     location_note = models.CharField(max_length=200, blank=True)
+    name_source = models.CharField(max_length=10, choices=[('manual', '人工指定'), ('supplier', '跟随供应商')], default='manual')
+    location_source = models.CharField(max_length=10, choices=[('manual', '人工指定'), ('supplier', '跟随供应商')], default='manual')
+    installation_note = models.CharField(max_length=200, blank=True)
+    supplier_coordinate_type = models.CharField(max_length=10, blank=True, default='', choices=[('', '未确认'), ('WGS84', 'WGS84'), ('GCJ02', 'GCJ02'), ('BD09', 'BD09')])
     active = models.BooleanField(default=True)
     revision = models.PositiveIntegerField(default=1)
     last_success_at = models.DateTimeField(null=True, editable=False)

@@ -6,14 +6,14 @@ from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.response import Response
 from .models import Device
 from .store_catalog import store_models
+from .device_location import display_identity
 
 
 def public_device_identity(device):
     # Location is maintained as the public installation address in inventory.
     # Never copy arbitrary supplier profile/contact fields to the customer page.
     return {'device_id': device.vendor_device_id, 'shop_id': device.connection.shop_id,
-            'name': device.name, 'number': device.provider_profile.get('device_num', ''),
-            'location': device.location_note}
+            'number': device.provider_profile.get('device_num', ''), **display_identity(device)}
 
 
 @never_cache

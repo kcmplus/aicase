@@ -82,6 +82,7 @@ def public_state(order):
             'can_retry_dispatch': can_retry_dispatch(row, order), 'submitted_at': row.submitted_at,
             'shop_id': identity['shop_id'], 'device_name': identity['name'],
             'device_location': identity['location'], 'device_number': identity['number'],
+            'device_coordinates': identity['coordinates'],
             'message': row.message, 'print_confirmed': bool(row.print_confirmed_at),
             'release_state': row.release_state, 'print_status': row.native_print_status,
             'cloud_status': row.cloud_status, 'status_updated_at': row.cloud_synced_at,
