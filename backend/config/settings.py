@@ -63,10 +63,10 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 12 * 1024 * 1024
 SUPPLIER_ORDER_ENABLED = os.environ.get('SUPPLIER_ORDER_ENABLED', '0') == '1'
 SUPPLIER_ORDER_PUBLIC_URL = os.environ.get('SUPPLIER_ORDER_PUBLIC_URL', '')
 SUPPLIER_PAYMENT_ENABLED = os.environ.get('SUPPLIER_PAYMENT_ENABLED', '0') == '1'
-# Provisional values requested by the user. Do not use them as verified physical proof.
+# User confirmed on 2026-11-10: 1 means success for both print and shipment.
+# Other nonzero codes remain unknown; verification is an explicit deployment setting.
 SUPPLIER_ORDER_STATUS_MAP = json.loads(os.environ.get('SUPPLIER_ORDER_STATUS_MAP',
-    '{"print":{"0":"idle","1":"printing","2":"printed","3":"print_failed"},'
-    '"shipment":{"0":"idle","1":"delivering","2":"dispensed","3":"delivery_failed"}}'))
+    '{"print":{"0":"idle","1":"printed"},"shipment":{"0":"idle","1":"dispensed"}}'))
 SUPPLIER_ORDER_STATUS_VERIFIED = os.environ.get('SUPPLIER_ORDER_STATUS_VERIFIED', '0') == '1'
 AI_DAILY_RENDER_LIMIT = int(os.environ.get('AI_DAILY_RENDER_LIMIT', '20'))
 AI_CONCURRENT_RENDER_LIMIT = int(os.environ.get('AI_CONCURRENT_RENDER_LIMIT', '2'))

@@ -301,6 +301,48 @@ class SupplierPaymentTests(TestCase):
         self.assertIsNone(row.print_confirmed_at);remote.assert_not_called()
 
 
+    @override_settings(SUPPLIER_ORDER_STATUS_VERIFIED=True)
+    @patch('management_api.supplier_payments.DeviceProvider.get')
+    @patch('management_api.supplier_payments.requests.post')
+    def test_confirmed_one_means_success_read_only_and_never_collection(self, post, get):
+        from .order_progress import order_progress, with_order_progress
+        row = self.ready()
+        row.print_confirmed_at, row.release_state = timezone.now(), 'observed'
+        row.cloud_status = {'phase': 'delivering', 'phase_verified': False, 'payment_recorded': True}
+        row.save()
+        for printed, shipped, code, status in [(1, 0, 'printed', 'printing'), (1, 1, 'dispensed', 'ready'), (1, 1, 'dispensed', 'ready')]:
+            get.return_value = {'list': [self.record('1.00', pay_status=1, print_status=printed, shipment_status=shipped)]}
+            self.assertTrue(sync_order(row.pk, force=True))
+            order = with_order_progress(PrintOrder.objects.all()).get(pk=self.order.pk)
+            self.assertEqual(order_progress(order)['code'], code)
+            self.assertEqual(order.status, status)
+            self.assertTrue(order.supplier_order.cloud_status['phase_verified'])
+        post.assert_not_called()
+        self.assertEqual(get.call_args.args, ('/shop/order/list',))
+        self.assertEqual(get.call_args.kwargs['trade_no'], row.trade_no)
+        self.assertEqual(get.call_args.kwargs['device_id'], row.device.vendor_device_id)
+
+    @override_settings(SUPPLIER_ORDER_STATUS_VERIFIED=True)
+    @patch('management_api.supplier_payments.DeviceProvider.get')
+    def test_unconfirmed_two_and_three_and_mismatched_amount_do_not_become_success(self, get):
+        from .order_progress import order_progress, with_order_progress
+        row = self.ready()
+        for value in [2, 3, 99]:
+            get.return_value = {'list': [self.record('1.00', pay_status=1, print_status=value, shipment_status=value)]}
+            self.assertEqual(query_order(row)['phase'], 'unknown')
+            self.assertTrue(sync_order(row.pk, force=True))
+            order = with_order_progress(PrintOrder.objects.all()).get(pk=self.order.pk)
+            self.assertEqual(order.status, 'paid')
+            self.assertEqual(order_progress(order)['code'], 'unverified')
+        get.return_value = {'list': [self.record('2.00', pay_status=1, print_status=1, shipment_status=1)]}
+        sync_order(row.pk, force=True)
+        order = with_order_progress(PrintOrder.objects.all()).get(pk=self.order.pk)
+        self.assertEqual(order.status, 'paid')
+        self.assertEqual(order_progress(order)['code'], 'unverified')
+        get.return_value = {'list': [self.record('1.00', pay_status=1, print_status=1, shipment_status=1, status=4)]}
+        sync_order(row.pk, force=True)
+        self.assertEqual(order_progress(with_order_progress(PrintOrder.objects.all()).get(pk=self.order.pk))['code'], 'cancelled')
+
     @override_settings(SUPPLIER_ORDER_STATUS_VERIFIED=True, SUPPLIER_ORDER_STATUS_MAP={'print': {'41': 'printing', '42': 'printed', '43': 'print_failed'},
                                                  'shipment': {'71': 'dispensed'}})
     @patch('management_api.supplier_payments.DeviceProvider.get')
