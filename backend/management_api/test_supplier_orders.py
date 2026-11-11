@@ -96,6 +96,8 @@ class SupplierOrderTests(TestCase):
         self.assertEqual(self.post('device/', self.target).status_code, 409)
 
     def test_first_binding_can_explicitly_accept_the_scanned_devices_template(self):
+        self.stock.product.specs=[{'spec_name':'版本','spec_value':'普通款'}];self.stock.product.save()
+        self.order.case_material='standard'
         self.order.snapshot['_inventory_item'] = 999
         self.order.snapshot['photo'] = 'kept-artwork'
         self.order.save()
@@ -361,3 +363,21 @@ class SupplierOrderTests(TestCase):
         admin=get_user_model().objects.create_user(username='retry-admin')
         PrintRefund.objects.create(order=self.order, amount=1, currency='USD', reason='test', requested_by=admin)
         self.assertEqual(self.post('retry-dispatch/',body).status_code,409)
+
+    def test_case_style_mismatch_blocks_binding_even_with_template_acceptance(self):
+        self.stock.product.specs=[{'spec_name':'版本','spec_value':'普通款'}];self.stock.product.save()
+        self.order.case_material='magnetic';self.order.save()
+        self.assertEqual(self.post('device/', {**self.target,'accept_template':True}).status_code,409)
+        self.assertFalse(SupplierOrder.objects.filter(order=self.order).exists())
+
+    def test_unconfirmed_legacy_style_cannot_switch_goods(self):
+        self.order.snapshot['_inventory_item']=999;self.order.save()
+        self.assertEqual(self.post('device/', {**self.target,'accept_template':True}).status_code,409)
+
+    @patch('management_api.supplier_orders.DeviceProvider')
+    def test_changed_material_blocks_dispatch_without_vendor_write(self, remote):
+        row=self.prepare()
+        self.order.case_material='magnetic';self.order.status='paid';self.order.paid_at=timezone.now();self.order.save()
+        self.stock.product.specs=[{'spec_name':'版本','spec_value':'普通款'}];self.stock.product.save()
+        self.assertFalse(dispatch_order(row.pk))
+        remote.assert_not_called()

@@ -133,6 +133,11 @@ class DeviceSerializer(StrictWriteSerializer):
 
 
 class ProductSerializer(StrictWriteSerializer):
+    case_material = serializers.SerializerMethodField()
+    def get_case_material(self, obj):
+        from .case_materials import material_from_specs
+        return material_from_specs(obj.specs)
+
     @transaction.atomic
     def update(self, instance, validated_data):
         instance = SupplierProduct.objects.select_for_update().get(pk=instance.pk)
@@ -158,7 +163,7 @@ class ProductSerializer(StrictWriteSerializer):
     class Meta:
         model = SupplierProduct
         fields = ['id', 'connection', 'connection_name', 'goods_id', 'product_id', 'brand_name', 'name', 'specs',
-                  'phone_model', 'phone_model_name', 'print_ready', 'display_name', 'active', 'publication_notes', 'updated_at']
+                  'phone_model', 'phone_model_name', 'case_material', 'print_ready', 'display_name', 'active', 'publication_notes', 'updated_at']
         read_only_fields = ['connection', 'goods_id', 'product_id', 'brand_name', 'name', 'specs', 'updated_at']
 
     def validate(self, attrs):
@@ -175,6 +180,11 @@ class LaneSerializer(serializers.ModelSerializer):
 
 
 class StockSerializer(StrictWriteSerializer):
+    case_material = serializers.SerializerMethodField()
+    def get_case_material(self, obj):
+        from .case_materials import stock_material
+        return stock_material(obj)
+
     template_asset = serializers.SerializerMethodField()
     device_name = serializers.CharField(source='device.name', read_only=True)
     vendor_device_id = serializers.CharField(source='device.vendor_device_id', read_only=True)
@@ -191,7 +201,7 @@ class StockSerializer(StrictWriteSerializer):
     class Meta:
         model = DeviceProduct
         fields = ['id', 'device', 'device_name', 'vendor_device_id', 'product', 'goods_id', 'product_name', 'specs',
-                  'phone_model_name', 'source_price', 'source_currency', 'template_url', 'active', 'present',
+                  'phone_model_name', 'case_material', 'source_price', 'source_currency', 'template_url', 'active', 'present',
                   'low_stock_threshold', 'stock', 'observed_at', 'lanes', 'stale', 'low_stock', 'device_active', 'template_asset']
         read_only_fields = ['device', 'product', 'source_price', 'source_currency', 'template_url', 'present', 'stock', 'observed_at']
 

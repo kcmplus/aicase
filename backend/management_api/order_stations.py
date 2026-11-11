@@ -12,6 +12,7 @@ from .models import Device, DeviceProduct, PrintOrder
 from .orders import StoreOrders, owner
 from .device_info import public_device_identity
 from .device_location import device_coordinates
+from .case_materials import MATERIALS, material_stocks
 from .store_catalog import available_stocks
 
 
@@ -27,12 +28,12 @@ class OrderStations(StoreOrders):
         allowed = (order.fulfillment_type == 'pickup' and order.mode in ('stripe_live', 'airwallex_live', 'free_test')
                    and order.status in ('pending', 'paid') and not (refund and refund.status != 'failed')
                    and not (target and (target.print_confirmed_at or target.state not in ('draft', 'prepared', 'rejected'))))
-        result = station_options(request, order.model_name, target) if allowed else {'results': [], 'page': 1, 'has_more': False, 'max_age_seconds': 60}
+        result = station_options(request, order.model_name, target, order.case_material) if allowed else {'results': [], 'page': 1, 'has_more': False, 'max_age_seconds': 60}
         return Response({**result, 'reference': str(order.reference), 'model': order.model_name,
-                         'applicable': allowed, 'bound': bool(target)})
+                         'case_material': order.case_material, 'applicable': allowed, 'bound': bool(target)})
 
 
-def station_options(request, model_name, target=None):
+def station_options(request, model_name, target=None, material=''):
     result = {'results': [], 'max_age_seconds': 60}
     try:
         page = int(request.query_params.get('page', '1'))
@@ -47,6 +48,11 @@ def station_options(request, model_name, target=None):
         product__connection_id=F('device__connection_id')).select_related('product__phone_model__brand')
     eligible = available_stocks().filter(product__phone_model__name=model_name,
         product__connection_id=F('device__connection_id'), product__goods_id__regex=r'^[0-9]*[1-9][0-9]*$')
+    if material:
+        stocks = material_stocks(stocks, material)
+        eligible = material_stocks(eligible, material)
+    elif not target:
+        stocks, eligible = stocks.none(), eligible.none()
     if target:
         stocks = stocks.filter(pk=target.inventory_item_id)
         eligible = eligible.filter(pk=target.inventory_item_id)
@@ -110,4 +116,7 @@ def public_print_stations(request):
     model = request.query_params.get('model', '')
     if not model or len(model) > 160:
         raise ValidationError({'detail': 'Please select a phone model.'})
-    return Response({**station_options(request, model), 'model': model, 'applicable': True, 'bound': False})
+    material = request.query_params.get('case_material', '')
+    if material and material not in MATERIALS:
+        raise ValidationError({'detail': 'Invalid case style.'})
+    return Response({**station_options(request, model, material=material), 'case_material': material, 'model': model, 'applicable': True, 'bound': False})

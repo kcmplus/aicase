@@ -93,7 +93,7 @@ class PublicDeviceInfoTests(TestCase):
             provider_config={'currency':'USD','print_type':'600dpi','last_login_ip':'private-ip'},last_success_at=timezone.now())
         brand=Brand.objects.create(code='test',name='Test')
         model=PhoneModel.objects.create(code='test',name='Test phone',brand=brand)
-        product=SupplierProduct.objects.create(connection=connection,goods_id='10',product_id='1',name='Phone',phone_model=model,active=True)
+        product=SupplierProduct.objects.create(connection=connection,goods_id='10',product_id='1',name='Phone',phone_model=model,active=True,specs=[{'spec_name':'版本','spec_value':'普通款'}])
         self.stock=DeviceProduct.objects.create(device=self.device,product=product,stock=2,observed_at=timezone.now(),
             template_url='https://example.com/a.png',template_imported_url='https://example.com/a.png',
             template_image='a.png',template_mask='b.png',template_width=600,template_height=1200)

@@ -69,7 +69,8 @@ class DefaultPickupMigrationTests(TransactionTestCase):
                 expected = snapshots[order.pk]
                 if expected['fulfillment_type'] == 'unspecified':
                     expected['fulfillment_type'] = 'pickup'
-                self.assertEqual({f.attname: getattr(order, f.attname) for f in order._meta.fields}, expected)
+                self.assertEqual({name: getattr(order, name) for name in expected}, expected)
+                self.assertEqual(order.case_material, '')
             self.assertEqual(Order.objects.create(model_name='New phone', amount='0.50').fulfillment_type, 'pickup')
         finally:
             MigrationExecutor(connection).migrate(after)

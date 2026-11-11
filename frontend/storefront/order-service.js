@@ -24,7 +24,7 @@ export async function orderRequest(path='',{method='GET',body,fetcher=fetch,key=
 }
 export function savedOrder(data,previous){
  if(data.phone_template)registerSupplierTemplates([data.phone_template]);
- const pass=readPass(data.snapshot.code,data.snapshot);
+ const pass=readPass(data.snapshot.code,{...data.snapshot,...(data.case_material?{caseMaterial:data.case_material}:{})});
  return {id:data.reference,...(data.phone_template?{phoneTemplate:data.phone_template}:{}),server:true,progress:data.progress||null,fulfillmentType:data.fulfillment_type||'unspecified',fulfillment:data.fulfillment||null,refund:data.refund||null,mode:data.mode,status:data.status==='completed'?'collected':data.status,priceCents:Math.round(Number(data.amount)*100),currency:data.currency,revision:data.revision,stationId:data.station_id,customerEmail:data.customer_email,pass,oldCodes:[...new Set([...(previous?.oldCodes||[]),...(previous&&previous.pass.code!==pass.code?[previous.pass.code]:[])])],createdAt:Date.parse(data.created_at),updatedAt:Date.parse(data.updated_at)};
 }
 export function checkoutBody(draft,{accepted,email='',account,amount,provider='demo',mode='demo'}){

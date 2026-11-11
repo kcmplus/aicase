@@ -31,6 +31,7 @@ const dirty=computed(()=>editOpen.value&&JSON.stringify(form)!==saved.value);
 const schema=computed(()=>tabs.value.find(t=>t.key===tab.value));
 const title=computed(()=>({product:'商品映射',stock:'设备商品设置',device:editing.value?'编辑设备':'登记设备',connection:editing.value?'编辑连接':'新增连接'}[kind.value]));
 const time=v=>v?new Date(v).toLocaleString('zh-CN'):'尚未同步';
+const caseStyle=v=>({standard:'普通款',magnetic:'磁吸款'}[v]||'待确认');
 const specs=v=>(v||[]).map(s=>`${s.spec_name}：${s.spec_value}`).join(' · ')||'未提供规格';
 const statusText={never:'未同步',running:'同步中',success:'成功',failed:'失败'};
 let requestId=0;
@@ -119,12 +120,14 @@ onBeforeRouteLeave(()=>editOpen.value?closeEdit():true);
   <el-table v-if="tab==='products'" v-loading="loading" :data="rows" empty-text="暂无商品，请先登记设备并同步库存。">
    <el-table-column label="供应商商品" min-width="230"><template #default="{row}"><strong>{{row.display_name||row.name}}</strong><div class="inventory-secondary">{{row.brand_name}} · 商品 {{row.goods_id}}</div><div class="inventory-secondary">{{specs(row.specs)}}</div></template></el-table-column>
    <el-table-column prop="connection_name" label="来源连接" min-width="150"/>
+   <el-table-column label="手机壳物料" min-width="110"><template #default="{row}">{{caseStyle(row.case_material)}}</template></el-table-column>
    <el-table-column label="本地机型" min-width="170"><template #default="{row}">{{row.phone_model_name||'待映射'}}<div class="inventory-secondary">{{row.print_ready?'机型已标记校准':'待打印校准'}}</div></template></el-table-column>
    <el-table-column label="我方配置" width="110"><template #default="{row}"><el-tag :type="row.active?'success':'info'">{{row.active?'启用':'停用'}}</el-tag><div v-for="note in row.publication_notes" :key="note" class="inventory-secondary">{{note}}</div></template></el-table-column>
    <el-table-column v-if="permit('change_supplierproduct')" label="操作" width="110"><template #default="{row}"><el-button text type="primary" @click="edit('product',row)">设置映射</el-button></template></el-table-column>
   </el-table>
   <el-table v-else-if="tab==='stocks'" v-loading="loading" :data="rows" empty-text="暂无库存快照，请在设备管理中同步库存。">
    <el-table-column type="expand"><template #default="{row}"><div class="inventory-expanded"><p>{{specs(row.specs)}} · {{row.lanes.length}} 条货道</p><el-table :data="row.lanes" size="small"><el-table-column prop="lane_number" label="货道编号"/><el-table-column prop="vendor_record_id" label="货道记录 ID"/><el-table-column prop="stock" label="剩余库存"/><el-table-column label="采集时间"><template #default="{row:lane}">{{time(lane.observed_at)}}</template></el-table-column></el-table><p class="inventory-secondary">货道仅用于查看；下单由设备方选道。{{row.template_url?'供应商已提供模板，仍需审核校准。':'供应商模板待补充，可再次同步。'}}</p><div v-if="row.template_asset?.image" class="inventory-template-preview"><a :href="row.template_asset.image" target="_blank" rel="noopener"><img :src="row.template_asset.image" :alt="row.phone_model_name+' 供应商底图'" loading="lazy"/></a><span>{{row.template_asset.width}} × {{row.template_asset.height}} px · {{row.template_asset.mask?'预览遮罩已生成':'遮罩待补充'}}</span></div><a v-if="row.template_url" :href="row.template_url" target="_blank" rel="noopener noreferrer">查看供应商模板</a><router-link v-if="permit('view_phonemodel')" to="/phone-models" class="inventory-template-link">在机型管理查看底图与遮罩</router-link></div></template></el-table-column>
+   <el-table-column label="手机壳物料" min-width="110"><template #default="{row}">{{caseStyle(row.case_material)}}</template></el-table-column>
    <el-table-column label="商品 / 设备" min-width="220"><template #default="{row}"><strong>{{row.product_name}}</strong><div class="inventory-secondary">{{row.device_name}} · 商品 {{row.goods_id}}</div><div class="inventory-secondary">{{specs(row.specs)}}</div></template></el-table-column>
    <el-table-column label="库存合计" width="120"><template #default="{row}"><strong>{{row.stock}}</strong><el-tag v-if="row.low_stock" :type="row.stock===0?'danger':'warning'" size="small">{{row.stock===0?'缺货':'低库存'}}</el-tag></template></el-table-column>
    <el-table-column label="来源价格" min-width="140"><template #default="{row}">{{row.source_price??'—'}}<div class="inventory-secondary">{{row.source_currency||'币种未提供'}}</div></template></el-table-column>

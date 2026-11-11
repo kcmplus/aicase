@@ -92,6 +92,7 @@ class Snapshot(Layout):
     source = serializers.ChoiceField(choices=['collection','photo'])
     designId = serializers.SlugField(max_length=80)
     model = serializers.CharField(max_length=120)
+    caseMaterial = serializers.ChoiceField(choices=['standard', 'magnetic'], required=False)
     phoneTemplateId = serializers.SlugField(max_length=80, required=False)
     photo = serializers.CharField(max_length=3_000_000, allow_blank=True, default='')
     effect = serializers.ChoiceField(choices=['original','fresh','warm','bold'])
@@ -116,8 +117,16 @@ class Snapshot(Layout):
                 raise serializers.ValidationError('This phone model is out of stock or unavailable. Please choose again.')
             # Freeze server-owned asset paths for historical orders. The client
             # cannot submit this internal metadata through StrictSerializer.
+            from .case_materials import stock_material
+            material = stock_material(stock)
+            if data.get('caseMaterial') and data['caseMaterial'] != material:
+                raise serializers.ValidationError('The selected case style does not match this product.')
+            if material:
+                data['caseMaterial'] = material
             data['_template'] = template
             data['_inventory_item'] = stock.pk
+        elif data.get('caseMaterial'):
+            raise serializers.ValidationError('Select an available template for this case style before checkout.')
         elif Device.objects.exists() and not available_stocks().filter(product__phone_model__name=data['model']).exists():
             raise serializers.ValidationError('This phone model is out of stock or unavailable. Please choose again.')
         if not supplied_template.startswith('supplier-') and not PhoneModel.objects.filter(
@@ -197,7 +206,7 @@ def owner(request):
 
 
 def order_data(order, detail=True):
-    result = {key: getattr(order, key) for key in ('reference','model_name','customer_email','status','amount','currency','mode','revision','station_id','fulfillment_type','created_at','updated_at')}
+    result = {key: getattr(order, key) for key in ('reference','model_name','case_material','customer_email','status','amount','currency','mode','revision','station_id','fulfillment_type','created_at','updated_at')}
     from .refunds import refund_data
     result['refund'] = refund_data(order)
     from .supplier_orders import public_state
@@ -232,7 +241,7 @@ class StoreOrders(APIView):
             raise serializers.ValidationError('Invalid page.')
         rows = list(qs[(page-1)*20:page*20+1])
         # List responses exclude private photos and design codes.
-        data = [{key: getattr(o, key) for key in ('reference','model_name','status','amount','currency','mode','fulfillment_type','created_at')} for o in rows[:20]]
+        data = [{key: getattr(o, key) for key in ('reference','model_name','case_material','status','amount','currency','mode','fulfillment_type','created_at')} for o in rows[:20]]
         for item, order in zip(data, rows[:20]):
             item['progress'] = order_progress(order)
             item['refund'] = refund_data(order)
@@ -280,7 +289,7 @@ class StoreOrders(APIView):
         if payment['mode'].startswith(('stripe_', 'airwallex_')) and plan.price < Decimal('0.50'):
             raise Conflict('Online payment requires a print price of at least USD 0.50.')
         order = PrintOrder.objects.create(owner_hash=owner_hash, request_key=data['request_key'],
-            fulfillment_type=data['fulfillment_type'], **payment, model_name=data['snapshot']['model'], amount=plan.price, currency=plan.currency, customer=customer, customer_email=data['customer_email'], snapshot=data['snapshot'])
+            fulfillment_type=data['fulfillment_type'], **payment, model_name=data['snapshot']['model'], case_material=data['snapshot'].get('caseMaterial', ''), amount=plan.price, currency=plan.currency, customer=customer, customer_email=data['customer_email'], snapshot=data['snapshot'])
         log(order, 'create')
         return Response(order_data(order), status=201)
 
@@ -304,8 +313,9 @@ class StoreOrder(StoreOrders):
             raise Conflict('Save changes with a new design code.')
         order.snapshot = data['snapshot']
         order.model_name = data['snapshot']['model']
+        order.case_material = data['snapshot'].get('caseMaterial', '')
         order.revision += 1
-        order.save(update_fields=['snapshot','model_name','revision','updated_at'])
+        order.save(update_fields=['snapshot','model_name','case_material','revision','updated_at'])
         log(order, 'revise')
         return Response(order_data(order))
     def post(self, request, reference):

@@ -19,6 +19,7 @@ export function registerSupplierTemplates(items,{select=false}={}){
  if(select)selectedTemplates.clear();
  for(const t of validated){supplierTemplates.set(t.id,t);if(select)selectedTemplates.set(t.model,t.id);}
 }
+export function selectSupplierTemplate(model,id){if(id)selectedTemplates.set(model,id);else selectedTemplates.delete(model);}
 export function phoneTemplate(model,id){
  const supplier=supplierTemplates.get(id??selectedTemplates.get(model));
  const template=supplier?.model===model?supplier:phoneTemplates.findLast(t=>t.model===model&&(id===undefined||t.id===id));

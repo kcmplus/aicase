@@ -84,8 +84,10 @@ export async function prepareDeviceOrder(order,scope,{save,request=orderRequest,
  if(!current.fulfillment){
   const response=await fetcher('/api/v1/store/phone-models/?'+new URLSearchParams(ids),{cache:'no-store',credentials:'omit',signal:AbortSignal.timeout(10000)});
   if(!response.ok)throw Error('This station’s phone models could not be loaded.');
-  const catalog=await response.json(),model=catalog.models?.find(m=>m.name===order.pass.model);
-  if(!model)throw Error('This station has no stock for your phone model.');
+  const catalog=await response.json(),phone=catalog.models?.find(m=>m.name===order.pass.model);
+  const style=order.pass.caseMaterial?phone?.styles?.find(s=>s.caseMaterial===order.pass.caseMaterial&&s.available):null;
+  const model=order.pass.caseMaterial?(style?.templateId?{...phone,...style}:null):phone;
+  if(!model)throw Error('This station has no stock for your phone model and case style.');
   registerSupplierTemplates(catalog.templates);
   await request(order.id+'/device/',{method:'POST',body:{...ids,inventory_item_id:model.inventoryItemId,accept_template:true}});
   current=await save(await request(order.id+'/'));

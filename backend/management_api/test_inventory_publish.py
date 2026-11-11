@@ -24,7 +24,7 @@ class AutoPublishTests(TestCase):
         override.enable(); self.addCleanup(override.disable)
         self.rows = [lane()]
         self.rows[0].update(product_brand_name='Google', product_name='Google Pixel 11',
-            specs=[{'spec_name':'型号','spec_value':'Pixel 11 Pro XL'}],
+            specs=[{'spec_name':'型号','spec_value':'Pixel 11 Pro XL'},{'spec_name':'版本','spec_value':'普通款'}],
             template_url='https://file.autovendpro.com/one.png')
 
     def test_sync_publishes_new_google_and_refreshes_template_without_duplicates(self):

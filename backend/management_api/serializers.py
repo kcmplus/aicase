@@ -181,7 +181,7 @@ class PrintOrderSerializer(serializers.ModelSerializer):
     customer_id = serializers.UUIDField(read_only=True, allow_null=True)
     class Meta:
         model = PrintOrder
-        fields = ["id", "reference", "customer_id", "customer_email", "model_name", "status", "amount", "currency", "mode", "revision", "station_id", "fulfillment_type", "notes", "created_at", "updated_at", "refund_status", "progress"]
+        fields = ["id", "reference", "customer_id", "customer_email", "model_name", "case_material", "status", "amount", "currency", "mode", "revision", "station_id", "fulfillment_type", "notes", "created_at", "updated_at", "refund_status", "progress"]
         read_only_fields = [f for f in fields if f != "notes"]
 
 class PrintOrderDetailSerializer(PrintOrderSerializer):

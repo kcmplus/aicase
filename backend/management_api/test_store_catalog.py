@@ -19,7 +19,7 @@ class StockCatalogTests(TestCase):
         self.model = PhoneModel.objects.create(code='new-phone', name='iPhone 18', brand=Brand.objects.get(code='apple'), preview_family='iphone')
         self.connection = DeviceProviderConnection.objects.create(name='Vendor', base_url='https://shop.widermatrix.cn', shop_id='146')
         self.device = Device.objects.create(connection=self.connection, vendor_device_id='401', name='Device', sync_status='success')
-        self.product = SupplierProduct.objects.create(connection=self.connection, goods_id='1', product_id='1', phone_model=self.model, active=True)
+        self.product = SupplierProduct.objects.create(connection=self.connection, goods_id='1', product_id='1', phone_model=self.model, active=True, specs=[{'spec_name':'版本','spec_value':'普通款'}])
         self.stock = DeviceProduct.objects.create(device=self.device, product=self.product, stock=3, observed_at=timezone.now(),
             template_url='https://oss.widermatrix.cn/a.png', template_imported_url='https://oss.widermatrix.cn/a.png',
             template_image='supplier-templates/'+'a'*64+'-overlay.png', template_mask='supplier-templates/'+'b'*64+'-mask.png', template_width=600, template_height=1200)
@@ -133,7 +133,7 @@ class StockCatalogTests(TestCase):
     def test_unscoped_catalog_includes_different_models_across_devices(self):
         other_model = PhoneModel.objects.create(code='other-phone', name='Other Phone', brand=self.model.brand)
         device = Device.objects.create(connection=self.connection, vendor_device_id='402', name='Other')
-        product = SupplierProduct.objects.create(connection=self.connection, goods_id='2', product_id='2', phone_model=other_model, active=True)
+        product = SupplierProduct.objects.create(connection=self.connection, goods_id='2', product_id='2', phone_model=other_model, active=True, specs=[{'spec_name':'版本','spec_value':'普通款'}])
         self.stock.pk = None
         self.stock.product = product
         self.stock.device = device

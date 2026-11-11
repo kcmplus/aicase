@@ -49,6 +49,9 @@ const entries=[
  ["An order with an active refund cannot be printed.", "正在退款或已退款的订单不能打印。"],
 
  ['Inventory is being refreshed. Please try again shortly.','库存待更新，正在自动重试，请稍后再试。'],
+ ['Choose your case style first.','请先选择普通款或磁吸款。'],
+ ['The selected case style does not match this product.','所选款式与商品不一致，请重新选择。'],
+ ['This station has no stock for your phone model and case style.','此网点暂无所选机型及款式的库存。'],
  ['Open this order again from My orders, then retry.','请从“我的订单”重新打开此订单后再试。'],
  ['Processing your request… Please wait.','正在处理，请稍候…'],
  ['Showing models in stock at the scanned station.','当前显示已扫码设备有库存的机型。'],

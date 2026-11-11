@@ -25,10 +25,12 @@ export async function loadPrintStations(context,page=1,{request=orderRequest,fet
  if(context.orderId)data=await request(context.orderId+'/stations/?'+params);
  else{
   params.set('model',context.model);
+  if(context.caseMaterial)params.set('case_material',context.caseMaterial);
   if(context.scope)for(const [key,value] of Object.entries(context.scope))params.set(key,value);
   const response=await fetcher('/api/v1/store/print-stations/?'+params,{credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(15000)});
   if(!response.ok)throw Error('unavailable');data=await response.json();
  }
+ if(context.caseMaterial&&data.case_material!==context.caseMaterial)throw Error('invalid-response');
  if(data.model!==context.model||context.orderId&&data.reference!==context.orderId||!Array.isArray(data.results)||data.page!==page||typeof data.has_more!=='boolean'||typeof data.applicable!=='boolean'||typeof data.bound!=='boolean')throw Error('invalid-response');
  const identities=new Set();
  for(const s of data.results){

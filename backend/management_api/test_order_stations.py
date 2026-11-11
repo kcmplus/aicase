@@ -12,14 +12,15 @@ class OrderStationTests(TestCase):
         device_tests.PublicDeviceInfoTests.setUp(self)
         self.device.provider_profile['coordinates'] = {'latitude': '23.1', 'longitude': '113.3', 'coordinate_type': 'WGS84'}
         self.device.save()
+        self.stock.product.specs=[{'spec_name':'版本','spec_value':'普通款'}];self.stock.product.save()
 
     def order(self, **values):
         self.client.credentials(HTTP_X_ORDER_KEY='a'*64)
         return PrintOrder.objects.create(mode='airwallex_live', status='paid', paid_at=timezone.now(),
-            amount='1.00', model_name='Test phone', owner_hash=hashlib.sha256(('a'*64).encode()).hexdigest(), **values)
+            amount='1.00', case_material='standard', model_name='Test phone', owner_hash=hashlib.sha256(('a'*64).encode()).hexdigest(), **values)
 
     def public(self, extra=''):
-        return self.client.get('/api/v1/store/print-stations/?model=Test%20phone'+extra)
+        return self.client.get('/api/v1/store/print-stations/?model=Test%20phone&case_material=standard'+extra)
 
     def test_public_catalog_is_exact_stocked_model_only_and_never_writes_supplier(self):
         with patch('management_api.device_provider.DeviceProvider') as provider:
@@ -89,7 +90,7 @@ class OrderStationTests(TestCase):
         for i in range(22):
             device=Device.objects.create(connection=self.device.connection,vendor_device_id=str(500+i),name='Station',provider_profile=self.device.provider_profile)
             DeviceProduct.objects.create(device=device,product=self.stock.product,stock=1,observed_at=timezone.now(),template_url=self.stock.template_url,template_imported_url=self.stock.template_imported_url,template_image='a.png',template_mask='b.png',template_width=600,template_height=1200)
-        with self.assertNumQueries(3):
+        with self.assertNumQueries(5):
             data=self.public().data
         self.assertEqual(len(data['results']),20);self.assertTrue(data['has_more'])
         self.assertEqual(len(self.public('&page=2').data['results']),3)
