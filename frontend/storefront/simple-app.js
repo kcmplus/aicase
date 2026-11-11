@@ -77,6 +77,14 @@ function pickupStationPanel(){
  return stationFinderPanel(finder,{model:context.model,lang:locale(),position:userPosition,locating:locatingStations,locationError:stationLocationError,openMaps:openStationMaps});
 }
 function pickupCheckoutReady(){const c=pickupContext(),v=stationFinder.state;return c&&v.key===c.key&&!v.error&&!v.busy&&Date.now()-v.loadedAt<=60000&&v.rows.some(s=>s.availability==='available');}
+async function requestStationLocation({force=false}={}){
+ if(locatingStations||passBusy||(!force&&userPosition&&Date.now()-userPosition.acquiredAt<300000))return;
+ locatingStations=true;stationLocationError='';
+ // Start on the radio/button gesture, before storage writes or other awaits.
+ const request=locateUser();renderStationFinder();
+ try{userPosition=await request;}catch(error){stationLocationError=error.message;userPosition=null;}
+ finally{locatingStations=false;renderStationFinder();}
+}
 function renderStationFinder(){
  const panel=document.querySelector('#pickup-station-panel');if(panel)panel.innerHTML=pickupStationPanel();
  const button=document.querySelector('#print-checkout-form button');if(button&&!checkoutDraft?.editId)button.disabled=passBusy||!pickupCheckoutReady();
@@ -586,7 +594,7 @@ function checkoutPage(){
  const delivery=order?.fulfillmentType||checkoutDraft.fulfillmentType||'pickup',pickup=delivery==='pickup';
  const price=order?money(order.priceCents):PRINT_PRICE;
  const provider=providerName(paymentConfig?.provider),paidCheckout=['stripe','airwallex'].includes(paymentConfig?.provider)&&!editId;
- return `<section class="flow wrap review-flow">${pickup?steps(1):''}<a class="back-link" href="#choose">← Keep editing</a><div class="ai-heading"><p class="eyebrow">REVIEW YOUR PRINT · ${paymentConfig?.zero_price_test?provider:paidCheckout?provider.toUpperCase():paymentConfig||editId?'DEMO':'CHECKOUT'}</p><h1>${editId?'Make it just right.':'Happy with your design?'}</h1><p>Check your artwork and phone model before confirming.</p></div><div class="ai-order-layout"><div class="checkout-preview"><div class="checkout-case">${passPreview(pass)}</div><h2>${passName(pass)}</h2><p>${esc(pass.model)}</p>${effectCaption(pass)}</div><div class="ai-order-card">${!editId?deliveryOptions(delivery,locale()):''}${pickup&&scannedStation?stationIdentity(scannedStation,{lang:locale(),navigation:false}):''}<div id="pickup-station-panel">${pickupStationPanel()}</div>${pickup&&(paymentConfig||editId)?quoteBreakdown(pass,price,Boolean(editId)):''}${pickup?`<p class="field-note">${paidCheckout||paymentConfig?.zero_price_test?'Check your design carefully. The artwork is locked when the payment order is created.':'You can edit your design until printing starts. Saving a revision updates your design. After printing starts, changes need a new order.'}</p>`:''}${!pickup?`<p class="delivery-notice" role="status">${locale()==='zh-CN'?'快递／空运配送暂未开放，设计已保存，暂不收款。可返回继续编辑，或选择设备现场自取。':'Courier and air delivery are coming soon. Your design is saved and checkout is paused. You can keep editing or choose on-site pickup.'}</p>`:paymentLoading?'<p role="status" aria-live="polite">Loading checkout… If the service is busy, we will retry up to 3 times.</p>':!editId&&(!paymentConfig?.available||paymentError)?`<p class="error" role="alert">${esc(paymentError||'Payment is unavailable. Please try again later.')}</p><button class="text-button" data-action="refresh-payment">Reload checkout</button>`:!PRINT_AVAILABLE&&!editId?'<p class="error">Printing is unavailable. Please reload and try again.</p>':locked?'<p class="error">This order has started printing. Return to My design to create a new order.</p>':`<form id="print-checkout-form">${!editId?checkoutEmailField(membership):''}<label class="ai-consent"><input name="accepted" type="checkbox" required><span>I confirm this design and phone model. ${editId?'Update my existing design at no extra printing charge.':paidCheckout?`Pay ${price} for one case with ${provider}.${paymentConfig.mode==='test'?' Test mode: no real charge.':''}`:paymentConfig?.zero_price_test?'Create a no-charge integration order. Confirm at the station to start a real print.':`Simulate a ${price} payment for one print. No real charge.`} The design and any photo will be securely saved with this order.</span></label><button class="button primary full" ${!editId&&!pickupCheckoutReady()?'disabled':''}>${editId?'Save design changes':paidCheckout?`Pay ${price} with ${provider}`:paymentConfig?.zero_price_test?'Complete free test order':`Confirm ${price} test order`}</button></form>`}</div></div></section>`;
+ return `<section class="flow wrap review-flow">${pickup?steps(1):''}<a class="back-link" href="#choose">← Keep editing</a><div class="ai-heading"><p class="eyebrow">REVIEW YOUR PRINT · ${paymentConfig?.zero_price_test?provider:paidCheckout?provider.toUpperCase():paymentConfig||editId?'DEMO':'CHECKOUT'}</p><h1>${editId?'Make it just right.':'Happy with your design?'}</h1><p>Check your artwork and phone model before confirming.</p></div><div class="ai-order-layout"><div class="checkout-preview"><div class="checkout-case">${passPreview(pass)}</div><h2>${passName(pass)}</h2><p>${esc(pass.model)}</p>${effectCaption(pass)}</div><div class="ai-order-card">${!editId?deliveryOptions(delivery,locale(),{pickupDetails:pickupStationPanel()}):''}${pickup&&scannedStation?stationIdentity(scannedStation,{lang:locale(),navigation:false}):''}${pickup&&(paymentConfig||editId)?quoteBreakdown(pass,price,Boolean(editId)):''}${pickup?`<p class="field-note">${paidCheckout||paymentConfig?.zero_price_test?'Check your design carefully. The artwork is locked when the payment order is created.':'You can edit your design until printing starts. Saving a revision updates your design. After printing starts, changes need a new order.'}</p>`:''}${!pickup?`<p class="delivery-notice" role="status">${locale()==='zh-CN'?'快递／空运配送暂未开放，设计已保存，暂不收款。可返回继续编辑，或选择设备现场自取。':'Courier and air delivery are coming soon. Your design is saved and checkout is paused. You can keep editing or choose on-site pickup.'}</p>`:paymentLoading?'<p role="status" aria-live="polite">Loading checkout… If the service is busy, we will retry up to 3 times.</p>':!editId&&(!paymentConfig?.available||paymentError)?`<p class="error" role="alert">${esc(paymentError||'Payment is unavailable. Please try again later.')}</p><button class="text-button" data-action="refresh-payment">Reload checkout</button>`:!PRINT_AVAILABLE&&!editId?'<p class="error">Printing is unavailable. Please reload and try again.</p>':locked?'<p class="error">This order has started printing. Return to My design to create a new order.</p>':`<form id="print-checkout-form">${!editId?checkoutEmailField(membership):''}<label class="ai-consent"><input name="accepted" type="checkbox" required><span>I confirm this design and phone model. ${editId?'Update my existing design at no extra printing charge.':paidCheckout?`Pay ${price} for one case with ${provider}.${paymentConfig.mode==='test'?' Test mode: no real charge.':''}`:paymentConfig?.zero_price_test?'Create a no-charge integration order. Confirm at the station to start a real print.':`Simulate a ${price} payment for one print. No real charge.`} The design and any photo will be securely saved with this order.</span></label><button class="button primary full" ${!editId&&!pickupCheckoutReady()?'disabled':''}>${editId?'Save design changes':paidCheckout?`Pay ${price} with ${provider}`:paymentConfig?.zero_price_test?'Complete free test order':`Confirm ${price} test order`}</button></form>`}</div></div></section>`;
 }
 function render(preserveScroll=false) {
   finishInlineText();
@@ -703,12 +711,14 @@ app.addEventListener('keydown',event=>{
 });
 app.addEventListener('toggle',event=>{const el=event.target;if(!el.isConnected||!el.matches('.pickup-stations .station-navigation'))return;const key=el.closest('[data-station-key]')?.dataset.stationKey;if(key){if(el.open)openStationMaps.add(key);else openStationMaps.delete(key);}},true);
 app.addEventListener('click',event=>{if(event.target.closest('.pickup-stations a')&&(stationFinder.state.error||Date.now()-stationFinder.state.loadedAt>60000)){event.preventDefault();void stationFinder.refresh();}},true);
+app.addEventListener('click',event=>{if(event.target.matches('input[name=fulfillment_type][value=pickup]')&&checkoutDraft&&!checkoutDraft.editId&&(checkoutDraft.fulfillmentType||'pickup')==='pickup')void requestStationLocation();});
 app.addEventListener('change',async event=>{
   if(event.target.matches('#ai-credit-form [name=accepted]'))aiUi.accepted=event.target.checked;
   if(event.target.name==='fulfillment_type'&&checkoutDraft&&!checkoutDraft.editId){
     if(passBusy)return;
     if(!['pickup','courier','air'].includes(event.target.value))return;
     checkoutDraft.fulfillmentType=event.target.value;checkoutDraft.requestKey=crypto.randomUUID();
+    if(event.target.value==='pickup')void requestStationLocation();
     await writeDesign('checkout-draft',checkoutDraft);syncStationFinder();render(true);return;
   }
   if(event.target.id==='language'){
@@ -852,11 +862,7 @@ app.addEventListener('click',async event=>{
   if(el.dataset.effect){state.effect=el.dataset.effect;comparing=false;effectPanelOpen=true;save();render(true);document.querySelector(`[data-effect="${state.effect}"]`)?.focus({preventScroll:true});return;}
   try {
     if(['refresh-stations','more-stations'].includes(el.dataset.action)){syncStationFinder();await stationFinder.refresh(el.dataset.action==='more-stations');return;}
-    if(el.dataset.action==='locate-stations'){
-      if(locatingStations)return;locatingStations=true;stationLocationError='';renderStationFinder();
-      try{userPosition=await locateUser();}catch(error){stationLocationError=error.message;userPosition=null;}
-      finally{locatingStations=false;renderStationFinder();}return;
-    }
+    if(el.dataset.action==='locate-stations'){await requestStationLocation({force:true});return;}
     if(el.dataset.action==='scan-station'){
       openStationScanner({lang:locale(),onScan:async (destination,{signal})=>{
         const url=new URL(destination),ids=scopeIds(url.search);

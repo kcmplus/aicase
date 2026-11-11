@@ -36,7 +36,7 @@ test('station list sorts distances, escapes content, preserves access without lo
  assert.ok(html.indexOf('Near')<html.indexOf('Far'));assert.ok(html.includes('直线距离'));assert.ok(html.includes('库存 2'));assert.ok(html.includes('选择地图导航'));
  assert.ok(!html.includes('Test <phone>'));assert.ok(html.includes('Test &lt;phone&gt;'));
  const noLocation=stationFinderPanel(state,{model:'Test phone',lang:'zh-CN',locationError:'denied',now});
- assert.ok(noLocation.includes('未授权定位'));assert.ok(noLocation.includes('选择地图导航'));
+ assert.ok(noLocation.includes('定位权限未开启'));assert.ok(noLocation.includes('选择地图导航'));
  assert.ok(stationFinderPanel(state,{now,openMaps:new Set(['146:401'])}).includes('class="station-navigation" open'));
  for(const modified of [{error:true},{loadedAt:now-61000},{rows:[{...station,availability:'out_of_stock',quantity:0}]}])assert.ok(!stationFinderPanel({...state,...modified},{now}).includes('Choose a map'));
  assert.ok(!stationFinderPanel({...state,error:true},{now}).includes('Choose a map'));
