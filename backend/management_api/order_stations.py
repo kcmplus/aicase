@@ -18,7 +18,8 @@ class OrderStations(StoreOrders):
     http_method_names = ['get', 'head', 'options']
 
     def get(self, request, reference):
-        order = get_object_or_404(PrintOrder.objects.select_related('supplier_order', 'refund').defer('snapshot'),
+        order = get_object_or_404(PrintOrder.objects.select_related('supplier_order', 'refund').defer(
+            'snapshot', 'supplier_order__print_image', 'supplier_order__preview_image'),
                                  reference=reference, owner_hash=owner(request))
         target = getattr(order, 'supplier_order', None)
         refund = getattr(order, 'refund', None)
