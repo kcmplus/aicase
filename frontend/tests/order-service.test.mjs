@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {orderAccessKey,orderRequest,savedOrder,checkoutBody,checkoutEmailField,getPaymentConfig,stripeCheckoutUrl} from '../storefront/order-service.js';
+import {providerOrderRoute,requireDisplayedOrder,orderAccessKey,orderRequest,savedOrder,checkoutBody,checkoutEmailField,getPaymentConfig,stripeCheckoutUrl} from '../storefront/order-service.js';
 import {createPersonalPass} from '../storefront/simple-core.js';
 import {phone} from '../storefront/art.js';
 import {makePersonalDesign} from '../storefront/simple-personalize.js';
@@ -173,4 +173,21 @@ test('no-charge checkout is explicit and never claims money was collected',async
  assert.doesNotMatch(view.message,/payment is confirmed/i);
  const body=checkoutBody({requestKey:crypto.randomUUID(),pass:pass()},{accepted:true,amount:'0.00',provider:'free',mode:'test'});
  assert.equal(body.expected_amount,'0.00');assert.equal(body.payment_provider,'free');
+});
+
+test('saved design entry routes guest free and live orders to their own active order page',()=>{
+ for(const mode of ['free_test','stripe_live','airwallex_live','stripe_test','airwallex_test']){
+  const order={server:true,id:'order-123',mode};
+  assert.equal(providerOrderRoute(order),'payment?order=order-123');
+  assert.equal(requireDisplayedOrder(order,'order-123','#'+providerOrderRoute(order)),order);
+ }
+ assert.equal(providerOrderRoute({server:true,id:'demo',mode:'demo'}),null);
+ assert.equal(providerOrderRoute(null),null);
+ assert.equal(providerOrderRoute({id:'local',mode:'free_test'}),null);
+});
+test('missing or stale active order cannot silently no-op or submit a different displayed order',()=>{
+ const order={server:true,id:'current',mode:'free_test'};
+ for(const [active,displayed,hash] of [[null,'current','#payment?order=current'],[order,'other','#payment?order=current'],[order,'current','#pass'],[order,'current','#payment?order=other']]){
+  assert.throws(()=>requireDisplayedOrder(active,displayed,hash),/Open this order again/);
+ }
 });

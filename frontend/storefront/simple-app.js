@@ -1,7 +1,7 @@
 import {createStationFinder,stationFinderPanel,locateUser} from './pickup-stations.js';
 import {progressPanel,progressPaymentText} from './order-progress.js';
 import {startVisiblePolling} from './visible-polling.js';
-import {mergeOrderProgress} from './order-service.js';
+import {providerOrderRoute,requireDisplayedOrder,mergeOrderProgress} from './order-service.js';
 import {stationScanPrompt,previewStationPanel,openStationScanner} from './station-scanner.js';
 import {stationEntry} from './station-entry.js';
 import {loadDeviceInfo,deviceInfoErrorMessage} from './device-info-service.js';
@@ -59,7 +59,7 @@ let checkoutDraft=await readDesign('checkout-draft');
 for(const order of Object.values(orderBook.orders||{}))if(order.phoneTemplate)try{registerSupplierTemplates([order.phoneTemplate]);}catch{}
 if(checkoutDraft?.phoneTemplate)try{registerSupplierTemplates([checkoutDraft.phoneTemplate]);}catch{}
 let orderRows=[],orderPage=1,orderHasMore=false,orderError='',entryOrders=null,entryOrderError='';
-let paymentConfig=null,paymentError='',paymentOrder=null,stopPaymentPolling=()=>{},paymentPollCount=0,paymentLoading=false,navigationId=0;
+let paymentConfig=null,paymentError='',orderActionError='',paymentOrder=null,stopPaymentPolling=()=>{},paymentPollCount=0,paymentLoading=false,navigationId=0;
 let userPosition=null,locatingStations=false,stationLocationError='';
 const openStationMaps=new Set();
 const stationFinder=createStationFinder({onChange:renderStationFinder});
@@ -480,7 +480,7 @@ function passPage() {
  const pass=state.pass,zh=locale()==='zh-CN',say=(en,cn)=>zh?cn:en;
  if(!pass)return `<section class="empty wrap"><h1>${say('Choose your photo first.','先选择你的照片。')}</h1><a class="button primary" href="#choose">${say('Create a design','开始设计')}</a></section>`;
  const order=orderForCode(orderBook,pass.code);
- if(isProviderOrder(order))return providerOrderPage(order);
+ if(isProviderOrder(order))return `<section class="empty wrap"><p>${say('Opening your order…','正在打开订单…')}</p><a class="button primary" href="#${esc(providerOrderRoute(order))}">${say('Open order','打开订单')}</a></section>`;
  const price=order?money(order.priceCents):PRINT_PRICE;
  return `<section class="flow wrap review-flow payment-flow"><div class="ai-heading"><h1>${say('Your design is saved.','设计已保存。')}</h1><p>${order?say('Demo order — no real payment was taken.','演示订单，未实际收款。'):say('Review your design before placing an order.','请确认设计后下单。')}</p></div><div class="ai-order-layout"><div class="checkout-preview"><div class="checkout-case">${passPreview(pass)}</div><h2>${passName(pass)}</h2><p>${esc(pass.model)}</p>${effectCaption(pass)}</div><div class="ai-order-card">${order?`<p class="eyebrow">${esc(orderStatus(order.status,order.refund))} · ${say('DEMO','演示')}</p><h2>${esc(order.currency||'USD')} ${price}</h2>`:''}${previewStationPanel(order,{station:scannedStation,scope:stockScope,lang:locale()})}<a class="button secondary full" href="#choose" data-action="new-order-from-pass">${say('Use this design for a new order','使用此设计重新下单')}</a>${order?.server?`<details class="payment-receipt"><summary>${say('Order details','订单详情')}</summary><p>${esc(order.id)}</p><a class="text-button" href="#orders">${say('View all my orders →','查看全部订单 →')}</a></details>`:''}</div></div></section>`;
 }
@@ -544,11 +544,12 @@ function providerOrderPage(order){
  const headline=order.progress&&!order.refund&&!view.pending?progressPaymentText(order.progress,locale()):view.title;
  const headingMessage=order.progress&&!order.refund&&!view.pending?(locale()==='zh-CN'?'订单已保存，打印与出货进度见下方。':'Your order is saved. See printing and dispensing progress below.'):view.message;
  const canStartNew=['ready','completed','collected','cancelled'].includes(order.status)||order.refund?.status==='succeeded';
- return `<section class="flow wrap review-flow payment-flow ${view.fulfilled?'payment-fulfilled':''}"><div class="ai-heading">${view.fulfilled?'':`<p class="eyebrow">${paymentLabel(order.mode)}</p>`}<h1>${esc(headline)}</h1><p role="status">${esc(headingMessage)}</p></div>${progressPanel(order.progress,{lang:locale()})}<div id="pickup-station-panel">${pickupStationPanel()}</div>
+ return `<section class="flow wrap review-flow payment-flow ${view.fulfilled?'payment-fulfilled':''}" data-active-order="${esc(order.id)}"><div class="ai-heading">${view.fulfilled?'':`<p class="eyebrow">${paymentLabel(order.mode)}</p>`}<h1>${esc(headline)}</h1><p role="status">${esc(headingMessage)}</p></div>${progressPanel(order.progress,{lang:locale()})}<div id="pickup-station-panel">${pickupStationPanel()}</div>
  <div class="ai-order-layout"><div class="checkout-preview"><div class="checkout-case">${passPreview(order.pass)}</div><h2>${passName(order.pass)}</h2><p>${esc(order.pass.model)}</p></div>
  <div class="ai-order-card" aria-busy="${passBusy}">${view.fulfilled?'':`<p class="eyebrow">${esc(orderStatus(order.status,order.refund))}</p><h2>${esc(order.currency)} ${money(order.priceCents)}</h2>`}
  ${order.mode==='free_test'?`<p class="payment-environment">${locale()==='zh-CN'?'0 元免付联调，不产生实际收款。':'No-charge test order. No payment was collected.'}</p>`:order.mode.endsWith('_test')?`<p class="payment-environment">${provider} test mode · No real charge.</p>`:view.pending?'<p class="payment-environment">Live payment · Your payment method will be charged.</p>':''}
- ${paymentError?`<p class="error" role="alert">${esc(paymentError)}</p>`:''}
+ ${orderActionError||paymentError?`<p class="error" role="alert">${esc(orderActionError||paymentError)}</p>`:''}
+ ${passBusy?`<p role="status" aria-live="polite">${locale()==='zh-CN'?'正在处理，请稍候…':'Processing your request… Please wait.'}</p>`:''}
  ${view.canPay&&isPickup(order)?`<button class="button primary full" data-action="pay-provider" data-id="${esc(order.id)}" ${passBusy?'disabled':''}>${passBusy?'Opening secure checkout…':`Continue to ${provider}`}</button>`:''}
  ${deliveryStatusPanel(order,{lang:locale(),busy:passBusy})}${deviceFulfillmentPanel(order)}
  <button class="text-button payment-refresh" data-action="refresh-payment" ${passBusy?'disabled':''}>${locale()==='zh-CN'?'刷新订单进度':'Refresh order progress'}</button>
@@ -878,12 +879,14 @@ app.addEventListener('click',async event=>{
       finally{passBusy=false;render(true);}return;
     }
     if(['send-device-order','confirm-device-print'].includes(el.dataset.action)){
-      if(passBusy||!paymentOrder)return;passBusy=true;render(true);
+      if(passBusy)return;
       try{
+        requireDisplayedOrder(paymentOrder,el.closest('[data-active-order]')?.dataset.activeOrder,location.hash);
+        passBusy=true;orderActionError='';render(true);
         if(el.dataset.action==='send-device-order')paymentOrder=await prepareDeviceOrder(paymentOrder,stockScope,{save:rememberOrder});
         else{await orderRequest(paymentOrder.id+'/confirm-print/',{method:'POST',body:{confirm:true}});paymentOrder=await refreshOrder(paymentOrder.id);}
         paymentError='';syncStationFinder();schedulePaymentPoll();
-      }catch(e){paymentError=e.message;}finally{passBusy=false;render(true);}return;
+      }catch(e){orderActionError=e.message;notify(e.message);}finally{passBusy=false;render(true);}return;
     }
     if(el.dataset.action==='toggle-library'){libraryExpanded=!libraryExpanded;render(true);return;}
     if(el.dataset.action==='edit-text'){if(inlineTextId)finishInlineText();else beginInlineText();return;}
@@ -950,13 +953,16 @@ async function navigate(){
   paymentError=config.status==='rejected'?config.reason.message:account.status==='rejected'?account.reason.message:'';
  }else paymentLoading=false;
  if(route==='payment'){
-  const paymentHash=location.hash;paymentError='';paymentOrder=null;render(true);
+  const paymentHash=location.hash;paymentError='';orderActionError='';paymentOrder=null;render(true);
   try{const latest=await refreshOrder(params.get('order'));if(location.hash!==paymentHash)return;paymentOrder=latest;state.pass=paymentOrder.pass;save();}
   catch(e){if(location.hash!==paymentHash)return;paymentError=e.message;}
   schedulePaymentPoll();
  }
  if(route==='pass'||route==='kiosk'){
    orderBook=await readDesign('print-orders-v1')||freshOrders();const order=state.pass&&orderForCode(orderBook,state.pass.code);
+   if(currentNavigation!==navigationId)return;
+   const detailRoute=route==='pass'&&providerOrderRoute(order);
+   if(detailRoute){history.replaceState(null,'','#'+detailRoute);return navigate();}
    if(order?.server)try{const latest=await refreshOrder(order.id);state.pass=latest.pass;if(state.job?.orderId===latest.id)state.job={...state.job,status:latest.status,pass:latest.pass};}catch(e){notify(e.message);}
  }
  if(route==='orders'){try{if(entryOrderError)throw Error(entryOrderError);const data=entryOrders||await orderRequest('?page='+orderPage);if(currentNavigation!==navigationId)return;orderRows=data.results;orderHasMore=data.has_more;orderError='';}catch(e){orderError=e.message;}finally{entryOrders=null;entryOrderError='';}}

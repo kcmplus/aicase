@@ -57,3 +57,14 @@ export function mergeOrderProgress(order,data){
  return {...order,progress:data.progress||null,fulfillment:data.fulfillment||null,refund:data.refund||null,
   status:data.status==='completed'?'collected':data.status,updatedAt:Date.parse(data.updated_at)};
 }
+
+export function providerOrderRoute(order){
+ return order?.server&&(/^(stripe|airwallex)_(test|live)$/.test(order.mode||'')||order.mode==='free_test')
+  ?'payment?order='+encodeURIComponent(order.id):null;
+}
+export function requireDisplayedOrder(order,displayedId,hash){
+ const [route,query='']=hash.slice(1).split('?');
+ if(!order||!displayedId||order.id!==displayedId||route!=='payment'||new URLSearchParams(query).get('order')!==order.id)
+  throw Error('Open this order again from My orders, then retry.');
+ return order;
+}

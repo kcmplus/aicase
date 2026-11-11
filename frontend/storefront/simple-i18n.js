@@ -49,6 +49,8 @@ const entries=[
  ["An order with an active refund cannot be printed.", "正在退款或已退款的订单不能打印。"],
 
  ['Inventory is being refreshed. Please try again shortly.','库存待更新，正在自动重试，请稍后再试。'],
+ ['Open this order again from My orders, then retry.','请从“我的订单”重新打开此订单后再试。'],
+ ['Processing your request… Please wait.','正在处理，请稍候…'],
  ['Showing models in stock at the scanned station.','当前显示已扫码设备有库存的机型。'],
  ['All phone models are shown. Station stock is checked after scanning.','当前显示全部机型，扫码后再按该设备库存筛选。'],
  ['No in-stock models are available at this station.','此设备暂无有库存的机型。'],
