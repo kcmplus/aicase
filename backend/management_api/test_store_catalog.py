@@ -27,7 +27,7 @@ class StockCatalogTests(TestCase):
             'model':self.model.name,'phoneTemplateId':stock_template(self.stock)['id'],'photo':'','effect':'original','intensity':65,'zoom':100,'x':50,'y':50}
 
     def catalog(self, params=None):
-        r = self.client.get('/api/v1/store/phone-models/', params or {})
+        r = self.client.get('/api/v1/store/phone-models/', {'device_id':'401','shop_id':'146'} if params is None else params)
         self.assertEqual(r.status_code, 200, r.content)
         return r.json()
 
@@ -78,9 +78,9 @@ class StockCatalogTests(TestCase):
     def test_shared_model_is_deduplicated_without_mixing_device_stock(self):
         other = Device.objects.create(connection=self.connection, vendor_device_id='402', name='Other device', sync_status='success')
         self.stock.pk=None; self.stock.device=other; self.stock.save()
-        self.assertEqual(len(self.catalog()['models']), 1)
+        self.assertEqual([r['name'] for r in self.catalog({})['models']].count(self.model.name), 1)
         DeviceProduct.objects.filter(device=self.device).update(stock=0)
-        self.assertEqual(len(self.catalog()['models']), 1)
+        self.assertIn(self.model.name, [r['name'] for r in self.catalog({})['models']])
         self.assertEqual(self.catalog({'device_id':'401'})['models'], [])
 
     def test_checkout_rechecks_stock_and_rejects_wrong_template_or_client_assets(self):
@@ -103,3 +103,41 @@ class StockCatalogTests(TestCase):
         self.assertEqual(read.status_code, 200)
         self.assertEqual(read.data['phone_template'], original)
         self.assertEqual(self.catalog()['models'], [])
+
+    def test_unscoped_design_catalog_ignores_stock_location_and_template_availability(self):
+        model = PhoneModel.objects.create(code='design-only', name='Design Only Phone', brand=self.model.brand)
+        self.stock.stock = 0
+        self.stock.observed_at = timezone.now() - timedelta(days=1)
+        self.stock.save()
+        self.device.active = False
+        self.device.provider_profile = {}
+        self.device.save()
+        catalog = self.catalog({})
+        self.assertEqual(catalog['scope'], 'catalog')
+        records = {row['name']: row for row in catalog['models']}
+        self.assertIn(self.model.name, records)
+        self.assertIn(model.name, records)
+        self.assertNotIn('templateId', records[model.name])
+        self.assertIn('templateId', records[self.model.name])
+        self.assertEqual(self.catalog()['models'], [])
+        self.assertEqual(self.catalog()['scope'], 'device')
+        self.stock.template_mask = ''
+        self.stock.save()
+        self.assertIn(self.model.name, [r['name'] for r in self.catalog({})['models']])
+        model.active = False
+        model.save()
+        self.assertNotIn(model.name, [r['name'] for r in self.catalog({})['models']])
+        # Being available for design is not authorization to sell/print absent stock.
+        self.assertFalse(Snapshot(data=self.snapshot).is_valid())
+
+    def test_unscoped_catalog_includes_different_models_across_devices(self):
+        other_model = PhoneModel.objects.create(code='other-phone', name='Other Phone', brand=self.model.brand)
+        device = Device.objects.create(connection=self.connection, vendor_device_id='402', name='Other')
+        product = SupplierProduct.objects.create(connection=self.connection, goods_id='2', product_id='2', phone_model=other_model, active=True)
+        self.stock.pk = None
+        self.stock.product = product
+        self.stock.device = device
+        self.stock.save()
+        self.assertTrue({self.model.name, other_model.name}.issubset({r['name'] for r in self.catalog({})['models']}))
+        self.assertEqual([r['name'] for r in self.catalog()['models']], [self.model.name])
+        self.assertEqual([r['name'] for r in self.catalog({'device_id':'402','shop_id':'146'})['models']], [other_model.name])

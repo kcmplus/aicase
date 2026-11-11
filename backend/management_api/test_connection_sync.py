@@ -76,10 +76,10 @@ class ConnectionSyncTests(TestCase):
             self.assertIn('机型停用 1 个', run.message)
             product = DeviceProduct.objects.get().product
             self.assertIn('机型已停用，需人工启用', ProductSerializer(product).data['publication_notes'])
-            self.assertEqual(store_models({})['models'], [])
+            self.assertEqual(store_models({'device_id':'401','shop_id':'146'})['models'], [])
             edit = PhoneModelSerializer(model, data={'active': True}, partial=True)
             self.assertTrue(edit.is_valid()); edit.save()
             self.sync()
         product.refresh_from_db()
         self.assertTrue(product.active)
-        self.assertEqual(len(store_models({})['models']), 1)
+        self.assertEqual(len(store_models({'device_id':'401','shop_id':'146'})['models']), 1)

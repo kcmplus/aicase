@@ -49,7 +49,12 @@ const entries=[
  ["An order with an active refund cannot be printed.", "正在退款或已退款的订单不能打印。"],
 
  ['Inventory is being refreshed. Please try again shortly.','库存待更新，正在自动重试，请稍后再试。'],
- ['Only in-stock models with available templates are shown.','仅显示有库存且模板齐全的机型。'],
+ ['Showing models in stock at the scanned station.','当前显示已扫码设备有库存的机型。'],
+ ['All phone models are shown. Station stock is checked after scanning.','当前显示全部机型，扫码后再按该设备库存筛选。'],
+ ['No in-stock models are available at this station.','此设备暂无有库存的机型。'],
+ ['No phone models are available right now.','暂未发布可选机型。'],
+ ['This phone model is unavailable. Please choose again.','此机型暂不可用，请重新选择。'],
+ ['Illustrative preview. The exact case template will be confirmed before printing.','当前为示意预览，打印前会确认对应机型的准确模板。'],
  ['Available models could not be loaded. Please try again.','可选机型加载失败，请重试。'],
  ['No in-stock models are available right now.','暂无有库存的可选机型。'],
  ['Refresh available models','刷新可选机型'],

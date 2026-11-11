@@ -66,3 +66,17 @@ test('Airwallex refund status survives alongside a frozen supplier template',()=
  assert.equal(order.pass.phoneTemplateId,template.id);
  assert.equal(order.phoneTemplate.mask,template.mask);
 });
+
+test('unscoped published models allow design without stock or an exact template; scanning replaces choices',async()=>{
+ const full={version:1,scope:'catalog',models:[...catalog().models,{name:'Design Only Phone',brand:'Design',code:'design-only'}],templates:[template]};
+ await loadStockCatalog(async url=>{assert.equal(url,'/api/v1/store/phone-models/');return {ok:true,json:async()=>full};},'');
+ assert.deepEqual(stockedPhoneModels,[template.model,'Design Only Phone']);
+ const pass=createPersonalPass({source:'collection',designId:'bloom',model:'Design Only Phone',effect:'original',intensity:0,zoom:100,x:50,y:50});
+ assert.equal(pass.model,'Design Only Phone');assert.equal(pass.phoneTemplateId,undefined);
+ assert.equal(readPass(pass.code,pass).model,'Design Only Phone');
+ await loadStockCatalog(async url=>{assert.ok(url.includes('device_id=401'));return {ok:true,json:async()=>catalog()};},'device_id=401&shop_id=146');
+ assert.deepEqual(stockedPhoneModels,[template.model]);
+ assert.equal(stockSelection('Design Only Phone'),null);
+ assert.equal(readPass(pass.code,pass).model,'Design Only Phone');
+ assert.throws(()=>applyStockCatalog({...full,scope:'device'}));
+});

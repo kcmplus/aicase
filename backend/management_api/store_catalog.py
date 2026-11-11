@@ -5,7 +5,7 @@ from django.core.files.storage import default_storage
 from django.db.models import F
 from django.utils import timezone
 from rest_framework import serializers
-from .models import Device, DeviceProduct
+from .models import Device, DeviceProduct, PhoneModel
 
 
 def catalog_stocks():
@@ -42,10 +42,38 @@ def resolve_stock_template(model, template_id):
     return None, None
 
 
+def design_models():
+    """Published design choices are independent of pickup inventory and location."""
+    models, templates, by_model = [], [], {}
+    # Prefer a current printable preview, then retain a valid imported preview
+    # for design-only models whose device stock is depleted or unavailable.
+    previews = DeviceProduct.objects.select_related('product__phone_model').filter(
+        product__active=True, product__phone_model__active=True,
+        product__phone_model__brand__active=True,
+        template_imported_url=F('template_url'), template_width__gt=0, template_height__gt=0,
+    ).exclude(template_image='').exclude(template_mask='').order_by('pk')
+    for stock in available_stocks().order_by('pk'):
+        by_model.setdefault(stock.product.phone_model_id, stock)
+    for stock in previews:
+        by_model.setdefault(stock.product.phone_model_id, stock)
+    for model in PhoneModel.objects.filter(active=True, brand__active=True).select_related('brand').order_by('sort_order', 'pk'):
+        record = {'name': model.name, 'code': model.code, 'brand': model.brand.name}
+        stock = by_model.get(model.pk)
+        if stock:
+            template = stock_template(stock)
+            record.update(templateId=template['id'], inventoryItemId=stock.pk)
+            templates.append(template)
+        models.append(record)
+    return {'version': 1, 'scope': 'catalog', 'models': models, 'templates': templates,
+            'device_id': None, 'availability': 'ready' if models else 'empty', 'max_age_seconds': 60}
+
+
 def store_models(params):
+    device_id, shop_id = params.get('device_id'), params.get('shop_id')
+    if device_id is None and shop_id is None:
+        return design_models()
     stocks = available_stocks()
     candidates = catalog_stocks()
-    device_id, shop_id = params.get('device_id'), params.get('shop_id')
     if shop_id and not device_id:
         raise serializers.ValidationError({'detail': 'A device_id is required with shop_id.'})
     if device_id is not None:
@@ -71,5 +99,5 @@ def store_models(params):
                        'templateId': template['id'], 'inventoryItemId': stock.pk})
         templates.append(template)
     availability = 'ready' if models else 'updating' if candidates.exists() else 'empty'
-    return {'version': 1, 'models': models, 'templates': templates, 'device_id': device_id, 'availability': availability,
+    return {'version': 1, 'scope': 'device', 'models': models, 'templates': templates, 'device_id': device_id, 'availability': availability,
             'max_age_seconds': 60}

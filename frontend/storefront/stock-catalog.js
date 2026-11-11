@@ -1,4 +1,4 @@
-import {registerSupplierTemplates} from './phone-templates.js';
+import {registerSupplierTemplates,registerDesignModels} from './phone-templates.js';
 export const stockedPhoneModels=[];
 export let stockCatalogStatus='loading';
 let records=[];
@@ -7,10 +7,11 @@ export function applyStockCatalog(data){
  if(data?.version!==1||!Array.isArray(data.models)||!Array.isArray(data.templates))throw Error('Invalid stock catalog.');
  const names=new Set();
  for(const r of data.models){
-  if(typeof r.name!=='string'||!r.name||names.has(r.name)||typeof r.brand!=='string'||!data.templates.some(t=>t.model===r.name&&t.id===r.templateId&&t.inventoryItemId===r.inventoryItemId))throw Error('Invalid stocked model.');
+  if(typeof r.name!=='string'||!r.name||names.has(r.name)||typeof r.brand!=='string'||!((data.scope==='catalog'&&r.templateId===undefined&&r.inventoryItemId===undefined)||data.templates.some(t=>t.model===r.name&&t.id===r.templateId&&t.inventoryItemId===r.inventoryItemId)))throw Error('Invalid stocked model.');
   names.add(r.name);
  }
  registerSupplierTemplates(data.templates,{select:true});
+ registerDesignModels(data.models.map(r=>r.name));
  records=data.models.map(r=>({...r}));stockedPhoneModels.splice(0,stockedPhoneModels.length,...records.map(r=>r.name));stockCatalogStatus=data.availability==='updating'?'updating':'ready';
 }
 export function unavailableStockCatalog(){
