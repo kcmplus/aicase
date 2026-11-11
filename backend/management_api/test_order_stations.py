@@ -8,7 +8,10 @@ from .models import PrintOrder, SupplierOrder, Device, DeviceProduct, DeviceProv
 
 
 class OrderStationTests(TestCase):
-    setUp = device_tests.PublicDeviceInfoTests.setUp
+    def setUp(self):
+        device_tests.PublicDeviceInfoTests.setUp(self)
+        self.device.provider_profile['coordinates'] = {'latitude': '23.1', 'longitude': '113.3', 'coordinate_type': 'WGS84'}
+        self.device.save()
 
     def order(self, **values):
         self.client.credentials(HTTP_X_ORDER_KEY='a'*64)
@@ -84,10 +87,33 @@ class OrderStationTests(TestCase):
 
     def test_catalog_paginates_and_has_bounded_query_count(self):
         for i in range(22):
-            device=Device.objects.create(connection=self.device.connection,vendor_device_id=str(500+i),name='Station')
+            device=Device.objects.create(connection=self.device.connection,vendor_device_id=str(500+i),name='Station',provider_profile=self.device.provider_profile)
             DeviceProduct.objects.create(device=device,product=self.stock.product,stock=1,observed_at=timezone.now(),template_url=self.stock.template_url,template_imported_url=self.stock.template_imported_url,template_image='a.png',template_mask='b.png',template_width=600,template_height=1200)
         with self.assertNumQueries(3):
             data=self.public().data
         self.assertEqual(len(data['results']),20);self.assertTrue(data['has_more'])
         self.assertEqual(len(self.public('&page=2').data['results']),3)
         self.assertEqual(self.public('&page=bad').status_code,400)
+
+    def test_missing_invalid_and_unconfirmed_coordinates_are_skipped(self):
+        for coords in [None, {}, {'latitude':'invalid','longitude':113,'coordinate_type':'WGS84'},
+                       {'latitude':91,'longitude':113,'coordinate_type':'WGS84'},
+                       {'latitude':23,'longitude':113},
+                       {'latitude':23,'longitude':113,'coordinate_type':'GCJ02'}]:
+            self.device.provider_profile={'coordinates':coords};self.device.save()
+            self.assertEqual(self.public().data['results'],[])
+            self.assertEqual(self.public('&shop_id=146&device_id=401').data['results'],[])
+        order=self.order()
+        row=SupplierOrder.objects.create(order=order,device=self.device,inventory_item=self.stock,business_number='2',goods_id=10,order_revision=1,snapshot_sha256='a'*64,state='prepared')
+        self.assertEqual(self.client.get(f'/api/v1/store/orders/{order.reference}/stations/').data['results'],[])
+        row.refresh_from_db();self.assertEqual(row.device_id,self.device.pk)
+
+    def test_coordinate_filter_runs_before_pagination(self):
+        self.device.provider_profile={};self.device.save()
+        for i in range(21):
+            device=Device.objects.create(connection=self.device.connection,vendor_device_id=str(800+i),name='Located',provider_profile={'coordinates':{'latitude':0,'longitude':0,'coordinate_type':'WGS84'}})
+            DeviceProduct.objects.create(device=device,product=self.stock.product,stock=1,observed_at=timezone.now(),template_url=self.stock.template_url,template_imported_url=self.stock.template_imported_url,template_image='a.png',template_mask='b.png',template_width=600,template_height=1200)
+        first=self.public().data;second=self.public('&page=2').data
+        self.assertEqual(len(first['results']),20);self.assertTrue(first['has_more'])
+        self.assertEqual(len(second['results']),1);self.assertFalse(second['has_more'])
+        self.assertNotIn('401',[s['device_id'] for s in first['results']+second['results']])

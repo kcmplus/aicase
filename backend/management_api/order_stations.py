@@ -1,6 +1,6 @@
 """Order-specific station stock, read only: no reservation or device binding."""
 from datetime import timedelta
-from django.db.models import Exists, OuterRef, Prefetch, F
+from django.db.models import Exists, OuterRef, Prefetch, F, prefetch_related_objects
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
@@ -11,6 +11,7 @@ from rest_framework.response import Response
 from .models import Device, DeviceProduct, PrintOrder
 from .orders import StoreOrders, owner
 from .device_info import public_device_identity
+from .device_location import device_coordinates
 from .store_catalog import available_stocks
 
 
@@ -61,8 +62,19 @@ def station_options(request, model_name, target=None):
             devices = devices.filter(vendor_device_id=device_id, connection__shop_id=shop_id)
         else:
             devices = devices.filter(stocked=True)
-    devices = devices.order_by('-stocked', 'pk').prefetch_related(Prefetch('products', queryset=stocks, to_attr='model_stocks'))
-    rows = list(devices[(page-1)*20:page*20+1])
+    # Validate source coordinates before pagination so omitted stations never
+    # leave an empty page ahead of valid candidates. Uses the public WGS84 contract.
+    rows, valid_count = [], 0
+    offset = (page - 1) * 20
+    for device in devices.order_by('-stocked', 'pk').iterator(chunk_size=100):
+        if device_coordinates(device) is None:
+            continue
+        if valid_count >= offset:
+            rows.append(device)
+        valid_count += 1
+        if len(rows) == 21:
+            break
+    prefetch_related_objects(rows[:20], Prefetch('products', queryset=stocks, to_attr='model_stocks'))
     good_ids = set(eligible.filter(device_id__in=[d.pk for d in rows[:20]]).values_list('pk', flat=True))
     cutoff = timezone.now() - timedelta(minutes=15)
     for device in rows[:20]:

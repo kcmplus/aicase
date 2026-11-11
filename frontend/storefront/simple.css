@@ -236,6 +236,8 @@
 
 .station-scanner [hidden]{display:none!important}
 
-.pickup-stations{margin:24px 0;padding:20px;border:1px solid #d5e1db;border-radius:20px;background:#f3f7f4}.pickup-stations h3{margin:0 0 8px}.pickup-station-card{margin:16px 0;padding:16px;background:#fff;border:1px solid #dce5df;border-radius:14px;overflow-wrap:anywhere}.pickup-station-actions{display:flex;flex-wrap:wrap;gap:12px}.pickup-stock{color:#276146;font-weight:650}.pickup-distance{font-weight:550}.pickup-station-card small{display:block;color:#65716b}.pickup-station-card .station-identity{margin:0}.pickup-stations .field-note{font-size:13px;line-height:1.5}
+.pickup-stations{margin:24px 0;padding:20px;border:1px solid #d5e1db;border-radius:20px;background:#f3f7f4}.pickup-stations h3{margin:0 0 8px}.pickup-station-actions{display:flex;flex-wrap:wrap;gap:12px}.pickup-stock{color:#276146;font-weight:650}.pickup-distance{font-weight:550}.pickup-stations .field-note{font-size:13px;line-height:1.5}
 
 .delivery-options>.pickup-option-details>.pickup-stations{margin:8px 0 16px}.pickup-option-details{min-width:0}
+
+.pickup-station-list{list-style:none;margin:12px 0;padding:0}.pickup-station-row{padding:14px 0;border-top:1px solid #d5e1db;overflow-wrap:anywhere}.pickup-row-heading{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}.pickup-row-heading strong{font-size:15px}.pickup-row-heading .pickup-distance{font-size:12px;font-weight:400;color:#58675e}.pickup-stations .pickup-row-address{margin:5px 0;font-size:13px;line-height:1.5}.pickup-row-actions{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}.pickup-row-actions .pickup-stock{font-size:13px}.pickup-row-actions .station-navigation{margin:0}.pickup-row-actions .station-navigation summary{font-size:13px}.pickup-station-row>small{display:block;color:#65716b;font-size:11px;margin-top:5px}.pickup-stations h3{font-size:16px}

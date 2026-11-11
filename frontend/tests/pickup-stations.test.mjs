@@ -33,13 +33,13 @@ test('station reads never send user location or write supplier orders and valida
 test('station list sorts distances, escapes content, preserves access without location and disables stale navigation',()=>{
  const state={rows:[{...station,name:'Far'}, {...station,device_id:'402',name:'Near',coordinates:{...station.coordinates,longitude:0.1}}],loadedAt:now};
  const html=stationFinderPanel(state,{model:'Test <phone>',position:{latitude:0,longitude:0,acquiredAt:now,accuracy:40},lang:'zh-CN',now});
- assert.ok(html.indexOf('Near')<html.indexOf('Far'));assert.ok(html.includes('直线距离'));assert.ok(html.includes('库存 2'));assert.ok(html.includes('选择地图导航'));
+ assert.ok(html.indexOf('Near')<html.indexOf('Far'));assert.ok(html.includes('直线距离'));assert.ok(html.includes('库存 2'));assert.ok(html.includes('导航'));
  assert.ok(!html.includes('Test <phone>'));assert.ok(html.includes('Test &lt;phone&gt;'));
  const noLocation=stationFinderPanel(state,{model:'Test phone',lang:'zh-CN',locationError:'denied',now});
- assert.ok(noLocation.includes('定位权限未开启'));assert.ok(noLocation.includes('选择地图导航'));
+ assert.ok(noLocation.includes('定位权限未开启'));assert.ok(noLocation.includes('导航'));
  assert.ok(stationFinderPanel(state,{now,openMaps:new Set(['146:401'])}).includes('class="station-navigation" open'));
- for(const modified of [{error:true},{loadedAt:now-61000},{rows:[{...station,availability:'out_of_stock',quantity:0}]}])assert.ok(!stationFinderPanel({...state,...modified},{now}).includes('Choose a map'));
- assert.ok(!stationFinderPanel({...state,error:true},{now}).includes('Choose a map'));
+ for(const modified of [{error:true},{loadedAt:now-61000},{rows:[{...station,availability:'out_of_stock',quantity:0}]}])assert.ok(!stationFinderPanel({...state,...modified},{now}).includes('Directions'));
+ assert.ok(!stationFinderPanel({...state,error:true},{now}).includes('Directions'));
 });
 test('late responses cannot replace another model and failures retain rows without usable navigation',async()=>{
  let first,fail=false;
@@ -49,6 +49,16 @@ test('late responses cannot replace another model and failures retain rows witho
  first({...payload,model:'Old',results:[]});await new Promise(r=>setTimeout(r,0));
  assert.equal(finder.state.key,'new');assert.equal(finder.state.rows.length,1);
  fail=true;await finder.refresh();assert.equal(finder.state.error,true);assert.equal(finder.state.rows.length,1);
- assert.ok(!stationFinderPanel(finder.state,{now}).includes('Choose a map'));
+ assert.ok(!stationFinderPanel(finder.state,{now}).includes('Directions'));
  finder.setContext(null);assert.equal(finder.state.rows.length,0);
+});
+
+test('compact list omits stations without valid WGS84 positions even in cached responses',()=>{
+ const html=stationFinderPanel({rows:[station,{...station,name:'Missing',device_id:'402',coordinates:null},{...station,name:'Wrong type',device_id:'403',coordinates:{...station.coordinates,coordinate_type:'GCJ02'}}],loadedAt:now},{now});
+ assert.ok(html.includes('<ul class="pickup-station-list">'));
+ assert.ok(html.includes('<li class="pickup-station-row"'));
+ assert.ok(!html.includes('Missing'));assert.ok(!html.includes('Wrong type'));
+ const empty=stationFinderPanel({rows:[{...station,coordinates:null}],loadedAt:now},{now,lang:'zh-CN'});
+ assert.ok(empty.includes('暂未找到已配置位置'));
+ assert.ok(!empty.includes('暂无距离信息'));
 });
