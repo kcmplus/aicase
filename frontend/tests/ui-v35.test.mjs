@@ -12,12 +12,12 @@ import {createDesignWorkspace,createDesignLibrary,designOwner} from '../storefro
 import {myDesignsPage,designReview} from '../storefront/v35-designs.js';
 import {createPersonalPass,readPass} from '../storefront/simple-core.js';
 import {phoneTemplates,phoneTemplate} from '../storefront/phone-templates.js';
-import {makePersonalDesign} from '../storefront/simple-personalize.js';
-import {validatePhoneColor,validPhoneColors,reconcilePhoneColor,colorPicker} from '../storefront/phone-colors.js';
+import {makePersonalDesign,isPhoto,validateAddedArtwork,validatePlacement} from '../storefront/simple-personalize.js';
+import {validatePhoneColor,validPhoneColors,frozenPhoneColor,reconcilePhoneColor,colorPicker} from '../storefront/phone-colors.js';
 import {phone} from '../storefront/art.js';
 import {exportCase} from '../storefront/print-export.js';
 import {orderRequest,savedOrder} from '../storefront/order-service.js';
-import {applyStockCatalog,stockSelection} from '../storefront/stock-catalog.js';
+import {applyStockCatalog,stockSelection,stockedPhoneModels,stockCatalogStatus,loadStockCatalog} from '../storefront/stock-catalog.js';
 import {customerPage} from '../storefront/customer-account.js';
 
 test('V35 home prioritizes the real album handler and preserves gallery and AI editor destinations',()=>{
@@ -346,7 +346,7 @@ test('actual editor submit opens a validated preview; saving stays local and onl
 test('actual restore handler retains rotations, text, crop and original bytes while clearing order authority',async()=>{
  const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8'),pass=syntheticPass(),before=JSON.stringify(pass),writes=[],routes=[];
  const context={readPass,phoneModels:[pass.model],privateWrite:async(name,value)=>writes.push([name,value]),workspace:{check(){}},finishInlineText:()=>{},state:{pass:{paid:true},job:{status:'printing'},editOrderId:'OLD'},structuredClone,
-  stockSelection:()=>null,reconcilePhoneColor,colorNotice:false,aiJob:{id:'OLD'},selectedArtwork:'OLD',comparing:true,reviewPass:{},save:()=>{},go:route=>routes.push(route),notify:()=>{},pass};
+  stockCatalogStatus:'ready',stockSelection:()=>null,reconcilePhoneColor,colorNotice:false,aiJob:{id:'OLD'},selectedArtwork:'OLD',comparing:true,reviewPass:{},save:()=>{},go:route=>routes.push(route),notify:()=>{},pass};
  await vm.runInNewContext(appFunction(source,'syncDraftColor')+'\n'+appFunction(source,'restoreLocalDesign')+'\nrestoreLocalDesign(pass)',context);
  assert.equal(context.state.pass,null);assert.equal(context.state.job,null);assert.equal(context.state.editOrderId,null);assert.equal(context.aiJob,null);
  assert.equal(context.state.photo,pass.photo);assert.deepEqual(context.state.photoPlacement,pass.photoPlacement);assert.deepEqual(context.state.photoArtwork,pass.addedArtwork);
@@ -417,7 +417,7 @@ test('no colors skip the picker; defaults, single/multiple colors and stale sele
 test('actual draft reconciliation clears an old model color, selects its own default and reports resource changes',async()=>{
  const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
  const old=previewColor(),fresh=previewColor(undefined,'new',2);
- const context={state:{model:'new-model',phoneColor:old},stockSelection:()=>({colors:[fresh]}),reconcilePhoneColor,colorNotice:false};
+ const context={state:{model:'new-model',phoneColor:old},stockCatalogStatus:'ready',stockSelection:()=>({colors:[fresh]}),reconcilePhoneColor,colorNotice:false};
  vm.createContext(context);vm.runInContext(appFunction(source,'syncDraftColor')+'\n'+appFunction(source,'assertCurrentColor'),context);
  vm.runInContext('syncDraftColor(true)',context);assert.equal(context.state.phoneColor.code,'new');assert.equal(context.colorNotice,false);
  context.state.phoneColor=old;vm.runInContext('syncDraftColor()',context);assert.equal(context.colorNotice,true);assert.equal(context.state.phoneColor.code,'new');
@@ -504,8 +504,112 @@ test('actual local restore clears unavailable color while retaining composition 
  const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8'),template=phoneTemplates[0],color=previewColor(template);
  const pass=createPersonalPass({source:'collection',designId:'bloom',model:template.model,phoneTemplateId:template.id,phoneColor:color,effect:'original',intensity:0,zoom:113,x:42,y:61});
  const before=JSON.stringify(pass),context={pass,readPass,phoneModels:[pass.model],privateWrite:async()=>{},workspace:{check(){}},finishInlineText:()=>{},state:{},structuredClone,
-  stockSelection:()=>({templateId:template.id,colors:[]}),reconcilePhoneColor,colorNotice:false,save:()=>{},go:()=>{},notify:()=>{}};
+  stockCatalogStatus:'ready',stockSelection:()=>({templateId:template.id,colors:[]}),reconcilePhoneColor,colorNotice:false,save:()=>{},go:()=>{},notify:()=>{}};
  await vm.runInNewContext(appFunction(source,'syncDraftColor')+'\n'+appFunction(source,'restoreLocalDesign')+'\nrestoreLocalDesign(pass)',context);
  assert.equal(context.state.phoneColor,null);assert.equal(context.colorNotice,true);assert.equal(context.state.artworkLayouts.bloom.zoom,113);assert.equal(context.state.artworkLayouts.bloom.x,42);
  assert.equal(JSON.stringify(pass),before);
+});
+
+// Run the actual startup, persistence and refresh code against the real catalog
+// module. Only HTTP/storage are synthetic; a failed read must remain distinct
+// from a successfully loaded catalog with no colors.
+async function startColorDraft(editor,response){
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
+ const start=source.indexOf('async function startStorefront(){');
+ const end=source.indexOf("try{if(location.hash.slice(1).split('?')[0]!=='checkout')",start);
+ const refreshStart=source.indexOf('async function refreshStockChoices(){');
+ const refreshEnd=source.indexOf('\nsetInterval(async()=>',refreshStart);
+ assert.ok(start>=0&&end>start&&refreshStart>0&&refreshEnd>refreshStart);
+ let currentResponse=response;
+ const context=vm.createContext({
+  document:{querySelector:()=>({textContent:''})},location:{hash:'#choose',href:'http://localhost/#choose'},
+  localStorage:{getItem:key=>editor.get(key)||null,setItem:(key,value)=>editor.set(key,value)},
+  t:value=>value,deviceScope:()=>'',scopeIds:()=>null,loadCatalog:async()=>null,
+  loadStockCatalog:()=>loadStockCatalog(async()=>currentResponse(),''),fulfillmentConfig:async()=>({}),
+  getAIAccount:async()=>customerIdentity(8),createDesignWorkspace,createDesignLibrary,readPass,
+  readDesign:async()=>undefined,writeDesign:async()=>{},updateDesign:async(key,transform,initial)=>transform(initial),
+  freshMembership:()=>({jobs:{}}),freshOrders:()=>({orders:{}}),designs:[{id:'bloom'}],phoneModels:stockedPhoneModels,
+  stations:[],aiStyles:[],aiExamples:[],effects:[],stockSelection,
+  exampleFor:()=>({id:'portrait',results:{anime:'synthetic'}}),migrateRender:value=>value,
+  frozenPhoneColor,reconcilePhoneColor,isPhoto,validateAddedArtwork,validatePlacement,phoneBrands:()=>[],phoneBrand:()=> 'Synthetic',notify:message=>assert.fail(message),
+ });
+ Object.defineProperty(context,'stockCatalogStatus',{get:()=>stockCatalogStatus});
+ const controller=await vm.runInContext(`(async()=>{${source.slice(start,end)}
+  let stockRefreshedAt=0,modelBrand='Synthetic';
+  ${appFunction(source,'syncDraftColor')}
+  ${appFunction(source,'save')}
+  ${source.slice(refreshStart,refreshEnd)}
+  return {get state(){return state;},get changed(){return colorNotice;},save,refresh:refreshStockChoices};
+ } return await startStorefront();})()`,context);
+ assert.equal(typeof controller,'object','the actual startup must reach the draft state');
+ return {controller,respond:next=>{currentResponse=next;}};
+}
+function draftColorCatalog(){
+ const template={...phoneTemplates[0],id:'supplier-889-'+'a'.repeat(20),inventoryItemId:889,dpi:null,previewOnly:true,model:'Synthetic Draft Color Model',
+  overlay:'/media/supplier-templates/'+'e'.repeat(64)+'-overlay.png',previewOverlay:'/media/supplier-templates/'+'e'.repeat(64)+'-overlay.png',mask:'/media/supplier-templates/'+'f'.repeat(64)+'-mask.png'};
+ const selected=previewColor(template,'chosen'),fallback={...previewColor(template,'default'),isDefault:true};
+ const catalog=colors=>({version:1,templates:[template],models:[{name:template.model,brand:'Synthetic',templateId:template.id,inventoryItemId:889,colors}]});
+ const draft={designId:'bloom',model:template.model,phoneColor:selected,source:'collection',zoom:123,x:35,y:67};
+ return {selected,fallback,catalog,draft};
+}
+test('503 startup and saves preserve the non-default draft color until a successful catalog refresh',async()=>{
+ const {selected,fallback,catalog,draft}=draftColorCatalog();
+ const key='v35:customer-8:editor',editor=new Map([[key,JSON.stringify(draft)]]),unavailable=()=>({ok:false,status:503});
+ let session=await startColorDraft(editor,()=>({ok:true,json:async()=>catalog([fallback,selected])}));
+ session.controller.save();assert.equal(JSON.parse(editor.get(key)).phoneColor.code,'chosen');
+ session=await startColorDraft(editor,unavailable);
+ for(let attempt=0;attempt<2;attempt++){
+  const app=session.controller;
+  assert.equal(stockCatalogStatus,'unavailable');assert.deepEqual(stockedPhoneModels,[]);assert.equal(stockSelection(draft.model),null);
+  assert.equal(app.state.model,draft.model);assert.deepEqual(JSON.parse(JSON.stringify(app.state.phoneColor)),selected);assert.equal(app.changed,false);
+  app.state.x=29;app.save();await app.refresh();
+  assert.equal(JSON.parse(editor.get(key)).phoneColor.code,'chosen');assert.equal(JSON.parse(editor.get(key)).model,draft.model);
+  session=await startColorDraft(editor,unavailable);
+ }
+ session.respond(()=>({ok:true,json:async()=>catalog([fallback,selected])}));
+ await session.controller.refresh();
+ assert.equal(stockCatalogStatus,'ready');assert.equal(session.controller.state.model,draft.model);
+ assert.equal(session.controller.state.phoneColor.code,'chosen','recovery must not silently replace a saved non-default color');
+ assert.equal(session.controller.changed,false);assert.equal(JSON.parse(editor.get(key)).x,29);
+ assert.equal(JSON.parse(editor.get(key)).phoneColor.code,'chosen');
+});
+test('inventory updating preserves a draft; a confirmed empty color list then clears and persists its invalid selection',async()=>{
+ const {catalog,draft}=draftColorCatalog(),key='v35:customer-8:editor',editor=new Map([[key,JSON.stringify(draft)]]);
+ const session=await startColorDraft(editor,()=>({ok:true,json:async()=>({version:1,templates:[],models:[],availability:'updating'})}));
+ assert.equal(stockCatalogStatus,'updating');assert.equal(session.controller.state.model,draft.model);
+ assert.equal(session.controller.state.phoneColor.code,'chosen');assert.equal(session.controller.changed,false);
+ session.controller.save();assert.equal(JSON.parse(editor.get(key)).phoneColor.code,'chosen');
+ session.respond(()=>({ok:true,json:async()=>catalog([])}));await session.controller.refresh();
+ assert.equal(session.controller.state.model,draft.model);assert.equal(session.controller.state.phoneColor,null);
+ assert.equal(session.controller.changed,true);assert.equal(JSON.parse(editor.get(key)).phoneColor,null);
+});
+test('a successfully loaded startup catalog still rejects a removed color or unavailable model',async()=>{
+ const {catalog,draft}=draftColorCatalog(),key='v35:customer-8:editor';
+ for(const data of [catalog([]),{version:1,models:[],templates:[]}]){
+  const editor=new Map([[key,JSON.stringify(draft)]]),{controller}=await startColorDraft(editor,()=>({ok:true,json:async()=>data}));
+  assert.equal(stockCatalogStatus,'ready');assert.equal(controller.state.phoneColor,null);assert.equal(controller.changed,true);
+  assert.equal(controller.state.model,data.models.length?draft.model:'');
+  controller.save();assert.equal(JSON.parse(editor.get(key)).phoneColor,null);
+ }
+});
+test('invalid cached color data is not restored while the catalog is unavailable',async()=>{
+ const {draft}=draftColorCatalog(),key='v35:customer-8:editor';
+ const editor=new Map([[key,JSON.stringify({...draft,phoneColor:{code:'broken',resource:null}})]]);
+ const {controller}=await startColorDraft(editor,()=>({ok:false,status:503}));
+ assert.equal(controller.state.model,draft.model);assert.equal(controller.state.phoneColor,undefined);
+ controller.save();assert.equal(JSON.parse(editor.get(key)).phoneColor,undefined);
+});
+test('local design restore retains a valid frozen color during catalog failure and updating',async()=>{
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8'),template=phoneTemplates[0],color=previewColor(template);
+ const pass=createPersonalPass({source:'collection',designId:'bloom',model:template.model,phoneTemplateId:template.id,phoneColor:color,effect:'original',intensity:0,zoom:113,x:42,y:61});
+ const before=JSON.stringify(pass);
+ for(const status of ['unavailable','updating']){
+  let saves=0;
+  const context={pass,readPass,phoneModels:[],stockCatalogStatus:status,privateWrite:async()=>{},workspace:{check(){}},finishInlineText:()=>{},state:{},structuredClone,
+   stockSelection:()=>null,reconcilePhoneColor,colorNotice:false,save:()=>{saves++;},go:()=>{},notify:message=>assert.fail(message)};
+  await vm.runInNewContext(appFunction(source,'syncDraftColor')+'\n'+appFunction(source,'restoreLocalDesign')+'\nrestoreLocalDesign(pass)',context);
+  assert.equal(context.state.model,pass.model);assert.deepEqual(context.state.phoneColor,color);assert.equal(context.colorNotice,false);
+  assert.equal(context.state.artworkLayouts.bloom.zoom,113);assert.equal(context.state.artworkLayouts.bloom.x,42);assert.equal(saves,1);
+  assert.equal(JSON.stringify(pass),before);
+ }
 });

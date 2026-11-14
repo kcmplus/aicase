@@ -13,7 +13,7 @@ import {phoneBrand,phoneBrands,findPhoneModels} from './phone-catalog.js';
 import {stockedPhoneModels as phoneModels,stockCatalogStatus,stockSelection,loadStockCatalog,deviceScope} from './stock-catalog.js';
 import {registerSupplierTemplates,phoneTemplate} from './phone-templates.js';
 import {fonts} from './editor-model.js';
-import {reconcilePhoneColor,colorPicker} from './phone-colors.js';
+import {frozenPhoneColor,reconcilePhoneColor,colorPicker} from './phone-colors.js';
 import {dragPlacement,scaleFromPointer,rotationFromPointer,rotateGroup} from './artwork-drag.js';
 import {freshOrders,orderForCode,currentOrder,commitPrintOrder} from './print-orders.js';
 import {freshMembership,refreshMembership,migrateRender} from './ai-membership.js';
@@ -86,8 +86,10 @@ try {
   const saved = KEY?JSON.parse(localStorage.getItem(KEY)):null;
   if (saved) {
     if (designs.some(d=>d.id===saved.designId)) state.designId=saved.designId;
-    if (phoneModels.includes(saved.model)) state.model=saved.model;
-    if (saved.phoneColor)state.phoneColor=saved.phoneColor;
+    // An unreadable/refreshing catalog cannot establish that this saved model
+    // disappeared. Keep the draft identity, without adding it to sale choices.
+    if (typeof saved.model==='string'&&saved.model.length<=120&&(phoneModels.includes(saved.model)||stockCatalogStatus!=='ready')) state.model=saved.model;
+    if (saved.phoneColor)try{state.phoneColor=frozenPhoneColor(saved.phoneColor);}catch{/* Invalid cached previews cannot be restored. */}
     if (stations.some(s=>s.id===saved.stationId)) state.stationId=saved.stationId;
     if(aiStyles.some(s=>s.id===saved.aiStyle))state.aiStyle=saved.aiStyle;
     state.aiExample=exampleFor(saved.aiExample).id;
@@ -361,6 +363,9 @@ function phonePicker(){
  return `<details class="model-first" ${state.model?'':'open'}><summary><span class="model-summary-label">${state.model?'Your phone':'First, choose your phone'}</span><strong class="model-summary-value">${esc(state.model||'')}</strong><span class="model-summary-action">${state.model?'Change':'Choose'}</span><span class="model-summary-chevron" aria-hidden="true">⌄</span></summary><div class="model-first-body">${modelPickerBody()}</div></details>`;
 }
 function syncDraftColor(reset=false){
+ // Only a current catalog can invalidate a saved color. A transport failure or
+ // pending inventory refresh is not an authoritative empty color list.
+ if(stockCatalogStatus!=='ready')return false;
  const result=reconcilePhoneColor(reset?null:state.phoneColor,stockSelection(state.model)?.colors||[]);
  state.phoneColor=result.color;colorNotice=reset?false:colorNotice||result.changed;
  return result.changed;
@@ -490,7 +495,7 @@ async function restoreLocalDesign(pass){
  const p=readPass(pass.code,pass);
  if(p.source==='photo')await privateWrite('draft-photo',p.photo);
  workspace.check();finishInlineText();
- Object.assign(state,{source:p.source,designId:p.designId,model:phoneModels.includes(p.model)?p.model:'',phoneTemplateId:p.phoneTemplateId,phoneColor:p.phoneColor||null,photo:p.source==='photo'?p.photo:'',effect:p.effect,intensity:p.intensity,zoom:p.zoom,x:p.x,y:p.y,ai:p.ai||null,aiJobId:null,photoOrigin:'upload',photoArtwork:p.source==='photo'?structuredClone(p.addedArtwork||[]):[],photoPlacement:structuredClone(p.photoPlacement||null),keepCollection:Boolean(p.collectionLayout),artworkLayouts:{},pass:null,job:null,editOrderId:null});
+ Object.assign(state,{source:p.source,designId:p.designId,model:phoneModels.includes(p.model)||stockCatalogStatus!=='ready'?p.model:'',phoneTemplateId:p.phoneTemplateId,phoneColor:p.phoneColor||null,photo:p.source==='photo'?p.photo:'',effect:p.effect,intensity:p.intensity,zoom:p.zoom,x:p.x,y:p.y,ai:p.ai||null,aiJobId:null,photoOrigin:'upload',photoArtwork:p.source==='photo'?structuredClone(p.addedArtwork||[]):[],photoPlacement:structuredClone(p.photoPlacement||null),keepCollection:Boolean(p.collectionLayout),artworkLayouts:{},pass:null,job:null,editOrderId:null});
  if(p.source==='collection')state.artworkLayouts[p.designId]={zoom:p.zoom,x:p.x,y:p.y,artworkEdits:structuredClone(p.artworkEdits||{}),addedArtwork:structuredClone(p.addedArtwork||[])};
  if(p.collectionLayout)state.artworkLayouts[p.designId]={...structuredClone(p.collectionLayout),addedArtwork:[]};
  const currentTemplate=stockSelection(state.model)?.templateId;
