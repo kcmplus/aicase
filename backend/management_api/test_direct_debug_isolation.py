@@ -130,3 +130,91 @@ with socket.socket() as s:
             raise AssertionError('outbound operation allowed')
 assert socket.getaddrinfo('127.0.0.1', 18761)
 ''')
+
+    def test_migration_and_service_process_share_only_disposable_database(self):
+        self.run_child('''
+import os
+os.environ['DJANGO_SETTINGS_MODULE'] = 'config.direct_debug'
+import django
+django.setup()
+from django.core.management import call_command
+call_command('migrate', verbosity=0, interactive=False)
+from django.contrib.auth.models import Group
+Group.objects.create(name='synthetic-isolation-sentinel')
+''')
+        self.run_child('''
+import os
+from pathlib import Path
+original = Path.read_text
+def no_local_credentials(self, *args, **kwargs):
+    assert not self.name.startswith('.local-'), 'read local credential'
+    return original(self, *args, **kwargs)
+Path.read_text = no_local_credentials
+os.environ['DJANGO_SETTINGS_MODULE'] = 'config.direct_debug'
+import django
+django.setup()
+from django.contrib.auth.models import Group
+from django.db import connection
+assert Group.objects.get(name='synthetic-isolation-sentinel')
+assert Path(connection.settings_dict['NAME']).resolve().parent == Path(os.environ['DIRECT_DEBUG_ISOLATED_ROOT']).resolve()
+from django.conf import settings
+assert settings.MEDIA_ROOT.parent == Path(os.environ['DIRECT_DEBUG_ISOLATED_ROOT']).resolve()
+assert settings.STATIC_ROOT.parent == settings.MEDIA_ROOT.parent
+assert settings.EMAIL_BACKEND == 'django.core.mail.backends.locmem.EmailBackend'
+from django.test import Client
+assert Client().get('/api/health/').status_code == 200
+''')
+
+    def test_default_branch_unchanged_without_opening_existing_database_or_token(self):
+        self.env.pop('DIRECT_DEBUG_ISOLATED')
+        self.run_child('''
+from pathlib import Path
+original = Path.read_text
+reads = []
+def synthetic_token(self, *args, **kwargs):
+    if self.name.startswith('.local-'):
+        assert self.name == '.local-direct-debug-token'
+        reads.append(self.name)
+        return 'synthetic-default-token-for-qa-only'
+    return original(self, *args, **kwargs)
+Path.read_text = synthetic_token
+import config.direct_debug as settings
+assert settings.DATABASES['default']['NAME'] == settings.BASE_DIR / '.direct-debug.sqlite3'
+assert settings.DIRECT_DEBUG_TOKEN == 'synthetic-default-token-for-qa-only'
+assert reads == ['.local-direct-debug-token']
+assert settings.DIRECT_DEBUG_ENABLED
+assert not settings.SUPPLIER_ORDER_ENABLED and not settings.SUPPLIER_PAYMENT_ENABLED
+''')
+
+    def test_invalid_isolation_flag_fails_before_loading_settings(self):
+        for value in ('true', 'yes', '', '2'):
+            with self.subTest(value=value):
+                self.env['DIRECT_DEBUG_ISOLATED'] = value
+                self.run_child('''
+import sys
+from django.core.exceptions import ImproperlyConfigured
+try:
+    import config.direct_debug
+except ImproperlyConfigured:
+    assert 'config.settings' not in sys.modules
+else:
+    raise AssertionError('invalid isolation flag accepted')
+''')
+
+    def test_udp_sendmsg_is_also_blocked(self):
+        # Instrument the transport boundary: no bind/send syscall or external I/O.
+        self.run_child('''
+import socket
+from unittest.mock import patch
+assert hasattr(socket.socket, 'sendmsg'), 'platform needs sendmsg coverage'
+with patch.object(socket.socket, 'sendmsg', return_value=21) as transport:
+    import config.direct_debug
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sender:
+        try:
+            sender.sendmsg([b'synthetic-qa-datagram'], [], 0, ('127.0.0.1', 9))
+        except OSError as exc:
+            assert 'disabled in isolated' in str(exc), str(exc)
+        else:
+            raise AssertionError('isolated UDP sendmsg reached the transport instead of being blocked')
+    transport.assert_not_called()
+''')
