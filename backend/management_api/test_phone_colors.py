@@ -278,6 +278,30 @@ class PhoneColorTests(TestCase):
         response = self.client.get(self.base, {'phone_model': '999999999999999999999999999999'})
         self.assertEqual(response.status_code, 400)
 
+    def test_model_filter_rejects_invalid_id_boundaries_for_view_only_staff(self):
+        self.grant('view_phonecolor')
+        for value in (str(2**63), '9' * 5000, '0', '-1', '1.0', '+1', '１', ''):
+            with self.subTest(value=value[:30]):
+                response = self.client.get(self.base, {'phone_model': value})
+                self.assertEqual(response.status_code, 400, response.data)
+                self.assertTrue(response.data)
+                self.assertIn('机型参数', str(response.data))
+
+    def test_model_filter_accepts_bigint_limit_and_preserves_exact_selection(self):
+        color = self.create()
+        other_color = self.create(phone_model=self.other.pk)
+        self.grant('view_phonecolor')
+        for value in (str(self.model.pk), f'00{self.model.pk}'):
+            with self.subTest(value=value):
+                response = self.client.get(self.base, {'phone_model': value})
+                self.assertEqual(response.status_code, 200, response.data)
+                self.assertEqual([item['id'] for item in response.data['results']], [color['id']])
+        response = self.client.get(self.base, {'phone_model': str(2**63 - 1)})
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['count'], 0)
+        self.assertEqual(PhoneColor.objects.count(), 2)
+        self.assertEqual(PhoneColor.objects.get(pk=other_color['id']).phone_model_id, self.other.pk)
+
     def test_supplier_template_is_bound_to_model_and_replacement_invalidates_activation(self):
         from django.utils import timezone
         from .models import DeviceProviderConnection, Device, SupplierProduct, DeviceProduct

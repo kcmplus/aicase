@@ -18,7 +18,7 @@
 
 ## 接口与存储
 
-- `GET /api/v1/admin/phone-colors/?phone_model=<id>`：分页列表；`POST` 创建停用草稿；`GET/PATCH .../<id>/` 查看和修改。
+- `GET /api/v1/admin/phone-colors/?phone_model=<id>`：分页列表；筛选 ID 仅接受 ASCII 十进制正整数，范围为 1–9223372036854775807；非法、超范围或超长参数返回 400 及参数说明，范围内不存在的 ID 返回空列表。`POST` 创建停用草稿；`GET/PATCH .../<id>/` 查看和修改。
 - `GET .../phone-colors/options_catalog/`：颜色权限下的现有机型与本地模板版本选项，包含已导入但尚不可售的供应商模板，不执行外部请求。
 - `POST .../<id>/resources/`：multipart `overlay`、`mask`、`template_id`，必须同时上传。
 - `POST .../<id>/verify-resources/`：JSON `version`、`review_note`，绑定当前资源版本。

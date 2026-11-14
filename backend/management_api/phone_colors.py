@@ -177,6 +177,17 @@ class PhoneColorViewSet(viewsets.ModelViewSet):
         if model is not None:
             if not model.isascii() or not model.isdecimal():
                 raise serializers.ValidationError('机型参数须为整数。')
+            # PhoneModel uses BigAutoField. Validate before constructing the SQL
+            # lookup: Python integers may exceed SQLite/PostgreSQL's ID range.
+            model = serializers.IntegerField(
+                min_value=1, max_value=2**63 - 1,
+                error_messages={
+                    'invalid': '机型参数无效，须为有效范围内的整数。',
+                    'max_string_length': '机型参数过长。',
+                    'min_value': '机型参数须大于零。',
+                    'max_value': '机型参数超出有效 ID 范围。',
+                },
+            ).run_validation(model)
             qs = qs.filter(phone_model_id=model)
         return qs
 
