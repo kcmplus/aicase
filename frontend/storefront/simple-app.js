@@ -1,3 +1,4 @@
+import {worksPage,workDetailPage,tutorialPage,aboutPage,locationsPage,membershipInfoPage} from './v35-pages.js';
 import {shellHeader,shellFooter,homePresentation,mountShell} from './v35-shell.js';
 import {stationScanPrompt,previewStationPanel,openStationScanner} from './station-scanner.js';
 import {stationEntry} from './station-entry.js';
@@ -13,18 +14,18 @@ import {stockedPhoneModels as phoneModels,stockCatalogStatus,stockSelection,load
 import {registerSupplierTemplates,phoneTemplate} from './phone-templates.js';
 import {fonts} from './editor-model.js';
 import {dragPlacement,scaleFromPointer,rotationFromPointer,rotateGroup} from './artwork-drag.js';
-import {freshOrders,orderForCode,currentOrder,commitPrintOrder,beginOrderPrint} from './print-orders.js';
+import {freshOrders,orderForCode,currentOrder,commitPrintOrder} from './print-orders.js';
 import {freshMembership,refreshMembership,migrateRender} from './ai-membership.js';
 import {PRINT_PRICE,PRINT_PRICE_CENTS,PRINT_AVAILABLE,money} from './simple-pricing.js';
 import {loadCatalog,catalogStatus,AI_GENERATION_CONNECTED} from './runtime-catalog.js';
 import {aiExamples,exampleFor} from './ai-examples.js';
 import {designFor,stickers} from './catalog.js';
 import {phone, icon, esc} from './art.js';
-import {designs, stations, readPass, stationAvailability, advancePrint, createPersonalPass} from './simple-core.js';
+import {designs, stations, readPass, createPersonalPass} from './simple-core.js';
 
 import {effects, validateAddedArtwork, validatePlacement, isPhoto, makePersonalDesign, personalPassName} from './simple-personalize.js';
 import {readDesign, writeDesign, updateDesign} from './simple-storage.js';
-import {stylePanel, aiPage, membershipPage} from './ai-view.js';
+import {stylePanel, aiPage} from './ai-view.js';
 import {setAIView,setAIComparison,mountAIStudio} from './ai-interactions.js';
 import {activeLook,lookBrowserContent,setLookMode,setLookComparison,updateLookImageState} from './ai-look-browser.js';
 import {aiStyles,refreshAIOrder,canApplyAIOrder} from './ai-core.js';
@@ -94,7 +95,6 @@ membership=await updateDesign('ai-membership-v1',a=>migrateRender(a,aiJob),fresh
 if(aiJob)aiJob=membership.jobs[aiJob.id];
 if(aiJob?.status==='awaiting_confirmation')customerUI.next='ai';
 try{if(location.hash.slice(1).split('?')[0]!=='checkout')await syncAIAccount();if(aiJob?.mode==='live')await rememberLiveJob(await refreshLiveRender(aiJob));}catch{/* A saved job can be resumed when the service returns. */}
-let scannedPass = null;
 let noticeTimer;
 let comparing=false,photoBusy=false,passBusy=false;
 let effectPanelOpen=false,cropPanelOpen=false,selectedArtwork=null,libraryExpanded=false;
@@ -318,7 +318,7 @@ function steps(active) {
   return `<ol class="steps" aria-label="Your design journey">${['Pick your design','Confirm & save','Scan & print'].map((label,i)=>`<li ${i===active?'aria-current="step"':''} class="${i===active?'active':i<active?'complete':''}"><span>${i<active?'✓':i+1}</span>${label}</li>`).join('')}</ol>`;
 }
 function home() {
- const gallery=`<section class="collection wrap home-gallery" id="designs"><div class="section-heading"><div><p class="eyebrow">A LITTLE INSPIRATION</p><h2>No photo in mind? Try the gallery.</h2></div><p>Ready-made designs, if you need a starting point.</p></div><div class="design-grid">${designs.map((d,i)=>`<a class="design-card" data-start-design="${d.id}" href="#choose?design=${d.id}" aria-label="Choose ${d.name}"><div class="design-image" style="--card:${d.color}"><span class="card-index">0${i+1}</span><div class="card-case">${casePreview(d.id)}</div><span class="card-arrow">${arrow()}</span></div><div class="card-caption"><div><h3>${d.name}</h3><p>${d.category}</p></div></div></a>`).join('')}</div></section>`;
+ const gallery=`<section class="collection wrap home-gallery" id="designs"><div class="section-heading"><div><p class="eyebrow">A LITTLE INSPIRATION</p><h2>No photo in mind? Try the gallery.</h2></div><p>Ready-made designs, if you need a starting point.</p><a class="text-button" href="#designs">${locale()==='zh-CN'?'查看全部设计 →':'View all designs →'}</a></div><div class="design-grid">${designs.map((d,i)=>`<a class="design-card" href="#work?id=${d.id}" aria-label="${esc(t('View design')+': '+d.name)}"><div class="design-image" style="--card:${d.color}"><span class="card-index">0${i+1}</span><div class="card-case">${casePreview(d.id)}</div><span class="card-arrow">${arrow()}</span></div><div class="card-caption"><div><h3>${d.name}</h3><p>${d.category}</p></div></div></a>`).join('')}</div></section>`;
  return homePresentation({lang:locale(),busy:photoBusy,gallery,station:stockScope?`<div class="v35-wrap">${stationContext()}</div>`:''});
 }
 function modelResults(){
@@ -443,23 +443,9 @@ function passPage() {
  const price=order?money(order.priceCents):PRINT_PRICE;
  return `<section class="flow wrap review-flow payment-flow"><div class="ai-heading"><h1>${say('Your design is saved.','设计已保存。')}</h1><p>${order?say('Demo order — no real payment was taken.','演示订单，未实际收款。'):say('Review your design before placing an order.','请确认设计后下单。')}</p></div><div class="ai-order-layout"><div class="checkout-preview"><div class="checkout-case">${passPreview(pass)}</div><h2>${passName(pass)}</h2><p>${esc(pass.model)}</p>${effectCaption(pass)}</div><div class="ai-order-card">${order?`<p class="eyebrow">${esc(orderStatus(order.status,order.refund))} · ${say('DEMO','演示')}</p><h2>${esc(order.currency||'USD')} ${price}</h2>`:''}${previewStationPanel(order,{station:scannedStation,scope:stockScope,lang:locale()})}<a class="button secondary full" href="#choose" data-action="new-order-from-pass">${say('Use this design for a new order','使用此设计重新下单')}</a>${order?.server?`<details class="payment-receipt"><summary>${say('Order details','订单详情')}</summary><p>${esc(order.id)}</p><a class="text-button" href="#orders">${say('View all my orders →','查看全部订单 →')}</a></details>`:''}</div></div></section>`;
 }
-function kioskPage() {
-  const job=state.job;
-  if(job && ['printing','ready','collected'].includes(job.status))return printPage(job);
-  const p=scannedPass;
-  const availability=p?stationAvailability(state.stationId,p):null;
-  const order=p?orderForCode(orderBook,p.code):null,paid=order?.mode==='demo'&&order?.status==='paid'&&order.pass.code===p?.code;
- const price=order?money(order.priceCents):PRINT_PRICE;
-  return `<section class="flow wrap station-flow">${steps(2)}<div class="station-top"><span class="station-dot"></span> POPOMO STATION <span class="demo-badge">DEMO</span></div><h1>${p?'Looks like you.':'Hello, good taste.'}</h1><p class="intro">${p?'Confirm your design and phone model before printing.':'Scan your design pass at the machine to get started.'}</p><div class="station-card">${p?`<div class="station-review"><div class="station-case">${passPreview(p)}</div><div><p class="eyebrow">DESIGN RECOGNIZED</p><h2>${passName(p)}</h2><p>${esc(p.model)}</p>${effectCaption(p)}<span class="human-code">${p.code}</span></div></div>`:`<div class="scanner-icon">${icon('scan',58)}</div><form id="scan-form"><label for="design-code">Enter your design code</label><div class="scan-input"><input id="design-code" name="code" placeholder="POP-1117" maxlength="32" required autocomplete="off" autocapitalize="characters" aria-describedby="scan-error"><button class="button primary" type="submit">Find design ${arrow()}</button></div><p id="scan-error" class="error" role="alert"></p></form>${state.pass?'<button class="text-button" data-action="scan-saved">Simulate scanning my saved pass</button>':''}`}
-  <label class="station-label" for="station">Demo machine</label><select id="station">${stations.map(s=>`<option value="${s.id}" ${s.id===state.stationId?'selected':''}>${s.name}</option>`).join('')}</select>${p?`<p class="availability ${availability.ok?'available':'unavailable'}" role="status">${icon(availability.ok?'check':'clock',17)} ${availability.message}</p><div class="price-row station-print-price"><span>${paid?'Print order · Demo paid':'Standard printing'}</span><strong>${price}</strong></div><p class="field-note">${paid?'Already paid in the demo order. No second print charge.':'Confirm a print order before starting.'}</p><button class="button primary full" data-action="start-print" ${availability.ok&&paid?'':'disabled'}>Start prepaid demo print ${arrow()}</button>${!paid?'<a class="text-button" href="#choose">Review a new print order →</a>':''}<button class="text-button" data-action="rescan">Use a different code</button>`:''}</div><p class="demo-note">Station preview · No camera or printer is connected.<br>Printing and collection below are simulated.</p></section>`;
+function publicStationPage(legacy=false){
+ return locationsPage({lang:locale(),station:scannedStation,hasScope:Boolean(stockScope),error:stationError,busy:passBusy,legacy});
 }
-function printPage(job) {
-  const status=job.status;
-  const d=currentDesign(job.pass.designId);
-  const titles={printing:'A little magic in progress.',ready:'Your case is ready.',collected:'Go make it your everyday.'};
-  return `<section class="flow wrap station-flow">${steps(2)}<div class="station-top">POPOMO STATION <span class="demo-badge">DEMO</span></div><div class="completion-icon ${status==='printing'?'working':''}">${icon(status==='printing'?'spark':'check',32)}</div><h1>${titles[status]}</h1><p class="intro">${status==='printing'?'Your design is making itself at home.':status==='ready'?'Take your new case from the collection tray.':'A small thing. A little more you.'}</p><div class="print-summary"><div class="station-case">${passPreview(job.pass)}</div><h2>${passName(job.pass)}</h2>${effectCaption(job.pass)}<p>${esc(job.pass.model)} · ${esc(job.stationId)}</p><ol class="print-progress">${['Design confirmed','Printing','Ready to collect'].map((label,i)=>`<li class="${i<=(status==='printing'?1:2)?'done':''}"><span>${icon('check',14)}</span>${label}</li>`).join('')}</ol>${status==='collected'?'<button class="button primary full" data-action="finish-session">Back to the designs '+arrow()+'</button>':`<button class="button primary full" data-action="advance-print">${status==='printing'?'Finish demo print':'I’ve collected my case'} ${arrow()}</button>`}</div><p class="demo-note">Demo only · No physical item has been printed.</p></section>`;
-}
-function orderStatus(status,refund){if(refund)return ({requested:'Checking refund status.',pending:'Refund processing.',succeeded:'Payment refunded.',failed:'Refund could not be completed.'})[refund.status]||'Checking refund status.';return ({pending:'Awaiting payment',paid:'Paid',printing:'Printing',ready:'Ready to collect',completed:'Collected',collected:'Collected',cancelled:'Cancelled'})[status]||status;}
 function stationContext(){
  if(!scannedIds)return '';
  const zh=locale()==='zh-CN';
@@ -554,13 +540,13 @@ function render(preserveScroll=false) {
   if(route!=='choose')canvasExpanded=false;
   if(route!=='choose')effectPanelOpen=false;
   document.body.classList.toggle('canvas-editor-open',canvasExpanded);
-  const pages={account:()=>customerPage(membership,customerUI),choose,pass:passPage,kiosk:kioskPage,ai:()=>aiPage(aiJob,membership,aiBusy,aiUi),membership:()=>membershipPage(membership),checkout:checkoutPage,orders:ordersPage,payment:paymentPage};
+  const pages={account:()=>customerPage(membership,customerUI),choose,pass:passPage,kiosk:()=>publicStationPage(true),designs:()=>worksPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),work:()=>workDetailPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),'how-it-works':()=>tutorialPage({lang:locale()}),about:()=>aboutPage({lang:locale()}),locations:publicStationPage,printers:publicStationPage,ai:()=>aiPage(aiJob,membership,aiBusy,aiUi),membership:()=>membershipInfoPage({account:membership,lang:locale()}),checkout:checkoutPage,orders:ordersPage,payment:paymentPage};
   app.classList.toggle('is-ai-studio',route==='ai'&&aiJob?.mode==='live');
   app.classList.toggle('is-editor',route==='choose');
   document.body.classList.toggle('v35-home-page',!Object.hasOwn(pages,route));
   app.innerHTML=header()+`<main id="main" tabindex="-1">${catalogStatus==='unavailable'?'<div class="catalog-warning" role="status">Prices and AI previews could not be loaded. Your saved designs are still available. <button class="text-button" data-action="reload-catalog">Try again</button></div>':''}${(Object.hasOwn(pages,route)?pages[route]:home)()}</main>`+footer();
   if(aiBusy)document.querySelectorAll('[data-ai-action],#ai-credit-form button,#ai-subscription-form button').forEach(el=>el.disabled=true);
-  const title=({account:'My account',choose:'Choose your case',pass:'Your design pass',kiosk:'Station demo',ai:'Your AI render',membership:'AI membership',checkout:'Review print order',orders:'My orders',payment:'Payment status'})[route];
+  const title=({account:'My account',choose:'Choose your case',pass:'Your design pass',kiosk:'Print locations',designs:'Works center',work:'Design details','how-it-works':'How to use',about:'About POPOMO',locations:'Print locations',printers:'Print locations',ai:'Your AI render',membership:'AI membership',checkout:'Review print order',orders:'My orders',payment:'Payment status'})[route];
   document.title=title?`${t(title)} · POPOMO`:t('POPOMO — A little more you.');
   localize(app);document.querySelector('.skip-link').textContent=t('Skip to content');
   cleanupAIStudio=mountAIStudio(app,aiJob,aiUi);
@@ -574,7 +560,7 @@ function render(preserveScroll=false) {
   highlightArtwork();
   document.querySelector('.crop-panel')?.addEventListener('toggle',e=>cropPanelOpen=e.target.open);
   if(preserveScroll)window.scrollTo(0,oldY);
-  else if(['designs','how-it-works'].includes(route))document.getElementById(route)?.scrollIntoView();
+  else if(new URLSearchParams(query).has('section')){const section=new URLSearchParams(query).get('section');if(['steps','save','print','story','our-story'].includes(section))document.getElementById(section)?.scrollIntoView();else window.scrollTo(0,0);}
   else window.scrollTo(0,0);
 }
 // A stable outer canvas retains capture while the selected artwork and handles update.
@@ -695,7 +681,6 @@ app.addEventListener('input',event=>{
   if(event.target.dataset.artwork){const key=event.target.dataset.artwork;setArtwork(key,Number(event.target.value));}
   if(event.target.dataset.crop){const key=event.target.dataset.crop;state[key]=Number(event.target.value);document.getElementById(key+'-value').textContent=state[key]+'%';updatePreview();save();}
   if(event.target.id==='effect-strength'){state.intensity=Number(event.target.value);document.getElementById('intensity-value').textContent=state.intensity+'%';document.getElementById('selected-strength').textContent=state.intensity+'%';updatePreview();save();}
-  if(event.target.id==='design-code'){event.target.removeAttribute('aria-invalid');document.getElementById('scan-error').textContent='';}
 });
 app.addEventListener('submit',async event=>{
   if(event.target.id==='customer-profile-form'){event.preventDefault();await handleCustomer('profile',new FormData(event.target));return;}
@@ -719,7 +704,7 @@ app.addEventListener('submit',async event=>{
         order=await rememberOrder(data);
       }
       if(devicePrinting.enabled&&isProviderOrder(order))order=await prepareDeviceOrder(order,stockScope,{save:rememberOrder});
-      state.pass=order.pass;state.job=null;scannedPass=null;state.editOrderId=null;checkoutDraft=null;await writeDesign('checkout-draft',null);save();
+      state.pass=order.pass;state.job=null;state.editOrderId=null;checkoutDraft=null;await writeDesign('checkout-draft',null);save();
       if(isProviderOrder(order)){paymentOrder=order;go('payment?order='+order.id);if(order.status==='pending'){render(true);await openPaymentCheckout(order.id);}}else go('pass');
     }
     catch(error){if(paymentOrder)paymentError=error.message;if(error.message==='Your sign-in changed. Reload checkout to review your email.'){paymentError=error.message;paymentConfig=null;}notify(error.message);}finally{passBusy=false;render(true);}return;
@@ -738,11 +723,7 @@ app.addEventListener('submit',async event=>{
     }catch(error){notify(error.message||'The design could not be saved. Please try again.');}
     finally{passBusy=false;if(location.hash.startsWith('#choose'))render(true);}
   }
-  if(event.target.id==='scan-form'){
-    event.preventDefault();
-    try{scannedPass=await resolvePass(new FormData(event.target).get('code'));render(true);}
-    catch(error){const el=document.querySelector('#scan-error');if(el){el.textContent=t(error.message);document.querySelector('#design-code').setAttribute('aria-invalid','true');}}
-  }
+  if(event.target.id==='v35-work-search'){event.preventDefault();const fields=new FormData(event.target),params=new URLSearchParams({category:String(fields.get('category')||'all'),q:String(fields.get('q')||'').slice(0,100)});go('designs?'+params);}
 });
 app.addEventListener('click',async event=>{
   const el=event.target.closest('[data-phone-brand],[data-phone-model],[data-action],[data-design],[data-start-design],[data-source],[data-effect],[data-ai-action],[data-ai-look-example],[data-ai-look-step],[data-look-action],[data-look-mode],[data-ai-group],[data-ai-view],[data-artwork-item],[data-add-graphic],[data-quick-font],[data-quick-color]');if(!el||el.disabled||photoBusy||passBusy||aiBusy)return;
@@ -857,16 +838,11 @@ if(selectedArtwork==='all'){const layout=artworkLayout();layout.zoom=100;layout.
       try{await navigator.clipboard.writeText(state.pass.code);notify('Design code copied.');}
       catch{notify('Your design code: '+state.pass.code);}
     }
-    if(el.dataset.action==='scan-saved'){scannedPass=await resolvePass(state.pass.code);render();}
-    if(el.dataset.action==='rescan'){scannedPass=null;render(true);}
-    if(el.dataset.action==='start-print'){const order=orderForCode(orderBook,scannedPass.code);if(order?.server){const updated=await orderAction(order,'start',state.stationId);state.job={pass:updated.pass,stationId:updated.stationId,status:updated.status,orderId:updated.id};save();render();return;}let result;orderBook=await updateDesign('print-orders-v1',b=>{result=beginOrderPrint(b,scannedPass.code,state.stationId);return result.book;},freshOrders());state.job=result.job;save();render();}
-    if(el.dataset.action==='advance-print'){const order=orderBook.orders[state.job?.orderId];if(order?.server){const updated=await orderAction(order,state.job.status==='printing'?'ready':'collect');state.job={pass:updated.pass,stationId:updated.stationId,status:updated.status,orderId:updated.id};save();render();return;}const job=advancePrint(state.job);if(job.orderId)orderBook=await updateDesign('print-orders-v1',b=>{b.orders[job.orderId].status=job.status;return b;});state.job=job;save();render();}
     if(el.dataset.action==='view-order'){go(await savedOrderRoute(el.dataset.id));}
     if(el.dataset.action==='cancel-order'){const order=orderForCode(orderBook,state.pass.code);if(order?.server){await orderAction(order,'cancel');notify('Test order cancelled. No money was charged.');render(true);}}
     if(el.dataset.action==='orders-page'){orderPage=Number(el.dataset.page);await navigate();}
     if(el.dataset.action==='refresh-orders'||el.dataset.action==='refresh-payment')await navigate();
     if(el.dataset.action==='pay-provider'){if(passBusy)return;passBusy=true;paymentError='';render(true);try{await openPaymentCheckout(el.dataset.id);}catch(e){paymentError=e.message;}finally{passBusy=false;render(true);}}
-    if(el.dataset.action==='finish-session'){state.job=null;scannedPass=null;save();go('designs');}
   } catch(error){notify(error.message||'Your design could not be saved. Please try again.');}
 });
 document.querySelector('.skip-link').addEventListener('click',event=>{event.preventDefault();document.querySelector('#main')?.focus();});
@@ -881,7 +857,7 @@ async function refreshStockChoices(){
 setInterval(async()=>{if(document.hidden||passBusy||photoBusy||aiBusy||canvasExpanded||(stockCatalogStatus==='ready'&&Date.now()-stockRefreshedAt<60000))return;const changed=await refreshStockChoices();if(changed&&location.hash.startsWith('#choose'))render(true);},10000);
 async function navigate(){
  const currentNavigation=++navigationId;
- const [route,query='']=location.hash.slice(1).split('?');const params=new URLSearchParams(query),code=params.get('code');
+ const [route,query='']=location.hash.slice(1).split('?');const params=new URLSearchParams(query);
  if(route==='choose')await refreshStockChoices();
  if(route==='account'||route==='membership')try{await syncAIAccount();if(route==='account'&&membership.authenticated)await loadCustomerCredits(true);}catch(error){customerUI.error=error.message;}
  clearTimeout(paymentPollTimer);paymentPollCount=0;
@@ -916,7 +892,6 @@ async function navigate(){
   state.source='photo';save();
  }
  if(route==='choose'&&params.get('studio')==='1')effectPanelOpen=true;
- if(route==='kiosk'&&code){try{scannedPass=await resolvePass(code);const order=orderForCode(orderBook,scannedPass.code);state.job=order?.stationId&&['printing','ready','collected'].includes(order.status)?{pass:order.pass,stationId:order.stationId,status:order.status,orderId:order.id}:null;save();}catch(error){scannedPass=null;notify(error.message);}history.replaceState(null,'','#kiosk');}
  if(currentNavigation!==navigationId)return;
  render();document.querySelector('#main')?.focus({preventScroll:true});
  if(route==='choose'&&params.get('studio')==='1')openAIStudio();

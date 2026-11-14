@@ -1,8 +1,9 @@
 // English is the source language. Translate interface copy, never artwork or form values.
 const KEY='popomo-language';
 export const supportedLocales=['en-US','zh-CN'];
+export const normalizeLocale=value=>value==='zh'?'zh-CN':value==='en'?'en-US':supportedLocales.includes(value)?value:null;
 let current='en-US';
-try{const requested=new URLSearchParams(globalThis.location?.search||'').get('lang'),saved=globalThis.localStorage?.getItem(KEY);current=supportedLocales.includes(requested)?requested:supportedLocales.includes(saved)?saved:'en-US';}catch{}
+try{const requested=normalizeLocale(new URLSearchParams(globalThis.location?.search||'').get('lang')),saved=globalThis.localStorage?.getItem(KEY);current=requested||normalizeLocale(saved)||'en-US';}catch{}
 export const locale=()=>current;
 export function setLocale(value){
  if(!supportedLocales.includes(value))return;
@@ -11,6 +12,7 @@ export function setLocale(value){
 }
 export const localized=(record,field='name')=>current==='zh-CN'?(record?.[field+'_zh']||t(record?.[field]||'')):(record?.[field]||'');
 const entries=[
+ ['Works center','作品中心'],['Design details','作品详情'],['How to use','如何使用'],['About POPOMO','关于 POPOMO'],['Print locations','打印网点'],['View design','查看设计'],
  ['No-charge order confirmed.','免付订单已确认。'],
  ['No payment is required. Confirm the station to send this test order.','无需付款，请确认设备后推送此联调订单。'],
  ['Zero-amount print release has not been confirmed by the supplier. Your order can be sent, but printing is not yet available.','供应商尚未确认 0 元放行规则，当前可推单，暂不能确认开印。'],
