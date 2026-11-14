@@ -74,3 +74,21 @@ npm run dev:direct -- --backend-dir /path/to/aicase --device-id 401 --shop-id 14
 2026-11-14 修复 QA 发现的 UDP `sendmsg` 遗漏：平台提供该方法时一并拦截，防止携带目标地址绕过 `connect/sendto`。保留 QA 原断言，隔离配置开发自测 9/9 通过、无跳过（`/tmp/v35-sendmsg-selftest.log`），待独立复验；未证明实际端口监听或浏览器外网隔离。
 
 开发自测命令（不读取现有数据库或本地凭证）：在 `backend/` 执行 `.venv/bin/python -m unittest management_api.test_direct_debug_isolation -v`。测试创建临时目录、合成密钥和全新 SQLite，执行真实迁移和健康接口请求，结束后清理。本子组未提供常驻预览服务或整站浏览器证据。
+
+## 第七组服务启动器子组（2026-11-14，端口权限阻塞，未验收）
+
+新增 `scripts/v35_runtime.py`：每次分配独立 loopback 端口、新建 `aicase-v35-*` 临时目录、生成合成凭证，以环境白名单启动迁移、Django 和有效 storefront；检查首页及代理健康接口。上下文退出、启动失败和命令行 Ctrl+C/SIGTERM 走子进程终止及临时文件清理。不复制用户数据库，不读取旧调试凭证，不启动浏览器。当前仅迁移空库，**尚无合成业务设备、图片、订单夹具**，因此不提供可下单演示。
+
+在具有本地监听权限的执行环境中，待测试命令：
+
+```sh
+backend/.venv/bin/python scripts/v35_runtime.py --check
+backend/.venv/bin/python scripts/v35_runtime.py
+backend/.venv/bin/python -m unittest discover -s scripts -p test_v35_runtime.py -v
+```
+
+默认端口随机；启动成功才输出 API 和 storefront 的实际地址（JSON），不输出凭证。可用 `--api-port` 和 `--h5-port` 指定独立非默认端口；占用时失败，不终止其他服务。常驻模式退出后删除空库、日志及媒体目录。后续 E2E 可复用 `IsolatedRuntime` 上下文管理器，但必须另行实现浏览器外网阻断、合成业务夹具和 DirectPoll 操作；本入口不构成系统或浏览器沙箱，不能用于真实业务。
+
+本轮起点 `f2b0200b01b09dd2168b0f61bc05c16ef41fb749`，工作区原本干净；参考仍为 `5501bedb720d3e7552428b0dc75174973e87934c`（12 个 HTML）。启动器生命周期开发测试 **5 项均 ERROR**：当前沙箱对 `socket.bind(('127.0.0.1', ...))` 返回 `PermissionError: [Errno 1] Operation not permitted`，尚未启动服务或执行 HTTP 验证。日志 `/tmp/v35-runtime-selftest.log`。没有跳过或弱化断言；语法检查通过，但不能替代实际监听和清理验证。需要有监听权限的测试环境复验成功、占用端口、启动中断、业务体异常、Ctrl+C/SIGTERM 及残留进程/文件。当前不得声称提供了可访问预览地址。
+
+`scripts/test-ui-v35-e2e.mjs` 仍未交付，固定浏览器 gate 缺口、旧单安全替换、完整视觉和业务验收均保留。未部署、未真机验证；检查点由 harness 管理。

@@ -513,3 +513,5 @@ Authorization 由后台发送。**临时凭据不写入此文件、代码、测�
 - 已补 checkout.html 及 view=orders/order/result 入口、V35 结算/订单样式、订单列表加载/空/错分离；保留真实 API 与手机门禁。开发自测 V35 49/49、前端回归 216/216。
 - 未完成：产品候选 A 的旧服务端多份单核实与关联替换、隔离浏览器脚本、整站视觉/业务及 PostgreSQL 并发验证。当前拒付门禁不等于单份兼容完成。
 - 细节及测试日志见 docs/ui-v35-migration.md 最新界面子组。未部署、未真机验证；检查点由 harness 创建。
+
+- 第七组新增独立空库服务启动器 `scripts/v35_runtime.py` 及 5 项生命周期测试；当前沙箱禁止 loopback bind，5 项均 ERROR（`/tmp/v35-runtime-selftest.log`），未验证实际访问及服务清理。需有监听权限环境复验；业务夹具、浏览器外网隔离和完整 E2E 脚本仍缺，不代表整站通过。详见 `docs/direct-terminal-debug.md`。
