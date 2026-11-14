@@ -679,3 +679,49 @@ test('orders loading and failure remain distinct from empty, and server text is 
  const row=Object.freeze({reference:'<img>',model_name:'<script>',status:'paid',mode:'stripe_test',currency:'USD',amount:'30.00',created_at:'2026-11-14T00:00:00Z'});
  const list=render({orderRows:[row]});assert.match(list,/USD 30.00/);assert.match(list,/data-id="&lt;img&gt;"/);assert.match(list,/View order →/);assert.match(list,/data-page="1"/);assert.match(list,/data-page="3"/);assert.doesNotMatch(list,/<script>|pay-provider/);
 });
+
+// Run the complete production navigation function with controlled identity/API
+// responses. No browser, database or external service is involved in this race.
+async function qaOrdersNavigation(){
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
+ const start=source.indexOf('async function navigate(){');
+ const end=source.indexOf('\nconst entryHash=',start);
+ assert.ok(start>=0&&end>start);
+ const identity=[];
+ const context=vm.createContext({
+  URLSearchParams,location:{hash:'#orders'},navigationId:0,
+  syncAIAccount:()=>new Promise(resolve=>identity.push(resolve)),
+  workspace:{active:true},customerUI:{},clearTimeout:()=>{},
+  paymentPollTimer:null,paymentPollCount:0,paymentLoading:false,
+  orderLoading:false,orderError:'',orderRows:[],orderHasMore:false,
+  orderPage:1,entryOrders:null,entryOrderError:'',
+  orderRequest:async()=>({results:[{reference:'QA-SYNTHETIC'}],has_more:false}),
+  render:()=>{},document:{querySelector:()=>null},
+ });
+ vm.runInContext(source.slice(start,end),context);
+ return {context,identity};
+}
+
+test('QA orders navigation clears loading after a successful or failed server read',async()=>{
+ for(const fails of [false,true]){
+  const {context,identity}=await qaOrdersNavigation();
+  if(fails)context.orderRequest=async()=>{throw Error('Synthetic API failure');};
+  const navigation=context.navigate();identity[0]();await navigation;
+  assert.equal(context.orderLoading,false);
+  assert.equal(context.orderError,fails?'Synthetic API failure':'');
+  assert.equal(context.orderRows.length,fails?0:1);
+ }
+});
+
+test('QA a superseded orders navigation cannot leave the newer loaded page permanently busy',async()=>{
+ const {context,identity}=await qaOrdersNavigation();
+ const oldNavigation=context.navigate();
+ const newNavigation=context.navigate();
+ identity[1]();await newNavigation;
+ assert.equal(context.orderLoading,false);
+ assert.equal(context.orderRows[0].reference,'QA-SYNTHETIC');
+ // The older account read completes only after the newer page is ready.
+ identity[0]();await oldNavigation;
+ assert.equal(context.orderLoading,false,'stale navigation must not re-enable loading after the current navigation completed');
+ assert.equal(context.orderRows[0].reference,'QA-SYNTHETIC');
+});
