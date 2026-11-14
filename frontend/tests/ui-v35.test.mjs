@@ -5,6 +5,7 @@ import {shellHeader,shellFooter,homePresentation,shellInfo,mountShell} from '../
 import {worksPage,workDetailPage,matchingWorks,tutorialPage,aboutPage,locationsPage,membershipInfoPage,publicPageDestination} from '../storefront/v35-pages.js';
 import {designs} from '../storefront/simple-core.js';
 import {normalizeLocale} from '../storefront/simple-i18n.js';
+import vm from 'node:vm';
 
 test('V35 home prioritizes the real album handler and preserves gallery and AI editor destinations',()=>{
  const html=homePresentation({gallery:'<section id="designs">CATALOG</section>'});
@@ -150,4 +151,15 @@ test('Public page integration registers real routes and removes obsolete manual 
  assert.match(deviceEntry,/import\('\.\/device-info-app.js'\)/);assert.match(deviceEntry,/destination.hash='kiosk'/);assert.doesNotMatch(deviceEntry,/import\('\.\/device-app.js'\)/);
  const htmls=[worksPage({works:designs,preview}),workDetailPage({works:designs,preview,params:new URLSearchParams({id:'bloom'})}),tutorialPage(),aboutPage(),locationsPage()];
  for(const html of htmls)for(const [,path] of html.matchAll(/src="\.\/([^"?]+)"/g))await access(new URL('../storefront/'+path,import.meta.url));
+});
+
+test('orders page renders a server order and its status',async()=>{
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
+ const declaration=source.match(/^function ordersPage\(\)\{.*$/m)?.[0];
+ assert.ok(declaration,'ordersPage must exist');
+ const context={stationContext:()=>'',orderError:'',orderRows:[{status:'paid',mode:'free_test',model_name:'Synthetic model',fulfillment_type:'pickup',reference:'SYNTHETIC-1',created_at:'2026-01-01T00:00:00Z',currency:'USD',amount:0}],esc:String,paymentLabel:()=>'',deliveryLabel:()=>'',locale:()=> 'en-US',orderPage:1,orderHasMore:false};
+ const statusDeclaration=source.match(/^function orderStatus\([^\n]+$/m)?.[0]||'';
+ const html=vm.runInNewContext(`${statusDeclaration}\n${declaration}\nordersPage()`,context);
+ assert.match(html,/SYNTHETIC-1/);
+ assert.match(html,/Paid/);
 });
