@@ -120,6 +120,45 @@ class StoreOrderTests(TestCase):
         self.assertEqual(detail['refund']['status'], 'succeeded')
         self.assertEqual(listed.get('refund', {}).get('status'), 'succeeded',
                          'The order list must display the actual refund state')
+    def test_order_list_refunds_are_public_read_only_and_owned_without_per_order_queries(self):
+        from .models import PrintRefund
+        for status in (None, 'requested', 'pending', 'succeeded', 'failed'):
+            self.payload['request_key'] = str(uuid.uuid4())
+            order = self.create()
+            if status:
+                PrintRefund.objects.create(order=PrintOrder.objects.get(reference=order['reference']),
+                                           status=status, amount='10.00', currency='USD',
+                                           reason='private support note', provider_id='private-provider-id')
+        orders_before = list(PrintOrder.objects.order_by('pk').values())
+        refunds_before = list(PrintRefund.objects.order_by('pk').values())
+        # A list read must neither reconcile external refunds nor write state;
+        # all refund states are loaded with the owned orders in one query.
+        with self.assertNumQueries(1):
+            response = self.client.get('/api/v1/store/orders/')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('no-store', response['Cache-Control'])
+        rows = response.json()['results']
+        self.assertEqual(len(rows), 5)
+        self.assertFalse(response.json()['has_more'])
+        self.assertEqual([row['refund']['status'] if row['refund'] else None for row in rows],
+                         ['failed', 'succeeded', 'pending', 'requested', None])
+        for row in rows:
+            detail = self.client.get(self.endpoint(row)).json()
+            self.assertEqual(row['refund'], detail['refund'])
+            self.assertEqual(row['status'], 'paid')  # Preserve historical order status.
+            for private in ('snapshot', 'owner_hash', 'request_key', 'customer_email', 'code'):
+                self.assertNotIn(private, row)
+            if row['refund']:
+                self.assertEqual(set(row['refund']), {'reference', 'status', 'amount', 'currency', 'created_at', 'completed_at'})
+        self.assertNotIn('private support note', response.content.decode())
+        self.assertNotIn('private-provider-id', response.content.decode())
+        self.assertEqual(list(PrintOrder.objects.order_by('pk').values()), orders_before)
+        self.assertEqual(list(PrintRefund.objects.order_by('pk').values()), refunds_before)
+        self.client.credentials(HTTP_X_ORDER_KEY='b'*64)
+        self.assertEqual(self.client.get('/api/v1/store/orders/').json()['results'], [])
+        self.assertEqual(self.client.get(self.endpoint(rows[0])).status_code, 404)
+        self.client.credentials()
+        self.assertEqual(self.client.get('/api/v1/store/orders/').status_code, 403)
     def test_repeat_checkout_returns_same_order_even_after_price_change(self):
         order=self.create()
         PricingPlan.objects.filter(kind='print').update(price='15.00')

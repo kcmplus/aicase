@@ -112,6 +112,23 @@
 - 本轮没有启动本地服务、读取或修改数据库、调用外部业务、部署或真机操作。既有浏览器权限问题没有在本轮重新验证。交测试员在隔离环境复验 `#orders` 非空列表、`#pass`、`#payment?order=…`、支付返回和退款收据，并继续保留 390/1440 视觉对照与 320px 主流程验证缺口。
 - 第三至第七组和全部整站验收范围仍保留。上轮 harness 的 `backend-contracts` 缺 `test_phone_colors.py`、`whole-site-browser` 缺 `test-ui-v35-e2e.mjs` 失败未在本轮修复；本轮不为消除缺失模块错误而建立空测试或占位脚本。全部冻结 gates、独立 QA 与产品复核仍待后续。
 
+## 退款列表契约修复开发交接（2026-11-14，待独立复验）
+
+- 起始 HEAD `a44f691`，分支 `codex/ui-v35-migration`，工作区干净；本轮只修复 QA 发现的退款列表遗漏，不启动下一功能组。Git 检查点仍由 harness 创建。
+- 修复前在全新内存测试库实际复现 `test_order_list_reports_refund_status_consistently_with_detail` 失败：详情退款为 `succeeded`，列表没有 `refund`，实际 `None != 'succeeded'`。该 QA 测试及原断言完整保留。
+- `StoreOrders.get` 在原有限列表字段上新增 `refund`，复用详情的 `refund_data(order)` 公开序列化；无退款返回 `null`。继续排除照片、快照、设计码、邮箱和访问凭证，不调用带有设计详情／供应商状态的整单序列化。`select_related('refund')` 一次加载关联，列表不逐单查退款、不查询外部渠道或改变退款／订单历史状态。
+- 新增 `test_order_list_refunds_are_public_read_only_and_owned_without_per_order_queries`：覆盖 requested／pending／succeeded／failed 和无退款；列表与详情公开退款数据完全一致；保留原订单 `paid`，退款优先级仍由既有前端渲染处理；列表只执行一次数据库查询；不返回客服原因或渠道 ID；前后订单与退款记录不变；其他浏览器看不到订单／退款，无访问键拒绝读取。
+
+| 开发自测 | 结果与限制 |
+| --- | --- |
+| 后端相关模块 | 通过 Django `call_command('test', …, interactive=False)` 执行 `management_api.test_orders`、`test_refunds`、`test_free_orders`、`test_fulfillment`、`test_stripe`、`test_airwallex`；81 项中 80 通过、1 条既有条件跳过。原 QA 回归与新增列表契约测试均通过。 |
+| 隔离方式 | 进程中将默认数据库配置覆盖为全新 SQLite `:memory:`，媒体目录使用 `TemporaryDirectory`，启动前生成临时 Django／加密密钥并清除 PostgreSQL 选择环境，供应商开关关闭；测试期间 `socket.socket.connect` 被阻断。未读取／复制用户数据库、旧调试副本、旧凭证或客户照片。测试库及临时目录随结束清理，未改默认部署配置。 |
+| 未执行的并发断言 | 既有 `ConcurrentRefundTests.test_two_admin_submissions_create_only_one_remote_refund` 要求 PostgreSQL 行锁，由原 `skipUnless` 在 SQLite 上跳过；本轮未修改或新增跳过逻辑，不能据此声称 PostgreSQL 并发已验证。 |
+| 前端 | `npm test` 216/216、`node --test frontend/tests/ui-v35.test.mjs` 17/17，均无跳过；既有退款状态优先级、列表／设计详情／收据渲染断言保留。属于 Node 开发自测，没有实际浏览器证据。 |
+| 差异与 gates | `git diff --check` 通过。未改模型，无迁移；全部固定 gates 仍交 harness。本轮未创建缺失的颜色测试或端到端脚本，既有缺口和第三至第七组范围全部保留。 |
+
+交测试员在隔离浏览器复验同一订单的列表／详情／支付收据退款文案：已退款不再显示 Paid，待核实／处理中／失败及无退款分别正确，刷新不改变历史金额／状态、不产生渠道调用，其他浏览器不可见。390/1440 视觉与 320px 主流程仍未验证。本轮没有部署、真实收退款、供应商调用或硬件操作；修复可测试不表示整站通过。
+
 ## 本地预览与后续交接
 
 ```sh

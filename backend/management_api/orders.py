@@ -221,14 +221,16 @@ class StoreOrders(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'orders'
     def get(self, request):
-        qs = PrintOrder.objects.filter(owner_hash=owner(request)).defer('snapshot').order_by('-created_at')
+        from .refunds import refund_data
+        qs = PrintOrder.objects.filter(owner_hash=owner(request)).select_related('refund').defer('snapshot').order_by('-created_at')
         try:
             page = max(1, min(10000, int(request.query_params.get('page', '1'))))
         except ValueError:
             raise serializers.ValidationError('Invalid page.')
         rows = list(qs[(page-1)*20:page*20+1])
         # List responses exclude private photos and design codes.
-        data = [{key: getattr(o, key) for key in ('reference','model_name','status','amount','currency','mode','fulfillment_type','created_at')} for o in rows[:20]]
+        data = [{**{key: getattr(o, key) for key in ('reference','model_name','status','amount','currency','mode','fulfillment_type','created_at')},
+                 'refund': refund_data(o)} for o in rows[:20]]
         return Response({'results':data, 'has_more':len(rows)>20, 'page':page})
     @transaction.atomic
     def post(self, request):
