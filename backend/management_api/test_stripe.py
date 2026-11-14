@@ -52,6 +52,23 @@ class StripeTests(TestCase):
     def checkout(self, order):
         return self.client.post(f'/api/v1/store/orders/{order.reference}/checkout/', {}, format='json')
 
+    @patch('management_api.stripe_payments.create_session')
+    def test_legacy_unpaid_multi_print_requires_review_before_payment(self, create_session):
+        """An old unpaid multi-copy snapshot must not go straight to payment."""
+        order = self.create()
+        order.snapshot = {**order.snapshot, 'quantity': 3}
+        order.amount = '30.00'
+        order.save()
+        create_session.return_value = {
+            'id': 'cs_test_legacy_multi',
+            'url': 'https://checkout.stripe.com/c/pay/legacy-multi',
+            'livemode': False,
+        }
+        response = self.checkout(order)
+        self.assertFalse(create_session.called,
+            f'Unreviewed legacy multi-print reached payment: HTTP {response.status_code}')
+        self.assertIn(response.status_code, (400, 409), response.data)
+
     def event(self, order, **changes):
         obj = {'id': 'cs_test_example', 'object': 'checkout.session', 'mode': 'payment', 'status': 'complete',
                'payment_status': 'paid', 'livemode': False, 'amount_total': 1000, 'currency': 'usd',

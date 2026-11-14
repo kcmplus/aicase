@@ -54,6 +54,18 @@ class AirwallexTests(TestCase):
     def checkout(self, order):
         return self.client.post(f'/api/v1/store/orders/{order.reference}/checkout/', {}, format='json')
 
+    @patch('management_api.airwallex_payments.api_request')
+    def test_legacy_unpaid_multi_print_requires_review_before_payment(self, api):
+        order = self.create()
+        order.snapshot = {**order.snapshot, 'quantity': 3}
+        order.amount = '30.00'
+        order.save()
+        api.return_value = self.intent(order, amount=30)
+        response = self.checkout(order)
+        self.assertFalse(api.called,
+            f'Unreviewed legacy multi-print reached payment: HTTP {response.status_code}')
+        self.assertIn(response.status_code, (400, 409), response.data)
+
     def intent(self, order, **changes):
         return {'id': 'int_example', 'request_id': str(order.reference), 'merchant_order_id': str(order.reference),
                 'metadata': {'order_reference': str(order.reference)}, 'currency': 'USD', 'amount': 10,

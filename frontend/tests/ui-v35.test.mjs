@@ -632,3 +632,23 @@ test('single-print local draft adjustment preserves artwork, idempotency and his
  assert.equal(body.quantity,1);assert.equal(body.expected_amount,'10.00');
  assert.equal(body.request_key,'existing-key');assert.equal(body.snapshot,original.pass);
 });
+
+test('QA actual checkout bootstrap persists one-copy adjustment across reloads without rotating a timed-out key',async()=>{
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
+ const start=source.indexOf('let checkoutDraft;');
+ const end=source.indexOf('for(const order of Object.values(orderBook.orders||{}))',start);
+ assert.ok(start>=0&&end>start);
+ let stored={quantity:3,requestKey:'previous-timeout-key',pass:{code:'synthetic',zoom:123,x:31,y:67}};
+ const original=structuredClone(stored);let writes=0;
+ for(let reload=0;reload<2;reload++){
+  const context=vm.createContext({singlePrintDraft,
+   privateRead:async key=>{assert.equal(key,'checkout-draft');return structuredClone(stored);},
+   privateWrite:async(key,value)=>{assert.equal(key,'checkout-draft');stored=structuredClone(value);writes++;},
+   stopForStorage:()=>assert.fail('bootstrap unexpectedly failed'),
+  });
+  await vm.runInContext(`(async()=>{${source.slice(start,end)}})()`,context);
+  assert.equal(stored.quantity,1);assert.equal(stored.quantityAdjusted,true);
+  assert.equal(stored.requestKey,original.requestKey);assert.deepEqual(stored.pass,original.pass);
+ }
+ assert.equal(writes,2);
+});

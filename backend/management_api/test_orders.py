@@ -293,6 +293,22 @@ class StoreOrderTests(TestCase):
         self.assertEqual(self.client.patch(self.endpoint(order), payload, format='json').status_code, 400)
         self.assertEqual(PrintOrder.objects.get().revision, 2)
 
+    def test_qa_revision_rejects_quantity_types_aliases_and_nested_bypasses(self):
+        order = self.create()
+        before = list(PrintOrder.objects.values())
+        base = {'revision': 1, 'accepted': True,
+                'snapshot': {**self.payload['snapshot'], 'code': 'POP-C-FEDCBA9876543210'}}
+        patches = [{'quantity': value} for value in
+                   (0, 2, -1, True, False, '1', 1.0, None, [], {})]
+        patches += [{'copies': 2}, {'count': 2},
+                    {'snapshot': {**base['snapshot'], 'quantity': 2}},
+                    {'snapshot': {**base['snapshot'], 'copies': 2}}]
+        for patch in patches:
+            with self.subTest(patch=patch):
+                response = self.client.patch(self.endpoint(order), {**base, **patch}, format='json')
+                self.assertEqual(response.status_code, 400, response.data)
+                self.assertEqual(list(PrintOrder.objects.values()), before)
+
     def test_historical_multi_snapshot_reads_and_retry_never_recalculate(self):
         order = self.create()
         original = PrintOrder.objects.get()
