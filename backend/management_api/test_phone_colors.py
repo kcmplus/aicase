@@ -540,6 +540,25 @@ class PhoneColorInitializationTests(TestCase):
         self.assertEqual(PhoneColor.objects.count(), 0)
         self.assertEqual(AuditLog.objects.count(), 0)
 
+    def test_summary_audit_failure_rolls_back_all_prior_color_writes(self):
+        from .audit import audit as real_audit
+        self.populate()
+        preview = self.preview()
+        calls = []
+
+        def fail_summary(*args, **kwargs):
+            calls.append(1)
+            if 'summary' in kwargs:
+                raise RuntimeError('synthetic summary audit failure')
+            return real_audit(*args, **kwargs)
+
+        with patch('management_api.phone_color_initialization.audit', side_effect=fail_summary):
+            with self.assertRaisesRegex(RuntimeError, 'synthetic summary audit failure'):
+                self.execute(preview)
+        self.assertEqual(len(calls), 219)
+        self.assertEqual(PhoneColor.objects.count(), 0)
+        self.assertEqual(AuditLog.objects.count(), 0)
+
 
 class PhoneColorMigrationTests(TransactionTestCase):
     def test_additive_migration_preserves_historical_models_and_order_snapshots(self):
