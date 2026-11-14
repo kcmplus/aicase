@@ -759,3 +759,47 @@ test('leaving orders retires a delayed identity continuation without consuming e
  assert.equal(context.entryOrders,entry);
  assert.equal(context.entryOrderError,'New entry error');
 });
+
+test('QA stale identity success preserves a current orders failure and refresh remains usable',async()=>{
+ const {context,identity}=await qaOrdersNavigation();
+ let reads=0;
+ context.orderRequest=async()=>{reads++;if(reads===1)throw Error('Current read unavailable');return {results:[{reference:'REFRESHED'}],has_more:true};};
+ const stale=context.navigate(),current=context.navigate();
+ identity[1]();await current;
+ identity[0]();await stale;
+ assert.equal(reads,1);assert.equal(context.orderLoading,false);
+ assert.equal(context.orderError,'Current read unavailable');
+ const refresh=context.navigate();identity[2]();await refresh;
+ assert.equal(reads,2);assert.equal(context.orderLoading,false);
+ assert.equal(context.orderError,'');assert.equal(context.orderRows[0].reference,'REFRESHED');
+ assert.equal(context.orderHasMore,true);
+});
+
+test('QA leaving and returning to orders ignores the first visit identity result',async()=>{
+ const {context,identity}=await qaOrdersNavigation();let reads=0;
+ context.orderRequest=async()=>{reads++;return {results:[{reference:'RETURN-VISIT'}],has_more:false};};
+ const first=context.navigate();
+ context.location.hash='#home';await context.navigate();
+ context.location.hash='#orders';const returned=context.navigate();
+ identity[1]();await returned;
+ identity[0]();await first;
+ assert.equal(reads,1);assert.equal(context.orderRows[0].reference,'RETURN-VISIT');
+ assert.equal(context.orderLoading,false);assert.equal(context.orderError,'');
+});
+
+for(const oldFails of [false,true]){
+ test(`QA an old orders API ${oldFails?'failure':'success'} cannot replace the latest page`,async()=>{
+  const {context,identity}=await qaOrdersNavigation();const reads=[];
+  context.orderRequest=()=>new Promise((resolve,reject)=>reads.push({resolve,reject}));
+  const old=context.navigate();identity[0]();await new Promise(setImmediate);
+  assert.equal(reads.length,1);assert.equal(context.orderLoading,true);
+  const current=context.navigate();identity[1]();await new Promise(setImmediate);
+  assert.equal(reads.length,2);
+  reads[1].resolve({results:[{reference:'LATEST'}],has_more:true});await current;
+  if(oldFails)reads[0].reject(Error('Old API failure'));
+  else reads[0].resolve({results:[{reference:'STALE'}],has_more:false});
+  await old;
+  assert.equal(context.orderLoading,false);assert.equal(context.orderError,'');
+  assert.equal(context.orderRows[0].reference,'LATEST');assert.equal(context.orderHasMore,true);
+ });
+}
