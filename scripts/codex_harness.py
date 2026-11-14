@@ -17,6 +17,7 @@ import stat
 import subprocess
 import sys
 import time
+import traceback
 import uuid
 
 MODELS = {"product": "gpt-6-astra", "developer": "gpt-6.1-sol", "tester": "gpt-6.1-terra"}
@@ -363,6 +364,41 @@ def checkpoint_branch(root):
     return name
 
 
+def signal_process_group(pid, sig):
+    """On EPERM, inspect the group and signal only verified same-user members."""
+    try:
+        os.killpg(pid, sig)
+        return
+    except ProcessLookupError:
+        return
+    except PermissionError:
+        listing = subprocess.run(["ps", "-axo", "pid=,pgid=,uid="], capture_output=True,
+                                 text=True, timeout=3, check=False)
+        if listing.returncode:
+            raise HarnessError(f"无法核对进程组 {pid}，清理未完成")
+        members = []
+        for row in listing.stdout.splitlines():
+            fields = row.split()
+            if len(fields) != 3 or not all(x.isdigit() for x in fields):
+                raise HarnessError("进程列表格式不明确，不能认定清理完成")
+            member, group, uid = map(int, fields)
+            if group == pid:
+                members.append((member, uid))
+        # macOS may deny a group signal after the CLI has already exited.
+        # No remaining members is a verified no-op, not a blanket EPERM bypass.
+        if not members:
+            return
+        for member, uid in members:
+            if uid != os.getuid() or member <= 1 or member == os.getpid():
+                raise HarnessError(f"进程组 {pid} 含不可清理成员 {member}，已停止；请人工核对")
+        for member, _ in members:
+            try:
+                if os.getpgid(member) == pid:
+                    os.kill(member, sig)
+            except ProcessLookupError:
+                pass
+
+
 def checkpoint_paths(root):
     names = git(root, "diff", "HEAD", "--name-only", "-z").stdout
     names += git(root, "ls-files", "--others", "--exclude-standard", "-z").stdout
@@ -451,6 +487,7 @@ class Runner:
                          if options["max_seconds"] else float("inf"))
         self.sequence = int(state.get("sequence", 0))
         self.process = None
+        self.cleanup_failure = ""
 
     def save(self, **values):
         self.state.update(values, updated_at=now(), sequence=self.sequence)
@@ -490,20 +527,35 @@ class Runner:
         process = self.process
         if process is None:
             return
+        # Detach first: repeated finally/except cleanup must not mask the original failure.
+        self.process = None
+        errors = []
         try:
-            os.killpg(process.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
+            signal_process_group(process.pid, signal.SIGTERM)
+        except (OSError, HarnessError, subprocess.TimeoutExpired) as exc:
+            errors.append(f"SIGTERM: {exc}")
         until = time.monotonic() + 3
         while process.poll() is None and time.monotonic() < until:
             time.sleep(0.05)
         # Descendants may outlive their group leader; always finish the process group.
         try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        process.wait()
-        self.process = None
+            signal_process_group(process.pid, signal.SIGKILL)
+        except (OSError, HarnessError, subprocess.TimeoutExpired) as exc:
+            errors.append(f"SIGKILL: {exc}")
+        try:
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            errors.append("子进程仍未退出")
+        if errors:
+            self.cleanup_failure = f"子进程组 {process.pid} 清理失败：" + "; ".join(errors)
+            raise HarnessError(self.cleanup_failure)
+
+    def cleanup_for_exit(self):
+        try:
+            self.terminate()
+        except (OSError, HarnessError) as exc:
+            self.cleanup_failure = str(exc)
+        return self.cleanup_failure
 
     def execute(self, argv, cwd, directory, timeout, stdin=None, stdout_name="stdout.log"):
         self.check()
@@ -539,12 +591,14 @@ class Runner:
                 return code
             finally:
                 source.close()
-                self.terminate()
-                for tail in live:
-                    try:
-                        tail.pump(final=True)
-                    finally:
-                        tail.close()
+                try:
+                    self.terminate()
+                finally:
+                    for tail in live:
+                        try:
+                            tail.pump(final=True)
+                        finally:
+                            tail.close()
 
     def prompt(self, role, purpose, feedback):
         instructions = ROLE_CONTRACTS[purpose]
@@ -756,19 +810,25 @@ class Runner:
                     return 0
                 self.event(event="revision_required", reason="产品验收未通过")
         except KeyboardInterrupt:
-            self.terminate()
-            self.save(status="interrupted", finished_at=now(), message="用户中断，可 resume", pid=None)
+            cleanup = self.cleanup_for_exit()
+            self.save(status="error" if cleanup else "interrupted", finished_at=now(),
+                      message=cleanup or "用户中断，可 resume", pid=None)
             return 1
         except Halt as exc:
-            self.terminate()
-            self.save(status=exc.status, finished_at=now(), message=exc.message, pid=None)
+            cleanup = self.cleanup_for_exit()
+            self.save(status="error" if cleanup else exc.status, finished_at=now(),
+                      message=exc.message + ("；" + cleanup if cleanup else ""), pid=None)
             return 1
         except (HarnessError, OSError, ValueError) as exc:
-            self.terminate()
-            self.save(status="error", finished_at=now(), message=str(exc), pid=None)
+            private_write(self.directory / "error.log", traceback.format_exc())
+            cleanup = self.cleanup_for_exit()
+            self.save(status="error", finished_at=now(), message=str(exc),
+                      cleanup_error=cleanup, error_log=str(self.directory / "error.log"), pid=None)
             return 1
         finally:
-            self.terminate()
+            cleanup = self.cleanup_for_exit()
+            if cleanup:
+                self.save(status="error", message=cleanup, cleanup_error=cleanup, pid=None)
             print("运行目录：" + str(self.directory), flush=True)
             print("状态文件：" + str(self.directory / "status.json"), flush=True)
             print("状态：" + self.state["status"] + "；" + self.state.get("message", ""), flush=True)

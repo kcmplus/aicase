@@ -12,6 +12,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 HARNESS = Path(__file__).with_name('codex_harness.py').resolve()
 
@@ -480,6 +481,66 @@ class HarnessBlackBoxTests(unittest.TestCase):
         self.assertNotEqual(self.status()['status'], 'complete')
         with self.assertRaises(ProcessLookupError):
             os.kill(self.calls()[0]['pid'], 0)
+
+    def cleanup_module(self):
+        spec = importlib.util.spec_from_file_location('harness_cleanup_test', HARNESS)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_group_eperm_requires_inspection_and_only_signals_same_user_members(self):
+        module = self.cleanup_module()
+        listing = subprocess.CompletedProcess([], 0, '', '')
+        with mock.patch.object(module.os, 'killpg', side_effect=PermissionError(1, 'denied')), \
+             mock.patch.object(module.subprocess, 'run', return_value=listing) as ps, \
+             mock.patch.object(module.os, 'kill') as kill:
+            module.signal_process_group(54321, signal.SIGKILL)
+            ps.assert_called_once()
+            kill.assert_not_called()
+            listing.stdout = f'54322 54321 {os.getuid()}\n'
+            with mock.patch.object(module.os, 'getpgid', return_value=54321):
+                module.signal_process_group(54321, signal.SIGKILL)
+            kill.assert_called_once_with(54322, signal.SIGKILL)
+            listing.stdout = f'54323 54321 {os.getuid() + 1}\n'
+            with self.assertRaises(module.HarnessError):
+                module.signal_process_group(54321, signal.SIGKILL)
+            self.assertEqual(kill.call_count, 1)
+            listing.returncode = 1
+            with self.assertRaises(module.HarnessError):
+                module.signal_process_group(54321, signal.SIGKILL)
+
+    def run_with_cleanup_patch(self, patch):
+        wrapper = self.base / 'patched_harness.py'
+        wrapper.write_text(
+            'import importlib.util, sys\n'
+            f'spec=importlib.util.spec_from_file_location("h", {str(HARNESS)!r})\n'
+            'h=importlib.util.module_from_spec(spec); spec.loader.exec_module(h)\n'
+            'def denied(*args): raise PermissionError(1, "injected cleanup denial")\n'
+            + patch + '\nsys.exit(h.main())\n')
+        return subprocess.run([sys.executable, str(wrapper), 'run', '--task', str(self.task),
+                               '--codex-bin', str(self.fake), '--max-cycles', '1'],
+                              cwd=self.repo, env=self.env, capture_output=True, text=True, timeout=25)
+
+    def test_exited_group_eperm_does_not_lose_completed_phase(self):
+        result = self.run_with_cleanup_patch('h.os.killpg=denied')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.status()['status'], 'complete')
+        self.assertEqual(len(self.calls()), 4)
+        self.assertEqual(self.gate_log.read_text(), '1')
+
+    def test_unrecoverable_cleanup_records_error_and_flushes_final_output(self):
+        self.env['FAKE_MODE'] = 'stream'
+        result = self.run_with_cleanup_patch('h.signal_process_group=denied')
+        self.assertNotEqual(result.returncode, 0)
+        state = self.status()
+        self.assertEqual(state['status'], 'error')
+        self.assertIsNone(state['pid'])
+        self.assertIn('injected cleanup denial', state['message'])
+        self.assertIn('状态：error', result.stdout)
+        self.assertIn('LIVE_PROGRESS_MARKER', result.stdout)
+        self.assertIn('injected cleanup denial', Path(state['error_log']).read_text())
+        self.assertEqual(len(self.calls()), 1)
+        self.assertFalse(self.gate_log.exists())
 
 
 if __name__ == '__main__':
