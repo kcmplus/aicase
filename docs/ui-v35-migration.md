@@ -280,3 +280,10 @@ npm start
 - `config.direct_debug` 显式隔离模式在基础 settings 导入前校验参数；缺参数不能读取本地凭证或回退旧数据库。临时 SQLite／媒体、合成凭证、独立端口配置及 Python 外连阻断见 `docs/direct-terminal-debug.md`。
 - 新增 `test_direct_debug_isolation.py` 五项开发测试：缺参提前失败、路径／端口／密钥校验、软硬链接拒绝、全新库真实迁移与健康接口、本进程网络阻断。开发自测 **5/5 通过**，日志 `/tmp/v35-isolation-selftest.log`。原 DirectTerminal 合约在相同隔离配置下 **6/6 通过**，日志 `/tmp/v35-isolation-direct-regression.log`，均无跳过；`git diff --check` 通过。
 - 后续启动器仍需创建全新目录和合成数据、检查并绑定独立端口、阻断浏览器网络、运行真实页面操作及清理服务；`scripts/test-ui-v35-e2e.mjs` 尚未交付，原 gate 缺口保持。端口配置不是已监听证据；未提供浏览器截图、未部署、未真机验证。旧单安全替换、整站视觉、颜色与身份完整验收仍待完成。本轮 Git 检查点由 harness 管理。
+
+### UDP 发送保护修复（2026-11-14，开发自测交接）
+
+- 起点 `c4bb4203853b199fe10f4b8dbf4bbf4fcae15358`，工作区干净。在 mock 传输边界复现 `test_udp_sendmsg_is_also_blocked` 失败，没有真实网络发送。
+- `config/direct_debug_isolation.py` 对平台支持的 `socket.socket.sendmsg` 增加相同拒绝处理，堵住不经过连接或 `sendto` 的 UDP 发送入口。没有修改测试员断言、默认部署配置或数据模型。
+- 在 `backend/` 执行 `.venv/bin/python -m unittest management_api.test_direct_debug_isolation -v`，开发自测 **9/9 通过、无跳过**；日志 `/tmp/v35-sendmsg-selftest.log`，包括原失败断言及隔离路径、迁移、跨进程数据库复用、默认分支回归。仅创建临时合成数据，未访问用户数据库或凭证。
+- 交独立测试复验；本轮未执行完整 gates、DirectTerminal 全量业务回归或浏览器，也未证明服务端口可访问。后续隔离启动器、E2E 脚本、旧多份单替换与整站验收缺口保持。未提交、部署或操作真实业务。

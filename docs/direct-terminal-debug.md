@@ -71,4 +71,6 @@ npm run dev:direct -- --backend-dir /path/to/aicase --device-id 401 --shop-id 14
 
 此模式关闭供应商推单和放行，邮件使用内存后端，并阻断当前 Python 进程的 socket 连接、UDP 发送及非本地 DNS 解析。它不构成操作系统沙箱，不约束子进程或浏览器；浏览器外网阻断和外部渠道 mock 仍须由后续 E2E 脚本实现。不能以此启用真实渠道。
 
+2026-11-14 修复 QA 发现的 UDP `sendmsg` 遗漏：平台提供该方法时一并拦截，防止携带目标地址绕过 `connect/sendto`。保留 QA 原断言，隔离配置开发自测 9/9 通过、无跳过（`/tmp/v35-sendmsg-selftest.log`），待独立复验；未证明实际端口监听或浏览器外网隔离。
+
 开发自测命令（不读取现有数据库或本地凭证）：在 `backend/` 执行 `.venv/bin/python -m unittest management_api.test_direct_debug_isolation -v`。测试创建临时目录、合成密钥和全新 SQLite，执行真实迁移和健康接口请求，结束后清理。本子组未提供常驻预览服务或整站浏览器证据。

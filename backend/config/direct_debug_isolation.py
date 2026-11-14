@@ -77,6 +77,10 @@ def block_outbound_network():
     socket.socket.connect = denied
     socket.socket.connect_ex = denied
     socket.socket.sendto = denied
+    # UDP sendmsg can supply a destination without ever calling connect/sendto.
+    # It is not available on every platform; keep the guard portable.
+    if hasattr(socket.socket, 'sendmsg'):
+        socket.socket.sendmsg = denied
     socket.create_connection = denied
     socket.getaddrinfo = local_resolution
     socket.gethostbyname = denied
