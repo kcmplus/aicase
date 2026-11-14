@@ -233,6 +233,19 @@ def owner(request):
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def require_single_print_payment(order):
+    """Never pay an unreviewed legacy quantity or alter its frozen payment data.
+
+    Missing quantity is the historical single-copy contract. Even when no local
+    provider ID exists, an earlier timed-out write may exist remotely; this guard
+    must not reprice, rotate the request key, or discard provider identifiers.
+    """
+    quantity = order.snapshot.get('quantity', 1)
+    if type(quantity) is not int or quantity != 1:
+        raise Conflict('This historical order needs single-print review before payment. '
+                       'Its amount and payment records are preserved; do not create a duplicate payment.')
+
+
 def order_data(order, detail=True):
     result = {key: getattr(order, key) for key in ('reference','model_name','customer_email','status','amount','currency','mode','revision','station_id','fulfillment_type','created_at','updated_at')}
     from .refunds import refund_data

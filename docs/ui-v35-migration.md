@@ -243,3 +243,13 @@ npm start
 - 开发自测：V35 与启动测试 56/56、npm test 216/216，无跳过；订单/free/Stripe/Airwallex/refunds 共运行 76 项，75 通过、1 跳过。跳过定位为 `test_refunds.ConcurrentRefundTests`，要求 PostgreSQL 行锁，本地 SQLite 不能证明并发退款正确，不宣称已由 CI 验证。新增订单断言覆盖数量非法类型、幂等绕过、修改路径、历史 pending/paid/printing/completed/cancelled 快照不重算。测试仅使用 Django 新建测试数据库及合成数据。
 - 前端首次自测暴露 VM 测试环境未注入新启动依赖；已注入真实 `singlePrintDraft` 后重跑通过，原断言未删减。测试日志本地位于 `/tmp/v35-single-node2.log`、`/tmp/v35-single-existing.log`、`/tmp/v35-single-backend.log`；历史快照编辑保护后另跑订单回归见 `/tmp/v35-single-orders-final.log`。
 - 未进行浏览器、320/390/1440px 视觉、旧草稿实际 IndexedDB 恢复或独立 QA。结算/订单/返回页新版视觉、checkout.html 别名、设备分流与端到端仍需后续开发；第七组隔离脚本仍缺失，全部固定 gates 由 harness 执行。未访问用户数据库、外部业务、真实硬件或部署；未自行创建 Git 检查点。
+
+
+## 第六组支付绕过修复子组（2026-11-14，待独立复验）
+
+- 起点 `ab2caa7f5dbfea17bebc922a8b6e0b39991582dd`，`codex/ui-v35-migration` 工作区干净。本轮仅封闭 QA 发现的历史未付多份单直接进入支付渠道的漏洞，不代表旧未付单迁移或新版订单页完成。
+- Stripe 与 Airwallex 在持有订单行锁、确认 pending 后，创建／复用渠道会话之前统一校验快照数量：缺省兼容一份，显式值必须为整数 1。历史多份、非法类型和非法值返回 409；不会调用渠道，不改价、不重置数量、不清空已有会话、不轮换幂等标识。已付订单通知核实、退款处理不经过此新建支付门禁，历史快照仍保留。
+- 保留 QA 的两项原失败断言，新增两个矩阵测试覆盖多份、零、负数、布尔、字符串、小数、null，以及无本地渠道 ID／已有 ID 两种状态，逐字段比对拒绝前后订单不变。
+- 开发自测：orders/free_orders/stripe/airwallex/refunds 共 81 项，80 通过、1 项 PostgreSQL 行锁测试跳过；日志 `/tmp/v35-payment-guard.log`。`git diff --check` 通过。仅新建 Django 测试库和支付 mock，未进行浏览器或独立 QA；固定 gates 仍交 harness。
+- **未完成兼容路径**：旧服务端未付多份单仍需要单份报价、调整及显式重确认接口／页面；本轮拒付门禁不能替代该要求。旧实现没有持久化每次渠道写入尝试，因此没有本地会话 ID 不能证明远端未创建；后续实现必须先核实既有／未知渠道结果，再决定安全调整，不能直接改原订单金额或新建替代付款。完整兼容实现之前本项验收仍不通过。
+- 交测试员复验两个渠道的原失败用例、已有会话不能再次获得支付入口、未知结果保持原数据、正常单份及渠道通知／退款回归。整站页面、隔离端到端、视觉和颜色等既有缺口不缩减；未部署、未真机验证，Git 检查点由 harness 管理。

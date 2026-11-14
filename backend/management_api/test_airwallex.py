@@ -55,6 +55,22 @@ class AirwallexTests(TestCase):
         return self.client.post(f'/api/v1/store/orders/{order.reference}/checkout/', {}, format='json')
 
     @patch('management_api.airwallex_payments.api_request')
+    def test_legacy_quantity_payment_guard_preserves_unknown_and_existing_sessions(self, api):
+        order = self.create()
+        for quantity in (3, 0, -1, True, '1', 1.0, None):
+            for provider_id in ('', 'int_existing'):
+                with self.subTest(quantity=quantity, provider_id=bool(provider_id)):
+                    order.snapshot = {**order.snapshot, 'quantity': quantity}
+                    order.amount = '30.00'
+                    order.airwallex_payment_intent = provider_id
+                    order.save()
+                    before = PrintOrder.objects.filter(pk=order.pk).values().get()
+                    response = self.checkout(order)
+                    self.assertEqual(response.status_code, 409, response.data)
+                    api.assert_not_called()
+                    self.assertEqual(PrintOrder.objects.filter(pk=order.pk).values().get(), before)
+
+    @patch('management_api.airwallex_payments.api_request')
     def test_legacy_unpaid_multi_print_requires_review_before_payment(self, api):
         order = self.create()
         order.snapshot = {**order.snapshot, 'quantity': 3}
