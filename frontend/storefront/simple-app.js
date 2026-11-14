@@ -34,7 +34,9 @@ import {importPhoto} from './simple-upload.js';
 import {customerPage,sendEmailCode,verifyEmailCode,signOutCustomer,updateCustomerName,getCustomerCredits} from './customer-account.js';
 import {createDesignWorkspace,createDesignLibrary,designOwner} from './design-workspace.js';
 import {myDesignsPage,designReview} from './v35-designs.js';
+import {showStorageStartupError} from './v35-startup.js';
 
+async function startStorefront(){
 const app = document.querySelector('#app');
 app.textContent=t('Loading POPOMO…');
 const stockScope=deviceScope();
@@ -63,9 +65,17 @@ let cleanupShell=()=>{};
 const customerUI={email:'',codeSent:false,busy:false,error:'',success:'',ledger:[],ledgerNext:null,ledgerOpen:false,ledgerBusy:false,ledgerError:'',resendAt:0,next:'choose'};
 let resendTimer;
 let membership={...freshMembership(),server:true,authenticated:false,customer:null,...(initialData[4]||{})};
-if(workspace.active)membership=await privateUpdate('ai-membership-v1',a=>({...a,...membership,jobs:a.jobs||{}}),freshMembership());
-let orderBook=await updateDesign('print-orders-v1',v=>v,freshOrders());
-let checkoutDraft=await privateRead('checkout-draft');
+const stopForStorage=()=>{
+ app.textContent='Browser storage is unavailable. Allow site storage, then reload to try again. Existing designs have not been deleted.';
+ return 'storage-unavailable';
+};
+try{if(workspace.active)membership=await privateUpdate('ai-membership-v1',a=>({...a,...membership,jobs:a.jobs||{}}),freshMembership());}
+catch{return stopForStorage();}
+let orderBook=await updateDesign('print-orders-v1',v=>v,freshOrders()).catch(()=>null);
+if(!orderBook)return stopForStorage();
+let checkoutDraft;
+try{checkoutDraft=await privateRead('checkout-draft');}
+catch{return stopForStorage();}
 for(const order of Object.values(orderBook.orders||{}))if(order.phoneTemplate)try{registerSupplierTemplates([order.phoneTemplate]);}catch{}
 if(checkoutDraft?.phoneTemplate)try{registerSupplierTemplates([checkoutDraft.phoneTemplate]);}catch{}
 let orderRows=[],orderPage=1,orderHasMore=false,orderError='',entryOrders=null,entryOrderError='';
@@ -102,7 +112,8 @@ try {
 state.phoneTemplateId=stockSelection(state.model)?.templateId;
 state.aiExample=exampleFor(state.aiExample).id;
 if(!exampleFor(state.aiExample).results[state.aiStyle])state.aiStyle=Object.keys(exampleFor(state.aiExample).results)[0]||'';
-if(workspace.active)membership=await privateUpdate('ai-membership-v1',a=>migrateRender(a,aiJob),freshMembership());
+try{if(workspace.active)membership=await privateUpdate('ai-membership-v1',a=>migrateRender(a,aiJob),freshMembership());}
+catch{return stopForStorage();}
 if(aiJob)aiJob=membership.jobs[aiJob.id];
 if(aiJob?.status==='awaiting_confirmation')customerUI.next='ai';
 try{if(location.hash.slice(1).split('?')[0]!=='checkout')await syncAIAccount();if(aiJob?.mode==='live')await rememberLiveJob(await refreshLiveRender(aiJob));}catch{/* A saved job can be resumed when the service returns. */}
@@ -1110,13 +1121,6 @@ app.addEventListener('click',async event=>{
  const button=event.target.closest('[data-customer-action]');
  if(!button)return;event.preventDefault();await handleCustomer(button.dataset.customerAction);
 });
-async function loadCustomerCredits(reset=false){
- if(!membership.authenticated||customerUI.ledgerBusy)return;
- const id=membership.customer.id;customerUI.ledgerBusy=true;customerUI.ledgerError='';
- try{const data=await getCustomerCredits(reset?null:customerUI.ledgerNext);if(membership.customer?.id===id){customerUI.ledger=reset?data.results:[...customerUI.ledger,...data.results];customerUI.ledgerNext=data.nextCursor;}}
- catch(error){if(membership.customer?.id===id)customerUI.ledgerError=error.message;}
- finally{if(membership.customer?.id===id)customerUI.ledgerBusy=false;}
-}
 async function handleCustomer(action,fields){
  if(action==='credits-toggle'){customerUI.ledgerOpen=!customerUI.ledgerOpen;render(true);return;}
  if(action==='credits-more'||action==='credits-refresh'){const loading=loadCustomerCredits(action==='credits-refresh');render(true);await loading;render(true);return;}
@@ -1142,3 +1146,15 @@ async function handleCustomer(action,fields){
  }catch(error){customerUI.error=error.message;}
  finally{customerUI.busy=false;render(true);if(customerUI.codeSent)document.getElementById('customer-code')?.focus({preventScroll:true});}
 }
+async function loadCustomerCredits(reset=false){
+ if(!membership.authenticated||customerUI.ledgerBusy)return;
+ const id=membership.customer.id;customerUI.ledgerBusy=true;customerUI.ledgerError='';
+ try{const data=await getCustomerCredits(reset?null:customerUI.ledgerNext);if(membership.customer?.id===id){customerUI.ledger=reset?data.results:[...customerUI.ledger,...data.results];customerUI.ledgerNext=data.nextCursor;}}
+ catch(error){if(membership.customer?.id===id)customerUI.ledgerError=error.message;}
+ finally{if(membership.customer?.id===id)customerUI.ledgerBusy=false;}
+}
+}
+
+// A failed startup must not install navigation, polling, or business handlers.
+// Reload retries the original URL and session without deleting browser data.
+if(await startStorefront()==='storage-unavailable')showStorageStartupError(document.querySelector('#app'));
