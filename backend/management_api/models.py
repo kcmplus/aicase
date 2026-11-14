@@ -159,6 +159,52 @@ class PhoneModel(CatalogItem):
     notes = models.TextField(blank=True, max_length=2000)
     adaptation_prompt = models.TextField(blank=True, max_length=4000)
 
+class PhoneColor(Timestamped):
+    """Preview configuration only; never a supplier SKU or print template."""
+    phone_model = models.ForeignKey(PhoneModel, on_delete=models.PROTECT, related_name='colors')
+    code = models.SlugField(max_length=80)
+    name = models.CharField(max_length=120, blank=True)
+    rgb = models.JSONField()
+    region_note = models.CharField(max_length=300, blank=True)
+    source = models.CharField(max_length=500, blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    is_default = models.BooleanField(default=False)
+    active = models.BooleanField(default=False)
+    current_resource = models.ForeignKey('PhoneColorResource', null=True, editable=False,
+        on_delete=models.PROTECT, related_name='+')
+
+    class Meta:
+        ordering = ['sort_order', 'id']
+        default_permissions = ('view', 'add', 'change')
+        permissions = [('verify_phonecolor', '人工核验机型颜色资源')]
+        constraints = [
+            models.UniqueConstraint(fields=['phone_model', 'code'], name='unique_model_color_code'),
+            models.UniqueConstraint(fields=['phone_model'], condition=models.Q(is_default=True), name='unique_model_default_color'),
+        ]
+
+    def __str__(self):
+        return f'{self.phone_model.name} · {self.code}'
+
+
+class PhoneColorResource(Timestamped):
+    color = models.ForeignKey(PhoneColor, on_delete=models.PROTECT, related_name='resources')
+    version = models.PositiveIntegerField()
+    template_id = models.CharField(max_length=160)
+    width = models.PositiveIntegerField()
+    height = models.PositiveIntegerField()
+    overlay = models.CharField(max_length=300)
+    mask = models.CharField(max_length=300)
+    overlay_sha256 = models.CharField(max_length=64)
+    mask_sha256 = models.CharField(max_length=64)
+    uploaded_by = models.CharField(max_length=150)
+    verified_at = models.DateTimeField(null=True, editable=False)
+    verified_by = models.CharField(max_length=150, blank=True, editable=False)
+    review_note = models.CharField(max_length=500, blank=True, editable=False)
+
+    class Meta:
+        default_permissions = ()
+        constraints = [models.UniqueConstraint(fields=['color', 'version'], name='unique_color_resource_version')]
+
 class Graphic(CatalogItem):
     category = models.CharField(max_length=80, default="graphic")
     image_path = models.CharField(max_length=300)

@@ -14,6 +14,7 @@ import AIUsage from './AIUsage.vue';
 import AICenter from './AICenter.vue';
 import InventoryCenter from './InventoryCenter.vue';
 import PaymentSettings from './PaymentSettings.vue';
+import PhoneColors from './PhoneColors.vue';
 const aiResources=['ai','ai-prompts','ai-service','ai-usage','ai-examples','ai-styles'];
 const paymentResources=['payments','stripe','airwallex'];
 const aiRedirect=path=>to=>({path,query:to.query,hash:to.hash});
@@ -21,6 +22,7 @@ export const router=createRouter({history:createWebHistory(import.meta.env.BASE_
   {path:'/login',component:Login},
   {path:'/',component:Dashboard},
   {path:'/inventory',component:InventoryCenter,meta:{resource:'inventory'}},
+  {path:'/phone-colors',component:PhoneColors,meta:{resource:'phone-colors'}},
   {path:'/payments',component:PaymentSettings,meta:{resource:'payments',module:'payments'},children:[
     {path:'',redirect:'/payments/airwallex'},
     {path:'airwallex',component:AirwallexSettings,props:{embedded:true},meta:{resource:'airwallex'}},
@@ -39,7 +41,7 @@ export const router=createRouter({history:createWebHistory(import.meta.env.BASE_
   {path:'/ai-usage',redirect:aiRedirect('/ai/usage')},
   {path:'/ai-examples',redirect:to=>({path:'/ai/prompts',query:{...to.query,tab:'examples'}})},
   {path:'/ai-styles',redirect:to=>({path:'/ai/prompts',query:{...to.query,tab:'style'}})},
-  ...Object.keys(resources).filter(key=>key!=='inventory'&&!aiResources.includes(key)&&!paymentResources.includes(key)).map(resource=>({path:'/'+resource,component:resource==='customers'?Customers:resource==='mail'?MailSettings:ResourcePage,props:{resource},meta:{resource}})),
+  ...Object.keys(resources).filter(key=>key!=='inventory'&&key!=='phone-colors'&&!aiResources.includes(key)&&!paymentResources.includes(key)).map(resource=>({path:'/'+resource,component:resource==='customers'?Customers:resource==='mail'?MailSettings:ResourcePage,props:{resource},meta:{resource}})),
   {path:'/:pathMatch(.*)*',redirect:'/'},
 ]});
 router.beforeEach(async to=>{

@@ -4,6 +4,7 @@ from django.http import JsonResponse
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from management_api import views
+from management_api.phone_colors import PhoneColorViewSet
 from management_api.inventory import (ConnectionViewSet, DeviceViewSet, ProductViewSet,
                                      StockViewSet, RunViewSet, InventoryOptions)
 from management_api.orders import StoreOrders, StoreOrder, StoreOrderAction, OrderFulfillment
@@ -25,6 +26,7 @@ from management_api.terminal_orders import RetiredTerminalAPI
 from management_api.direct_terminal import DirectPoll, DirectPreview
 
 router = DefaultRouter()
+router.register('phone-colors', PhoneColorViewSet)
 router.register('device-connections', ConnectionViewSet)
 router.register('devices', DeviceViewSet)
 router.register('inventory/products', ProductViewSet)
