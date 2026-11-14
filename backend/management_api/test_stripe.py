@@ -94,6 +94,51 @@ class StripeTests(TestCase):
         return {'id': 'evt_example', 'object': 'event', 'type': 'checkout.session.completed', 'livemode': False,
                 'data': {'object': obj}}
 
+    @patch('management_api.stripe_payments.create_session')
+    def test_qa_missing_legacy_quantity_can_reuse_single_print_session(self, create_session):
+        order = self.create()
+        order.snapshot.pop('quantity', None)
+        order.stripe_session_id = 'cs_test_existing'
+        order.stripe_checkout_url = 'https://checkout.stripe.com/c/pay/existing'
+        order.save()
+        before = PrintOrder.objects.values().get(pk=order.pk)
+        self.assertEqual(self.checkout(order).status_code, 200)
+        create_session.assert_not_called()
+        self.assertEqual(PrintOrder.objects.values().get(pk=order.pk), before)
+
+    @patch('management_api.stripe_payments.create_session')
+    def test_qa_live_multi_print_never_reuses_checkout_url(self, create_session):
+        order = self.create()
+        order.mode = 'stripe_live'
+        order.snapshot = {**order.snapshot, 'quantity': 2}
+        order.amount = '20.00'
+        order.stripe_session_id = 'cs_live_existing'
+        order.stripe_checkout_url = 'https://checkout.stripe.com/c/pay/existing'
+        order.save()
+        before = PrintOrder.objects.values().get(pk=order.pk)
+        response = self.checkout(order)
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertNotIn('checkout_url', response.data)
+        create_session.assert_not_called()
+        self.assertEqual(PrintOrder.objects.values().get(pk=order.pk), before)
+
+    def test_qa_delayed_legacy_multi_payment_preserves_frozen_snapshot(self):
+        order = self.create()
+        order.snapshot = {**order.snapshot, 'quantity': 3}
+        order.amount = '30.00'
+        order.stripe_session_id = 'cs_test_example'
+        order.save()
+        snapshot = copy.deepcopy(order.snapshot)
+        event = self.event(order, amount_total=3000)
+        for _ in range(2):
+            self.assertEqual(self.deliver(event).status_code, 200)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'paid')
+        self.assertEqual(order.snapshot, snapshot)
+        self.assertEqual(str(order.amount), '30.00')
+        self.assertEqual(order.revision, 2)
+        self.assertEqual(AuditLog.objects.filter(actor_name='Stripe', action='payment').count(), 1)
+
     def deliver(self, event, secret=WEBHOOK, timestamp=None):
         payload = json.dumps(event)
         timestamp = timestamp or int(time.time())
