@@ -1,0 +1,3064 @@
+{
+  "version": 1,
+  "kind": "phone_body_color_reference",
+  "researched_at": "2026-11-14",
+  "models": [
+    {
+      "model_name": "iPhone 13 Pro",
+      "brand": "Apple",
+      "market": "Apple 美国英文技术规格/机型识别页；颜色参考，不承诺当地在售",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "已逐型号核对 Finish/Colors。中文为展示译名；不得据颜色名称认定有对应壳体、库存或底图。",
+      "sources": [
+        {
+          "url": "https://support.apple.com/en-us/111871",
+          "title": "iPhone 13 Pro — Technical Specifications — Apple Support"
+        },
+        {
+          "url": "https://support.apple.com/en-us/108044",
+          "title": "Identify your iPhone model — Apple Support"
+        }
+      ],
+      "colors": [
+        {
+          "code": "graphite",
+          "name_zh": "石墨色",
+          "name_en": "Graphite",
+          "rgb": {
+            "r": 86,
+            "g": 87,
+            "b": 84
+          }
+        },
+        {
+          "code": "gold",
+          "name_zh": "金色",
+          "name_en": "Gold",
+          "rgb": {
+            "r": 223,
+            "g": 201,
+            "b": 166
+          }
+        },
+        {
+          "code": "silver",
+          "name_zh": "银色",
+          "name_en": "Silver",
+          "rgb": {
+            "r": 229,
+            "g": 229,
+            "b": 223
+          }
+        },
+        {
+          "code": "sierra-blue",
+          "name_zh": "远峰蓝色",
+          "name_en": "Sierra Blue",
+          "rgb": {
+            "r": 169,
+            "g": 189,
+            "b": 207
+          }
+        },
+        {
+          "code": "alpine-green",
+          "name_zh": "苍岭绿色",
+          "name_en": "Alpine Green",
+          "rgb": {
+            "r": 82,
+            "g": 105,
+            "b": 87
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "iPhone 17 Pro",
+      "brand": "Apple",
+      "market": "Apple 美国英文技术规格/机型识别页；颜色参考，不承诺当地在售",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "已逐型号核对 Finish/Colors。中文为展示译名；不得据颜色名称认定有对应壳体、库存或底图。",
+      "sources": [
+        {
+          "url": "https://support.apple.com/en-us/125090",
+          "title": "iPhone 17 Pro — Technical Specifications — Apple Support"
+        },
+        {
+          "url": "https://support.apple.com/en-us/108044",
+          "title": "Identify your iPhone model — Apple Support"
+        }
+      ],
+      "colors": [
+        {
+          "code": "silver",
+          "name_zh": "银色",
+          "name_en": "Silver",
+          "rgb": {
+            "r": 229,
+            "g": 229,
+            "b": 223
+          }
+        },
+        {
+          "code": "cosmic-orange",
+          "name_zh": "星宇橙色",
+          "name_en": "Cosmic Orange",
+          "rgb": {
+            "r": 219,
+            "g": 116,
+            "b": 61
+          }
+        },
+        {
+          "code": "deep-blue",
+          "name_zh": "深蓝色",
+          "name_en": "Deep Blue",
+          "rgb": {
+            "r": 60,
+            "g": 75,
+            "b": 100
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "iPhone 17 Pro Max",
+      "brand": "Apple",
+      "market": "Apple 美国英文技术规格/机型识别页；颜色参考，不承诺当地在售",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "已逐型号核对 Finish/Colors。中文为展示译名；不得据颜色名称认定有对应壳体、库存或底图。",
+      "sources": [
+        {
+          "url": "https://support.apple.com/en-us/125091",
+          "title": "iPhone 17 Pro Max — Technical Specifications — Apple Support"
+        },
+        {
+          "url": "https://support.apple.com/en-us/108044",
+          "title": "Identify your iPhone model — Apple Support"
+        }
+      ],
+      "colors": [
+        {
+          "code": "silver",
+          "name_zh": "银色",
+          "name_en": "Silver",
+          "rgb": {
+            "r": 229,
+            "g": 229,
+            "b": 223
+          }
+        },
+        {
+          "code": "cosmic-orange",
+          "name_zh": "星宇橙色",
+          "name_en": "Cosmic Orange",
+          "rgb": {
+            "r": 219,
+            "g": 116,
+            "b": 61
+          }
+        },
+        {
+          "code": "deep-blue",
+          "name_zh": "深蓝色",
+          "name_en": "Deep Blue",
+          "rgb": {
+            "r": 60,
+            "g": 75,
+            "b": 100
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "iPhone 11 Pro",
+      "brand": "Apple",
+      "market": "Apple 美国英文技术规格/机型识别页；颜色参考，不承诺当地在售",
+      "connectivity": "4G LTE",
+      "match_status": "verified",
+      "notes": "已逐型号核对 Finish/Colors。中文为展示译名；不得据颜色名称认定有对应壳体、库存或底图。",
+      "sources": [
+        {
+          "url": "https://support.apple.com/en-us/108044",
+          "title": "Identify your iPhone model — Apple Support"
+        }
+      ],
+      "colors": [
+        {
+          "code": "silver",
+          "name_zh": "银色",
+          "name_en": "Silver",
+          "rgb": {
+            "r": 229,
+            "g": 229,
+            "b": 223
+          }
+        },
+        {
+          "code": "space-gray",
+          "name_zh": "深空灰色",
+          "name_en": "Space Gray",
+          "rgb": {
+            "r": 83,
+            "g": 85,
+            "b": 82
+          }
+        },
+        {
+          "code": "gold",
+          "name_zh": "金色",
+          "name_en": "Gold",
+          "rgb": {
+            "r": 223,
+            "g": 201,
+            "b": 166
+          }
+        },
+        {
+          "code": "midnight-green",
+          "name_zh": "暗夜绿色",
+          "name_en": "Midnight Green",
+          "rgb": {
+            "r": 80,
+            "g": 91,
+            "b": 82
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "iPhone 11",
+      "brand": "Apple",
+      "market": "Apple 美国英文技术规格/机型识别页；颜色参考，不承诺当地在售",
+      "connectivity": "4G LTE",
+      "match_status": "verified",
+      "notes": "已逐型号核对 Finish/Colors。中文为展示译名；不得据颜色名称认定有对应壳体、库存或底图。",
+      "sources": [
+        {
+          "url": "https://support.apple.com/en-us/111865",
+          "title": "iPhone 11 — Technical Specifications — Apple Support"
+        },
+        {
+          "url": "https://support.apple.com/en-us/108044",
+          "title": "Identify your iPhone model — Apple Support"
+        }
+      ],
+      "colors": [
+        {
+          "code": "black",
+          "name_zh": "黑色",
+          "name_en": "Black",
+          "rgb": {
+            "r": 37,
+            "g": 38,
+            "b": 40
+          }
+        },
+        {
+          "code": "green",
+          "name_zh": "绿色",
+          "name_en": "Green",
+          "rgb": {
+            "r": 169,
+            "g": 195,
+            "b": 173
+          }
+        },
+        {
+          "code": "yellow",
+          "name_zh": "黄色",
+          "name_en": "Yellow",
+          "rgb": {
+            "r": 242,
+            "g": 228,
+            "b": 161
+          }
+        },
+        {
+          "code": "purple",
+          "name_zh": "紫色",
+          "name_en": "Purple",
+          "rgb": {
+            "r": 198,
+            "g": 187,
+            "b": 216
+          }
+        },
+        {
+          "code": "product-red",
+          "name_zh": "红色（PRODUCT）RED",
+          "name_en": "(PRODUCT)RED",
+          "rgb": {
+            "r": 201,
+            "g": 50,
+            "b": 64
+          }
+        },
+        {
+          "code": "white",
+          "name_zh": "白色",
+          "name_en": "White",
+          "rgb": {
+            "r": 243,
+            "g": 243,
+            "b": 239
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "iPhone 15 Plus",
+      "brand": "Apple",
+      "market": "Apple 美国英文技术规格/机型识别页；颜色参考，不承诺当地在售",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "已逐型号核对 Finish/Colors。中文为展示译名；不得据颜色名称认定有对应壳体、库存或底图。",
+      "sources": [
+        {
+          "url": "https://support.apple.com/en-us/111830",
+          "title": "iPhone 15 Plus — Technical Specifications — Apple Support"
+        },
+        {
+          "url": "https://support.apple.com/en-us/108044",
+          "title": "Identify your iPhone model — Apple Support"
+        }
+      ],
+      "colors": [
+        {
+          "code": "black",
+          "name_zh": "黑色",
+          "name_en": "Black",
+          "rgb": {
+            "r": 37,
+            "g": 38,
+            "b": 40
+          }
+        },
+        {
+          "code": "blue",
+          "name_zh": "蓝色",
+          "name_en": "Blue",
+          "rgb": {
+            "r": 158,
+            "g": 190,
+            "b": 212
+          }
+        },
+        {
+          "code": "green",
+          "name_zh": "绿色",
+          "name_en": "Green",
+          "rgb": {
+            "r": 169,
+            "g": 195,
+            "b": 173
+          }
+        },
+        {
+          "code": "yellow",
+          "name_zh": "黄色",
+          "name_en": "Yellow",
+          "rgb": {
+            "r": 242,
+            "g": 228,
+            "b": 161
+          }
+        },
+        {
+          "code": "pink",
+          "name_zh": "粉色",
+          "name_en": "Pink",
+          "rgb": {
+            "r": 235,
+            "g": 198,
+            "b": 207
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "iPhone 15 Pro Max",
+      "brand": "Apple",
+      "market": "Apple 美国英文技术规格/机型识别页；颜色参考，不承诺当地在售",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "已逐型号核对 Finish/Colors。中文为展示译名；不得据颜色名称认定有对应壳体、库存或底图。",
+      "sources": [
+        {
+          "url": "https://support.apple.com/en-us/108044",
+          "title": "Identify your iPhone model — Apple Support"
+        }
+      ],
+      "colors": [
+        {
+          "code": "black-titanium",
+          "name_zh": "黑色钛金属",
+          "name_en": "Black Titanium",
+          "rgb": {
+            "r": 73,
+            "g": 73,
+            "b": 73
+          }
+        },
+        {
+          "code": "white-titanium",
+          "name_zh": "白色钛金属",
+          "name_en": "White Titanium",
+          "rgb": {
+            "r": 233,
+            "g": 230,
+            "b": 223
+          }
+        },
+        {
+          "code": "blue-titanium",
+          "name_zh": "蓝色钛金属",
+          "name_en": "Blue Titanium",
+          "rgb": {
+            "r": 74,
+            "g": 83,
+            "b": 100
+          }
+        },
+        {
+          "code": "natural-titanium",
+          "name_zh": "原色钛金属",
+          "name_en": "Natural Titanium",
+          "rgb": {
+            "r": 167,
+            "g": 163,
+            "b": 152
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "iPhone 16 Plus",
+      "brand": "Apple",
+      "market": "Apple 美国英文技术规格/机型识别页；颜色参考，不承诺当地在售",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "已逐型号核对 Finish/Colors。中文为展示译名；不得据颜色名称认定有对应壳体、库存或底图。",
+      "sources": [
+        {
+          "url": "https://support.apple.com/en-us/108044",
+          "title": "Identify your iPhone model — Apple Support"
+        }
+      ],
+      "colors": [
+        {
+          "code": "black",
+          "name_zh": "黑色",
+          "name_en": "Black",
+          "rgb": {
+            "r": 37,
+            "g": 38,
+            "b": 40
+          }
+        },
+        {
+          "code": "white",
+          "name_zh": "白色",
+          "name_en": "White",
+          "rgb": {
+            "r": 243,
+            "g": 243,
+            "b": 239
+          }
+        },
+        {
+          "code": "pink",
+          "name_zh": "粉色",
+          "name_en": "Pink",
+          "rgb": {
+            "r": 235,
+            "g": 198,
+            "b": 207
+          }
+        },
+        {
+          "code": "teal",
+          "name_zh": "深青色",
+          "name_en": "Teal",
+          "rgb": {
+            "r": 165,
+            "g": 199,
+            "b": 191
+          }
+        },
+        {
+          "code": "ultramarine",
+          "name_zh": "群青色",
+          "name_en": "Ultramarine",
+          "rgb": {
+            "r": 135,
+            "g": 146,
+            "b": 211
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "iPhone 16 Pro Max",
+      "brand": "Apple",
+      "market": "Apple 美国英文技术规格/机型识别页；颜色参考，不承诺当地在售",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "已逐型号核对 Finish/Colors。中文为展示译名；不得据颜色名称认定有对应壳体、库存或底图。",
+      "sources": [
+        {
+          "url": "https://support.apple.com/en-us/121032",
+          "title": "iPhone 16 Pro Max — Technical Specifications — Apple Support"
+        },
+        {
+          "url": "https://support.apple.com/en-us/108044",
+          "title": "Identify your iPhone model — Apple Support"
+        }
+      ],
+      "colors": [
+        {
+          "code": "black-titanium",
+          "name_zh": "黑色钛金属",
+          "name_en": "Black Titanium",
+          "rgb": {
+            "r": 73,
+            "g": 73,
+            "b": 73
+          }
+        },
+        {
+          "code": "white-titanium",
+          "name_zh": "白色钛金属",
+          "name_en": "White Titanium",
+          "rgb": {
+            "r": 233,
+            "g": 230,
+            "b": 223
+          }
+        },
+        {
+          "code": "natural-titanium",
+          "name_zh": "原色钛金属",
+          "name_en": "Natural Titanium",
+          "rgb": {
+            "r": 167,
+            "g": 163,
+            "b": 152
+          }
+        },
+        {
+          "code": "desert-titanium",
+          "name_zh": "沙漠色钛金属",
+          "name_en": "Desert Titanium",
+          "rgb": {
+            "r": 205,
+            "g": 181,
+            "b": 157
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "iPhone 14",
+      "brand": "Apple",
+      "market": "Apple 美国英文技术规格/机型识别页；颜色参考，不承诺当地在售",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "已逐型号核对 Finish/Colors。中文为展示译名；不得据颜色名称认定有对应壳体、库存或底图。",
+      "sources": [
+        {
+          "url": "https://support.apple.com/en-us/108044",
+          "title": "Identify your iPhone model — Apple Support"
+        }
+      ],
+      "colors": [
+        {
+          "code": "midnight",
+          "name_zh": "午夜色",
+          "name_en": "Midnight",
+          "rgb": {
+            "r": 37,
+            "g": 44,
+            "b": 52
+          }
+        },
+        {
+          "code": "starlight",
+          "name_zh": "星光色",
+          "name_en": "Starlight",
+          "rgb": {
+            "r": 244,
+            "g": 240,
+            "b": 232
+          }
+        },
+        {
+          "code": "product-red",
+          "name_zh": "红色（PRODUCT）RED",
+          "name_en": "(PRODUCT)RED",
+          "rgb": {
+            "r": 201,
+            "g": 50,
+            "b": 64
+          }
+        },
+        {
+          "code": "blue",
+          "name_zh": "蓝色",
+          "name_en": "Blue",
+          "rgb": {
+            "r": 158,
+            "g": 190,
+            "b": 212
+          }
+        },
+        {
+          "code": "purple",
+          "name_zh": "紫色",
+          "name_en": "Purple",
+          "rgb": {
+            "r": 198,
+            "g": 187,
+            "b": 216
+          }
+        },
+        {
+          "code": "yellow",
+          "name_zh": "黄色",
+          "name_en": "Yellow",
+          "rgb": {
+            "r": 242,
+            "g": 228,
+            "b": 161
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "iPhone 14 Pro",
+      "brand": "Apple",
+      "market": "Apple 美国英文技术规格/机型识别页；颜色参考，不承诺当地在售",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "已逐型号核对 Finish/Colors。中文为展示译名；不得据颜色名称认定有对应壳体、库存或底图。",
+      "sources": [
+        {
+          "url": "https://support.apple.com/en-us/111849",
+          "title": "iPhone 14 Pro — Technical Specifications — Apple Support"
+        },
+        {
+          "url": "https://support.apple.com/en-us/108044",
+          "title": "Identify your iPhone model — Apple Support"
+        }
+      ],
+      "colors": [
+        {
+          "code": "space-black",
+          "name_zh": "深空黑色",
+          "name_en": "Space Black",
+          "rgb": {
+            "r": 60,
+            "g": 60,
+            "b": 61
+          }
+        },
+        {
+          "code": "silver",
+          "name_zh": "银色",
+          "name_en": "Silver",
+          "rgb": {
+            "r": 229,
+            "g": 229,
+            "b": 223
+          }
+        },
+        {
+          "code": "gold",
+          "name_zh": "金色",
+          "name_en": "Gold",
+          "rgb": {
+            "r": 223,
+            "g": 201,
+            "b": 166
+          }
+        },
+        {
+          "code": "deep-purple",
+          "name_zh": "暗紫色",
+          "name_en": "Deep Purple",
+          "rgb": {
+            "r": 101,
+            "g": 93,
+            "b": 112
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "iPhone 14 Pro Max",
+      "brand": "Apple",
+      "market": "Apple 美国英文技术规格/机型识别页；颜色参考，不承诺当地在售",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "已逐型号核对 Finish/Colors。中文为展示译名；不得据颜色名称认定有对应壳体、库存或底图。",
+      "sources": [
+        {
+          "url": "https://support.apple.com/en-us/108044",
+          "title": "Identify your iPhone model — Apple Support"
+        }
+      ],
+      "colors": [
+        {
+          "code": "space-black",
+          "name_zh": "深空黑色",
+          "name_en": "Space Black",
+          "rgb": {
+            "r": 60,
+            "g": 60,
+            "b": 61
+          }
+        },
+        {
+          "code": "silver",
+          "name_zh": "银色",
+          "name_en": "Silver",
+          "rgb": {
+            "r": 229,
+            "g": 229,
+            "b": 223
+          }
+        },
+        {
+          "code": "gold",
+          "name_zh": "金色",
+          "name_en": "Gold",
+          "rgb": {
+            "r": 223,
+            "g": 201,
+            "b": 166
+          }
+        },
+        {
+          "code": "deep-purple",
+          "name_zh": "暗紫色",
+          "name_en": "Deep Purple",
+          "rgb": {
+            "r": 101,
+            "g": 93,
+            "b": 112
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "iPhone 12 Pro",
+      "brand": "Apple",
+      "market": "Apple 美国英文技术规格/机型识别页；颜色参考，不承诺当地在售",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "已逐型号核对 Finish/Colors。中文为展示译名；不得据颜色名称认定有对应壳体、库存或底图。",
+      "sources": [
+        {
+          "url": "https://support.apple.com/en-us/111875",
+          "title": "iPhone 12 Pro — Technical Specifications — Apple Support"
+        },
+        {
+          "url": "https://support.apple.com/en-us/108044",
+          "title": "Identify your iPhone model — Apple Support"
+        }
+      ],
+      "colors": [
+        {
+          "code": "silver",
+          "name_zh": "银色",
+          "name_en": "Silver",
+          "rgb": {
+            "r": 229,
+            "g": 229,
+            "b": 223
+          }
+        },
+        {
+          "code": "graphite",
+          "name_zh": "石墨色",
+          "name_en": "Graphite",
+          "rgb": {
+            "r": 86,
+            "g": 87,
+            "b": 84
+          }
+        },
+        {
+          "code": "gold",
+          "name_zh": "金色",
+          "name_en": "Gold",
+          "rgb": {
+            "r": 223,
+            "g": 201,
+            "b": 166
+          }
+        },
+        {
+          "code": "pacific-blue",
+          "name_zh": "海蓝色",
+          "name_en": "Pacific Blue",
+          "rgb": {
+            "r": 61,
+            "g": 89,
+            "b": 104
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "iPhone 13",
+      "brand": "Apple",
+      "market": "Apple 美国英文技术规格/机型识别页；颜色参考，不承诺当地在售",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "已逐型号核对 Finish/Colors。中文为展示译名；不得据颜色名称认定有对应壳体、库存或底图。",
+      "sources": [
+        {
+          "url": "https://support.apple.com/en-us/111872",
+          "title": "iPhone 13 — Technical Specifications — Apple Support"
+        },
+        {
+          "url": "https://support.apple.com/en-us/108044",
+          "title": "Identify your iPhone model — Apple Support"
+        }
+      ],
+      "colors": [
+        {
+          "code": "product-red",
+          "name_zh": "红色（PRODUCT）RED",
+          "name_en": "(PRODUCT)RED",
+          "rgb": {
+            "r": 201,
+            "g": 50,
+            "b": 64
+          }
+        },
+        {
+          "code": "starlight",
+          "name_zh": "星光色",
+          "name_en": "Starlight",
+          "rgb": {
+            "r": 244,
+            "g": 240,
+            "b": 232
+          }
+        },
+        {
+          "code": "midnight",
+          "name_zh": "午夜色",
+          "name_en": "Midnight",
+          "rgb": {
+            "r": 37,
+            "g": 44,
+            "b": 52
+          }
+        },
+        {
+          "code": "blue",
+          "name_zh": "蓝色",
+          "name_en": "Blue",
+          "rgb": {
+            "r": 158,
+            "g": 190,
+            "b": 212
+          }
+        },
+        {
+          "code": "pink",
+          "name_zh": "粉色",
+          "name_en": "Pink",
+          "rgb": {
+            "r": 235,
+            "g": 198,
+            "b": 207
+          }
+        },
+        {
+          "code": "green",
+          "name_zh": "绿色",
+          "name_en": "Green",
+          "rgb": {
+            "r": 169,
+            "g": 195,
+            "b": 173
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "iPhone 13 Pro Max",
+      "brand": "Apple",
+      "market": "Apple 美国英文技术规格/机型识别页；颜色参考，不承诺当地在售",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "已逐型号核对 Finish/Colors。中文为展示译名；不得据颜色名称认定有对应壳体、库存或底图。",
+      "sources": [
+        {
+          "url": "https://support.apple.com/en-us/111870",
+          "title": "iPhone 13 Pro Max — Technical Specifications — Apple Support"
+        },
+        {
+          "url": "https://support.apple.com/en-us/108044",
+          "title": "Identify your iPhone model — Apple Support"
+        }
+      ],
+      "colors": [
+        {
+          "code": "graphite",
+          "name_zh": "石墨色",
+          "name_en": "Graphite",
+          "rgb": {
+            "r": 86,
+            "g": 87,
+            "b": 84
+          }
+        },
+        {
+          "code": "gold",
+          "name_zh": "金色",
+          "name_en": "Gold",
+          "rgb": {
+            "r": 223,
+            "g": 201,
+            "b": 166
+          }
+        },
+        {
+          "code": "silver",
+          "name_zh": "银色",
+          "name_en": "Silver",
+          "rgb": {
+            "r": 229,
+            "g": 229,
+            "b": 223
+          }
+        },
+        {
+          "code": "sierra-blue",
+          "name_zh": "远峰蓝色",
+          "name_en": "Sierra Blue",
+          "rgb": {
+            "r": 169,
+            "g": 189,
+            "b": 207
+          }
+        },
+        {
+          "code": "alpine-green",
+          "name_zh": "苍岭绿色",
+          "name_en": "Alpine Green",
+          "rgb": {
+            "r": 82,
+            "g": 105,
+            "b": 87
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "iPhone 12",
+      "brand": "Apple",
+      "market": "Apple 美国英文技术规格/机型识别页；颜色参考，不承诺当地在售",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "已逐型号核对 Finish/Colors。中文为展示译名；不得据颜色名称认定有对应壳体、库存或底图。",
+      "sources": [
+        {
+          "url": "https://support.apple.com/en-us/111876",
+          "title": "iPhone 12 — Technical Specifications — Apple Support"
+        },
+        {
+          "url": "https://support.apple.com/en-us/108044",
+          "title": "Identify your iPhone model — Apple Support"
+        }
+      ],
+      "colors": [
+        {
+          "code": "black",
+          "name_zh": "黑色",
+          "name_en": "Black",
+          "rgb": {
+            "r": 37,
+            "g": 38,
+            "b": 40
+          }
+        },
+        {
+          "code": "white",
+          "name_zh": "白色",
+          "name_en": "White",
+          "rgb": {
+            "r": 243,
+            "g": 243,
+            "b": 239
+          }
+        },
+        {
+          "code": "product-red",
+          "name_zh": "红色（PRODUCT）RED",
+          "name_en": "(PRODUCT)RED",
+          "rgb": {
+            "r": 201,
+            "g": 50,
+            "b": 64
+          }
+        },
+        {
+          "code": "green",
+          "name_zh": "绿色",
+          "name_en": "Green",
+          "rgb": {
+            "r": 169,
+            "g": 195,
+            "b": 173
+          }
+        },
+        {
+          "code": "blue",
+          "name_zh": "蓝色",
+          "name_en": "Blue",
+          "rgb": {
+            "r": 158,
+            "g": 190,
+            "b": 212
+          }
+        },
+        {
+          "code": "purple",
+          "name_zh": "紫色",
+          "name_en": "Purple",
+          "rgb": {
+            "r": 198,
+            "g": 187,
+            "b": 216
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "iPhone 12 Mini",
+      "brand": "Apple",
+      "market": "Apple 美国英文技术规格/机型识别页；颜色参考，不承诺当地在售",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "已逐型号核对 Finish/Colors。中文为展示译名；不得据颜色名称认定有对应壳体、库存或底图。",
+      "sources": [
+        {
+          "url": "https://support.apple.com/en-us/108044",
+          "title": "Identify your iPhone model — Apple Support"
+        }
+      ],
+      "colors": [
+        {
+          "code": "black",
+          "name_zh": "黑色",
+          "name_en": "Black",
+          "rgb": {
+            "r": 37,
+            "g": 38,
+            "b": 40
+          }
+        },
+        {
+          "code": "white",
+          "name_zh": "白色",
+          "name_en": "White",
+          "rgb": {
+            "r": 243,
+            "g": 243,
+            "b": 239
+          }
+        },
+        {
+          "code": "product-red",
+          "name_zh": "红色（PRODUCT）RED",
+          "name_en": "(PRODUCT)RED",
+          "rgb": {
+            "r": 201,
+            "g": 50,
+            "b": 64
+          }
+        },
+        {
+          "code": "green",
+          "name_zh": "绿色",
+          "name_en": "Green",
+          "rgb": {
+            "r": 169,
+            "g": 195,
+            "b": 173
+          }
+        },
+        {
+          "code": "blue",
+          "name_zh": "蓝色",
+          "name_en": "Blue",
+          "rgb": {
+            "r": 158,
+            "g": 190,
+            "b": 212
+          }
+        },
+        {
+          "code": "purple",
+          "name_zh": "紫色",
+          "name_en": "Purple",
+          "rgb": {
+            "r": 198,
+            "g": 187,
+            "b": 216
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "Samsung A56",
+      "brand": "Samsung",
+      "market": "英国",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "对应 Galaxy A56 5G；不包含地区专属衍生机型。",
+      "sources": [
+        {
+          "url": "https://news.samsung.com/uk/samsung-marks-a-step-forward-with-ai-for-everyone-by-introducing-new-galaxy-a56-5g-galaxy-a36-5g-and-galaxy-a26-5g",
+          "title": "Samsung UK — Galaxy A56 5G / A36 5G launch"
+        }
+      ],
+      "colors": [
+        {
+          "code": "awesome-lightgrey",
+          "name_zh": "浅灰色（Awesome）",
+          "name_en": "Awesome Lightgrey",
+          "rgb": {
+            "r": 196,
+            "g": 196,
+            "b": 191
+          }
+        },
+        {
+          "code": "awesome-graphite",
+          "name_zh": "石墨色（Awesome）",
+          "name_en": "Awesome Graphite",
+          "rgb": {
+            "r": 80,
+            "g": 81,
+            "b": 83
+          }
+        },
+        {
+          "code": "awesome-olive",
+          "name_zh": "橄榄绿色（Awesome）",
+          "name_en": "Awesome Olive",
+          "rgb": {
+            "r": 162,
+            "g": 163,
+            "b": 141
+          }
+        },
+        {
+          "code": "awesome-pink",
+          "name_zh": "粉色（Awesome）",
+          "name_en": "Awesome Pink",
+          "rgb": {
+            "r": 216,
+            "g": 181,
+            "b": 177
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "Samsung A36",
+      "brand": "Samsung",
+      "market": "英国",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "对应 Galaxy A36 5G。",
+      "sources": [
+        {
+          "url": "https://news.samsung.com/uk/samsung-marks-a-step-forward-with-ai-for-everyone-by-introducing-new-galaxy-a56-5g-galaxy-a36-5g-and-galaxy-a26-5g",
+          "title": "Samsung UK — Galaxy A56 5G / A36 5G launch"
+        }
+      ],
+      "colors": [
+        {
+          "code": "awesome-lavender",
+          "name_zh": "薰衣草紫色（Awesome）",
+          "name_en": "Awesome Lavender",
+          "rgb": {
+            "r": 199,
+            "g": 195,
+            "b": 222
+          }
+        },
+        {
+          "code": "awesome-black",
+          "name_zh": "黑色（Awesome）",
+          "name_en": "Awesome Black",
+          "rgb": {
+            "r": 52,
+            "g": 54,
+            "b": 55
+          }
+        },
+        {
+          "code": "awesome-white",
+          "name_zh": "白色（Awesome）",
+          "name_en": "Awesome White",
+          "rgb": {
+            "r": 238,
+            "g": 238,
+            "b": 234
+          }
+        },
+        {
+          "code": "awesome-lime",
+          "name_zh": "青柠色（Awesome）",
+          "name_en": "Awesome Lime",
+          "rgb": {
+            "r": 214,
+            "g": 223,
+            "b": 177
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "Samsung A16",
+      "brand": "Samsung",
+      "market": "未确定；已核对菲律宾资料",
+      "connectivity": "未确定（4G LTE / 5G）",
+      "match_status": "needs_review",
+      "notes": "UI 未标 LTE/5G 或 SM 型号。菲律宾 LTE 为 Black/Grey/Light Green；5G 为 Blue Black/Gold，不能拼成同一列表。需确认设备版本、销售区域及模板适配后整理正式颜色。",
+      "sources": [
+        {
+          "url": "https://news.samsung.com/ph/elevating-everyday-with-the-new-samsung-galaxy-a16",
+          "title": "Samsung Philippines — Galaxy A16 5G and LTE launch"
+        }
+      ],
+      "colors": []
+    },
+    {
+      "model_name": "Samsung A55",
+      "brand": "Samsung",
+      "market": "英国",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "对应 Galaxy A55 5G / Galaxy A35 5G 的相应型号；英国四配色，未混入其他市场列表。",
+      "sources": [
+        {
+          "url": "https://news.samsung.com/uk/galaxy-a55-5g-and-galaxy-a35-5g-awesome-innovations-and-security-engineered-for-everyone",
+          "title": "Samsung UK — Galaxy A55 5G / A35 5G launch"
+        }
+      ],
+      "colors": [
+        {
+          "code": "awesome-ice-blue",
+          "name_zh": "冰蓝色（Awesome）",
+          "name_en": "Awesome Ice Blue",
+          "rgb": {
+            "r": 207,
+            "g": 223,
+            "b": 235
+          }
+        },
+        {
+          "code": "awesome-lemon",
+          "name_zh": "柠檬黄色（Awesome）",
+          "name_en": "Awesome Lemon",
+          "rgb": {
+            "r": 229,
+            "g": 226,
+            "b": 183
+          }
+        },
+        {
+          "code": "awesome-lilac",
+          "name_zh": "淡紫色（Awesome）",
+          "name_en": "Awesome Lilac",
+          "rgb": {
+            "r": 198,
+            "g": 181,
+            "b": 207
+          }
+        },
+        {
+          "code": "awesome-navy",
+          "name_zh": "海军蓝色（Awesome）",
+          "name_en": "Awesome Navy",
+          "rgb": {
+            "r": 52,
+            "g": 61,
+            "b": 81
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "Samsung S21",
+      "brand": "Samsung",
+      "market": "爱尔兰",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "仅 Galaxy S21 5G；不混用同页面 S21+、Ultra 或 FE 的颜色。",
+      "sources": [
+        {
+          "url": "https://www.samsung.com/ie/smartphones/galaxy-s21-5g/specs/",
+          "title": "Samsung Ireland — Galaxy S21 5G specifications"
+        }
+      ],
+      "colors": [
+        {
+          "code": "phantom-violet",
+          "name_zh": "幻影紫色",
+          "name_en": "Phantom Violet",
+          "rgb": {
+            "r": 165,
+            "g": 160,
+            "b": 190
+          }
+        },
+        {
+          "code": "phantom-grey",
+          "name_zh": "幻影灰色",
+          "name_en": "Phantom Grey",
+          "rgb": {
+            "r": 98,
+            "g": 100,
+            "b": 106
+          }
+        },
+        {
+          "code": "phantom-white",
+          "name_zh": "幻影白色",
+          "name_en": "Phantom White",
+          "rgb": {
+            "r": 240,
+            "g": 240,
+            "b": 237
+          }
+        },
+        {
+          "code": "phantom-pink",
+          "name_zh": "幻影粉色",
+          "name_en": "Phantom Pink",
+          "rgb": {
+            "r": 222,
+            "g": 194,
+            "b": 202
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "Samsung A05S",
+      "brand": "Samsung",
+      "market": "爱尔兰",
+      "connectivity": "4G LTE",
+      "match_status": "verified",
+      "notes": "按 Galaxy A05s（小写 s）匹配；本页列三色，不从其他地区加入额外颜色。",
+      "sources": [
+        {
+          "url": "https://www.samsung.com/ie/business/smartphones/galaxy-a/galaxy-a05s-black-64gb-sm-a057gzkueub/",
+          "title": "Samsung Ireland — Galaxy A05s SM-A057G"
+        }
+      ],
+      "colors": [
+        {
+          "code": "light-green",
+          "name_zh": "浅绿色",
+          "name_en": "Light Green",
+          "rgb": {
+            "r": 204,
+            "g": 215,
+            "b": 191
+          }
+        },
+        {
+          "code": "silver",
+          "name_zh": "银色",
+          "name_en": "Silver",
+          "rgb": {
+            "r": 229,
+            "g": 229,
+            "b": 223
+          }
+        },
+        {
+          "code": "black",
+          "name_zh": "黑色",
+          "name_en": "Black",
+          "rgb": {
+            "r": 37,
+            "g": 38,
+            "b": 40
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "Samsung A14",
+      "brand": "Samsung",
+      "market": "未确定；已核对西班牙 LTE 与拉美 5G",
+      "connectivity": "未确定（4G LTE / 5G）",
+      "match_status": "needs_review",
+      "notes": "UI 未标 SM-A145 / SM-A146。西班牙 LTE 资料为 Black/Light Green/Silver；拉美 5G 发布为 Black/Silver/Dark Red/Light Green。两地区仅作歧义证据，不合并。",
+      "sources": [
+        {
+          "url": "https://www.samsung.com/es/business/smartphones/galaxy-a/galaxy-a14-sm-a145rzkveub/",
+          "title": "Samsung Spain — Galaxy A14 LTE SM-A145R"
+        },
+        {
+          "url": "https://news.samsung.com/latin/samsung-presenta-galaxy-a14-5g-disponible-en-america-latina-en-febrero",
+          "title": "Samsung Latin America — Galaxy A14 5G launch"
+        }
+      ],
+      "colors": []
+    },
+    {
+      "model_name": "Samsung A35",
+      "brand": "Samsung",
+      "market": "英国",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "对应 Galaxy A55 5G / Galaxy A35 5G 的相应型号；英国四配色，未混入其他市场列表。",
+      "sources": [
+        {
+          "url": "https://news.samsung.com/uk/galaxy-a55-5g-and-galaxy-a35-5g-awesome-innovations-and-security-engineered-for-everyone",
+          "title": "Samsung UK — Galaxy A55 5G / A35 5G launch"
+        }
+      ],
+      "colors": [
+        {
+          "code": "awesome-ice-blue",
+          "name_zh": "冰蓝色（Awesome）",
+          "name_en": "Awesome Ice Blue",
+          "rgb": {
+            "r": 207,
+            "g": 223,
+            "b": 235
+          }
+        },
+        {
+          "code": "awesome-lemon",
+          "name_zh": "柠檬黄色（Awesome）",
+          "name_en": "Awesome Lemon",
+          "rgb": {
+            "r": 229,
+            "g": 226,
+            "b": 183
+          }
+        },
+        {
+          "code": "awesome-lilac",
+          "name_zh": "淡紫色（Awesome）",
+          "name_en": "Awesome Lilac",
+          "rgb": {
+            "r": 198,
+            "g": 181,
+            "b": 207
+          }
+        },
+        {
+          "code": "awesome-navy",
+          "name_zh": "海军蓝色（Awesome）",
+          "name_en": "Awesome Navy",
+          "rgb": {
+            "r": 52,
+            "g": 61,
+            "b": 81
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "Samsung A52",
+      "brand": "Samsung",
+      "market": "未确定；已核对德国资料",
+      "connectivity": "未确定（4G LTE / 5G）",
+      "match_status": "needs_review",
+      "notes": "官方选择器区分 Galaxy A52、A52 5G 与 4G/5G，并列 Awesome Black/Blue/White/Violet。UI 未给型号编号，不把共用选择器等同模板适配确认；不包含 A52s。",
+      "sources": [
+        {
+          "url": "https://www.samsung.com/de/smartphones/galaxy-a/galaxy-a52-5g/buy/",
+          "title": "Samsung Germany — Galaxy A52 / A52 5G selector"
+        }
+      ],
+      "colors": []
+    },
+    {
+      "model_name": "Samsung A15",
+      "brand": "Samsung",
+      "market": "未确定；已核对英国资料",
+      "connectivity": "未确定（4G LTE / 5G）",
+      "match_status": "needs_review",
+      "notes": "英国两版均列 Blue Black/Blue/Yellow，但 UI 未确定 SM-A155 / SM-A156；颜色相同不能证明模板或外形兼容，正式列表留空。",
+      "sources": [
+        {
+          "url": "https://www.samsung.com/uk/business/smartphones/galaxy-a/galaxy-a15-yellow-128gb-sm-a155fzydeub/",
+          "title": "Samsung UK — Galaxy A15 SM-A155F"
+        },
+        {
+          "url": "https://www.samsung.com/uk/business/smartphones/galaxy-a/galaxy-a15-5g-yellow-128gb-sm-a156bzydeub/",
+          "title": "Samsung UK — Galaxy A15 5G SM-A156B"
+        }
+      ],
+      "colors": []
+    },
+    {
+      "model_name": "Samsung S25+",
+      "brand": "Samsung",
+      "market": "美国",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "对应 Galaxy S25+；Blueblack、Coralred、Pinkgold 在该页标为 Samsung.com 专属。",
+      "sources": [
+        {
+          "url": "https://www.samsung.com/us/smartphones/galaxy-s25/",
+          "title": "Samsung US — Galaxy S25 & S25+ features and colors"
+        }
+      ],
+      "colors": [
+        {
+          "code": "navy",
+          "name_zh": "海军蓝色",
+          "name_en": "Navy",
+          "rgb": {
+            "r": 61,
+            "g": 76,
+            "b": 101
+          }
+        },
+        {
+          "code": "icyblue",
+          "name_zh": "冰蓝色",
+          "name_en": "Icyblue",
+          "rgb": {
+            "r": 212,
+            "g": 224,
+            "b": 231
+          }
+        },
+        {
+          "code": "silver-shadow",
+          "name_zh": "银影色",
+          "name_en": "Silver Shadow",
+          "rgb": {
+            "r": 185,
+            "g": 188,
+            "b": 188
+          }
+        },
+        {
+          "code": "mint",
+          "name_zh": "薄荷绿色",
+          "name_en": "Mint",
+          "rgb": {
+            "r": 202,
+            "g": 221,
+            "b": 207
+          }
+        },
+        {
+          "code": "blueblack",
+          "name_zh": "蓝黑色",
+          "name_en": "Blueblack",
+          "rgb": {
+            "r": 53,
+            "g": 66,
+            "b": 71
+          }
+        },
+        {
+          "code": "coralred",
+          "name_zh": "珊瑚红色",
+          "name_en": "Coralred",
+          "rgb": {
+            "r": 215,
+            "g": 124,
+            "b": 115
+          }
+        },
+        {
+          "code": "pinkgold",
+          "name_zh": "粉金色",
+          "name_en": "Pinkgold",
+          "rgb": {
+            "r": 222,
+            "g": 196,
+            "b": 193
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "Samsung S24+",
+      "brand": "Samsung",
+      "market": "海湾地区英文支持页",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "Jade Green、Sandstone Orange、Sapphire Blue 为该页列出的 Samsung.com 专属；仅颜色资料，不承诺当前供应。",
+      "sources": [
+        {
+          "url": "https://www.samsung.com/ae/support/mobile-devices/how-many-and-what-colors-are-available-on-the-market-for-the-s24-device/",
+          "title": "Samsung Gulf — Galaxy S24 Colors & Availability"
+        }
+      ],
+      "colors": [
+        {
+          "code": "marble-gray",
+          "name_zh": "大理石灰色",
+          "name_en": "Marble Gray",
+          "rgb": {
+            "r": 200,
+            "g": 198,
+            "b": 190
+          }
+        },
+        {
+          "code": "onyx-black",
+          "name_zh": "缟玛瑙黑色",
+          "name_en": "Onyx Black",
+          "rgb": {
+            "r": 69,
+            "g": 72,
+            "b": 74
+          }
+        },
+        {
+          "code": "cobalt-violet",
+          "name_zh": "钴紫色",
+          "name_en": "Cobalt Violet",
+          "rgb": {
+            "r": 100,
+            "g": 93,
+            "b": 123
+          }
+        },
+        {
+          "code": "amber-yellow",
+          "name_zh": "琥珀黄色",
+          "name_en": "Amber Yellow",
+          "rgb": {
+            "r": 239,
+            "g": 224,
+            "b": 163
+          }
+        },
+        {
+          "code": "jade-green",
+          "name_zh": "翡翠绿色",
+          "name_en": "Jade Green",
+          "rgb": {
+            "r": 165,
+            "g": 201,
+            "b": 183
+          }
+        },
+        {
+          "code": "sandstone-orange",
+          "name_zh": "砂岩橙色",
+          "name_en": "Sandstone Orange",
+          "rgb": {
+            "r": 222,
+            "g": 194,
+            "b": 164
+          }
+        },
+        {
+          "code": "sapphire-blue",
+          "name_zh": "宝石蓝色",
+          "name_en": "Sapphire Blue",
+          "rgb": {
+            "r": 168,
+            "g": 187,
+            "b": 205
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "Samsung S24 FE",
+      "brand": "Samsung",
+      "market": "爱尔兰",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "采用本地区颜色选择器及正文的四色；不从其他地区图片说明补入 Gray。",
+      "sources": [
+        {
+          "url": "https://www.samsung.com/ie/business/smartphones/galaxy-s/galaxy-s24-fe-graphite-128gb-sm-s721bzkdeub/",
+          "title": "Samsung Ireland — Galaxy S24 FE SM-S721B"
+        }
+      ],
+      "colors": [
+        {
+          "code": "blue",
+          "name_zh": "蓝色",
+          "name_en": "Blue",
+          "rgb": {
+            "r": 158,
+            "g": 190,
+            "b": 212
+          }
+        },
+        {
+          "code": "graphite",
+          "name_zh": "石墨色",
+          "name_en": "Graphite",
+          "rgb": {
+            "r": 86,
+            "g": 87,
+            "b": 84
+          }
+        },
+        {
+          "code": "mint",
+          "name_zh": "薄荷绿色",
+          "name_en": "Mint",
+          "rgb": {
+            "r": 202,
+            "g": 221,
+            "b": 207
+          }
+        },
+        {
+          "code": "yellow",
+          "name_zh": "黄色",
+          "name_en": "Yellow",
+          "rgb": {
+            "r": 242,
+            "g": 228,
+            "b": 161
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "Samsung S24 Ultra",
+      "brand": "Samsung",
+      "market": "海湾地区英文支持页",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "Titanium Green、Titanium Orange、Titanium Blue 为该页列出的 Samsung.com 专属。",
+      "sources": [
+        {
+          "url": "https://www.samsung.com/ae/support/mobile-devices/how-many-and-what-colors-are-available-on-the-market-for-the-s24-device/",
+          "title": "Samsung Gulf — Galaxy S24 Colors & Availability"
+        }
+      ],
+      "colors": [
+        {
+          "code": "titanium-gray",
+          "name_zh": "钛灰色",
+          "name_en": "Titanium Gray",
+          "rgb": {
+            "r": 169,
+            "g": 165,
+            "b": 155
+          }
+        },
+        {
+          "code": "titanium-black",
+          "name_zh": "钛黑色",
+          "name_en": "Titanium Black",
+          "rgb": {
+            "r": 85,
+            "g": 86,
+            "b": 81
+          }
+        },
+        {
+          "code": "titanium-violet",
+          "name_zh": "钛紫色",
+          "name_en": "Titanium Violet",
+          "rgb": {
+            "r": 92,
+            "g": 91,
+            "b": 112
+          }
+        },
+        {
+          "code": "titanium-yellow",
+          "name_zh": "钛黄色",
+          "name_en": "Titanium Yellow",
+          "rgb": {
+            "r": 217,
+            "g": 203,
+            "b": 169
+          }
+        },
+        {
+          "code": "titanium-green",
+          "name_zh": "钛绿色",
+          "name_en": "Titanium Green",
+          "rgb": {
+            "r": 176,
+            "g": 185,
+            "b": 165
+          }
+        },
+        {
+          "code": "titanium-orange",
+          "name_zh": "钛橙色",
+          "name_en": "Titanium Orange",
+          "rgb": {
+            "r": 217,
+            "g": 179,
+            "b": 148
+          }
+        },
+        {
+          "code": "titanium-blue",
+          "name_zh": "钛蓝色",
+          "name_en": "Titanium Blue",
+          "rgb": {
+            "r": 176,
+            "g": 185,
+            "b": 201
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "Samsung S22",
+      "brand": "Samsung",
+      "market": "新加坡",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "含后续上市 Bora Purple；Graphite、Violet、Sky Blue、Cream 标为 Samsung.com 专属。Bora Purple 与 Violet 不合并。",
+      "sources": [
+        {
+          "url": "https://www.samsung.com/sg/business/smartphones/galaxy-s/galaxy-s22-for-business-sm-s901-sm-s901ezvgxsp/buy/",
+          "title": "Samsung Singapore — Galaxy S22 5G SM-S901E"
+        }
+      ],
+      "colors": [
+        {
+          "code": "phantom-white",
+          "name_zh": "幻影白色",
+          "name_en": "Phantom White",
+          "rgb": {
+            "r": 240,
+            "g": 240,
+            "b": 237
+          }
+        },
+        {
+          "code": "phantom-black",
+          "name_zh": "幻影黑色",
+          "name_en": "Phantom Black",
+          "rgb": {
+            "r": 48,
+            "g": 50,
+            "b": 49
+          }
+        },
+        {
+          "code": "green",
+          "name_zh": "绿色",
+          "name_en": "Green",
+          "rgb": {
+            "r": 169,
+            "g": 195,
+            "b": 173
+          }
+        },
+        {
+          "code": "graphite",
+          "name_zh": "石墨色",
+          "name_en": "Graphite",
+          "rgb": {
+            "r": 86,
+            "g": 87,
+            "b": 84
+          }
+        },
+        {
+          "code": "bora-purple",
+          "name_zh": "波拉紫色",
+          "name_en": "Bora Purple",
+          "rgb": {
+            "r": 185,
+            "g": 163,
+            "b": 205
+          }
+        },
+        {
+          "code": "violet",
+          "name_zh": "紫罗兰色",
+          "name_en": "Violet",
+          "rgb": {
+            "r": 184,
+            "g": 173,
+            "b": 200
+          }
+        },
+        {
+          "code": "sky-blue",
+          "name_zh": "天蓝色",
+          "name_en": "Sky Blue",
+          "rgb": {
+            "r": 180,
+            "g": 205,
+            "b": 222
+          }
+        },
+        {
+          "code": "pink-gold",
+          "name_zh": "粉金色",
+          "name_en": "Pink Gold",
+          "rgb": {
+            "r": 226,
+            "g": 199,
+            "b": 195
+          }
+        },
+        {
+          "code": "cream",
+          "name_zh": "奶油色",
+          "name_en": "Cream",
+          "rgb": {
+            "r": 234,
+            "g": 228,
+            "b": 212
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "Samsung S22 Ultra",
+      "brand": "Samsung",
+      "market": "加拿大",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "Graphite、Sky Blue、Red 为该页在线专属；不套用普通 S22 配色。",
+      "sources": [
+        {
+          "url": "https://www.samsung.com/ca/business/smartphones/galaxy-s22-ultra/",
+          "title": "Samsung Canada — Galaxy S22 Ultra"
+        }
+      ],
+      "colors": [
+        {
+          "code": "burgundy",
+          "name_zh": "勃艮第红色",
+          "name_en": "Burgundy",
+          "rgb": {
+            "r": 118,
+            "g": 84,
+            "b": 91
+          }
+        },
+        {
+          "code": "green",
+          "name_zh": "绿色",
+          "name_en": "Green",
+          "rgb": {
+            "r": 169,
+            "g": 195,
+            "b": 173
+          }
+        },
+        {
+          "code": "phantom-white",
+          "name_zh": "幻影白色",
+          "name_en": "Phantom White",
+          "rgb": {
+            "r": 240,
+            "g": 240,
+            "b": 237
+          }
+        },
+        {
+          "code": "phantom-black",
+          "name_zh": "幻影黑色",
+          "name_en": "Phantom Black",
+          "rgb": {
+            "r": 48,
+            "g": 50,
+            "b": 49
+          }
+        },
+        {
+          "code": "graphite",
+          "name_zh": "石墨色",
+          "name_en": "Graphite",
+          "rgb": {
+            "r": 86,
+            "g": 87,
+            "b": 84
+          }
+        },
+        {
+          "code": "sky-blue",
+          "name_zh": "天蓝色",
+          "name_en": "Sky Blue",
+          "rgb": {
+            "r": 180,
+            "g": 205,
+            "b": 222
+          }
+        },
+        {
+          "code": "red",
+          "name_zh": "红色",
+          "name_en": "Red",
+          "rgb": {
+            "r": 182,
+            "g": 93,
+            "b": 80
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "Samsung S23",
+      "brand": "Samsung",
+      "market": "全球发布资料；专属色按市场供应",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "Graphite、Lime 为普通及 Plus 机型在线专属；不包含仅 Ultra 的 Sky Blue、Red。",
+      "sources": [
+        {
+          "url": "https://news.samsung.com/global/samsung-announces-global-launch-of-the-galaxy-s23-series",
+          "title": "Samsung Global Newsroom — Galaxy S23 series global launch"
+        }
+      ],
+      "colors": [
+        {
+          "code": "phantom-black",
+          "name_zh": "幻影黑色",
+          "name_en": "Phantom Black",
+          "rgb": {
+            "r": 48,
+            "g": 50,
+            "b": 49
+          }
+        },
+        {
+          "code": "cream",
+          "name_zh": "奶油色",
+          "name_en": "Cream",
+          "rgb": {
+            "r": 234,
+            "g": 228,
+            "b": 212
+          }
+        },
+        {
+          "code": "green",
+          "name_zh": "绿色",
+          "name_en": "Green",
+          "rgb": {
+            "r": 169,
+            "g": 195,
+            "b": 173
+          }
+        },
+        {
+          "code": "lavender",
+          "name_zh": "薰衣草紫色",
+          "name_en": "Lavender",
+          "rgb": {
+            "r": 206,
+            "g": 196,
+            "b": 218
+          }
+        },
+        {
+          "code": "graphite",
+          "name_zh": "石墨色",
+          "name_en": "Graphite",
+          "rgb": {
+            "r": 86,
+            "g": 87,
+            "b": 84
+          }
+        },
+        {
+          "code": "lime",
+          "name_zh": "青柠色",
+          "name_en": "Lime",
+          "rgb": {
+            "r": 213,
+            "g": 220,
+            "b": 167
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "Samsung S23+",
+      "brand": "Samsung",
+      "market": "全球发布资料；专属色按市场供应",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "Graphite、Lime 为普通及 Plus 机型在线专属；不包含仅 Ultra 的 Sky Blue、Red。",
+      "sources": [
+        {
+          "url": "https://news.samsung.com/global/samsung-announces-global-launch-of-the-galaxy-s23-series",
+          "title": "Samsung Global Newsroom — Galaxy S23 series global launch"
+        }
+      ],
+      "colors": [
+        {
+          "code": "phantom-black",
+          "name_zh": "幻影黑色",
+          "name_en": "Phantom Black",
+          "rgb": {
+            "r": 48,
+            "g": 50,
+            "b": 49
+          }
+        },
+        {
+          "code": "cream",
+          "name_zh": "奶油色",
+          "name_en": "Cream",
+          "rgb": {
+            "r": 234,
+            "g": 228,
+            "b": 212
+          }
+        },
+        {
+          "code": "green",
+          "name_zh": "绿色",
+          "name_en": "Green",
+          "rgb": {
+            "r": 169,
+            "g": 195,
+            "b": 173
+          }
+        },
+        {
+          "code": "lavender",
+          "name_zh": "薰衣草紫色",
+          "name_en": "Lavender",
+          "rgb": {
+            "r": 206,
+            "g": 196,
+            "b": 218
+          }
+        },
+        {
+          "code": "graphite",
+          "name_zh": "石墨色",
+          "name_en": "Graphite",
+          "rgb": {
+            "r": 86,
+            "g": 87,
+            "b": 84
+          }
+        },
+        {
+          "code": "lime",
+          "name_zh": "青柠色",
+          "name_en": "Lime",
+          "rgb": {
+            "r": 213,
+            "g": 220,
+            "b": 167
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "Samsung S23 Ultra",
+      "brand": "Samsung",
+      "market": "全球发布资料；专属色按市场供应",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "Graphite、Lime、Sky Blue、Red 为 Ultra 在线专属。",
+      "sources": [
+        {
+          "url": "https://news.samsung.com/global/samsung-announces-global-launch-of-the-galaxy-s23-series",
+          "title": "Samsung Global Newsroom — Galaxy S23 series global launch"
+        }
+      ],
+      "colors": [
+        {
+          "code": "phantom-black",
+          "name_zh": "幻影黑色",
+          "name_en": "Phantom Black",
+          "rgb": {
+            "r": 48,
+            "g": 50,
+            "b": 49
+          }
+        },
+        {
+          "code": "cream",
+          "name_zh": "奶油色",
+          "name_en": "Cream",
+          "rgb": {
+            "r": 234,
+            "g": 228,
+            "b": 212
+          }
+        },
+        {
+          "code": "green",
+          "name_zh": "绿色",
+          "name_en": "Green",
+          "rgb": {
+            "r": 169,
+            "g": 195,
+            "b": 173
+          }
+        },
+        {
+          "code": "lavender",
+          "name_zh": "薰衣草紫色",
+          "name_en": "Lavender",
+          "rgb": {
+            "r": 206,
+            "g": 196,
+            "b": 218
+          }
+        },
+        {
+          "code": "graphite",
+          "name_zh": "石墨色",
+          "name_en": "Graphite",
+          "rgb": {
+            "r": 86,
+            "g": 87,
+            "b": 84
+          }
+        },
+        {
+          "code": "lime",
+          "name_zh": "青柠色",
+          "name_en": "Lime",
+          "rgb": {
+            "r": 213,
+            "g": 220,
+            "b": 167
+          }
+        },
+        {
+          "code": "sky-blue",
+          "name_zh": "天蓝色",
+          "name_en": "Sky Blue",
+          "rgb": {
+            "r": 180,
+            "g": 205,
+            "b": 222
+          }
+        },
+        {
+          "code": "red",
+          "name_zh": "红色",
+          "name_en": "Red",
+          "rgb": {
+            "r": 182,
+            "g": 93,
+            "b": 80
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "Redmi A3",
+      "brand": "Xiaomi",
+      "market": "国际版",
+      "connectivity": "4G LTE",
+      "match_status": "verified",
+      "notes": "对应 Redmi A3；不包含 A3x 或其他衍生型号。",
+      "sources": [
+        {
+          "url": "https://www.mi.com/global/product/redmi-a3/specs/",
+          "title": "Redmi A3 — Xiaomi Global specifications"
+        }
+      ],
+      "colors": [
+        {
+          "code": "midnight-black",
+          "name_zh": "午夜黑色",
+          "name_en": "Midnight Black",
+          "rgb": {
+            "r": 44,
+            "g": 45,
+            "b": 46
+          }
+        },
+        {
+          "code": "forest-green",
+          "name_zh": "森林绿色",
+          "name_en": "Forest Green",
+          "rgb": {
+            "r": 68,
+            "g": 104,
+            "b": 90
+          }
+        },
+        {
+          "code": "star-blue",
+          "name_zh": "星蓝色",
+          "name_en": "Star Blue",
+          "rgb": {
+            "r": 185,
+            "g": 208,
+            "b": 224
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "Redmi 14C",
+      "brand": "Xiaomi",
+      "market": "未确定；已核对国际 4G 与印度 5G",
+      "connectivity": "未确定（4G LTE / 5G）",
+      "match_status": "needs_review",
+      "notes": "国际 4G 为 Midnight Black/Sage Green/Dreamy Purple/Starry Blue；印度 5G 为 Stargaze Black/Starlight Blue/Stardust Purple。UI 未标网络版，同尺寸不能证明同模板，正式颜色留空。",
+      "sources": [
+        {
+          "url": "https://www.mi.com/global/product/redmi-14-c/specs/",
+          "title": "Redmi 14C — Xiaomi Global specifications"
+        },
+        {
+          "url": "https://www.mi.com/in/product/redmi-14c-5g/specs/",
+          "title": "Redmi 14C 5G — Xiaomi India specifications"
+        }
+      ],
+      "colors": []
+    },
+    {
+      "model_name": "Xiaomi 14T Pro",
+      "brand": "Xiaomi",
+      "market": "国际版",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "Titan 是该产品颜色名称；不由名称推断机身或壳体材质。",
+      "sources": [
+        {
+          "url": "https://www.mi.com/global/product/xiaomi-14t-pro/specs/",
+          "title": "Xiaomi 14T Pro — Xiaomi Global specifications"
+        }
+      ],
+      "colors": [
+        {
+          "code": "titan-black",
+          "name_zh": "钛黑色",
+          "name_en": "Titan Black",
+          "rgb": {
+            "r": 68,
+            "g": 70,
+            "b": 74
+          }
+        },
+        {
+          "code": "titan-blue",
+          "name_zh": "钛蓝色",
+          "name_en": "Titan Blue",
+          "rgb": {
+            "r": 139,
+            "g": 156,
+            "b": 168
+          }
+        },
+        {
+          "code": "titan-gray",
+          "name_zh": "钛灰色",
+          "name_en": "Titan Gray",
+          "rgb": {
+            "r": 180,
+            "g": 182,
+            "b": 181
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "Xiaomi 14 Pro",
+      "brand": "Xiaomi",
+      "market": "中国大陆",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "官方清单明确：黑/白/岩石青为标准色；钛金属特别版为独立特别版本；雅灰/熔岩橙/流星蓝/海湾蓝/橄榄绿为 16GB+1TB 限量定制色。英文字段为工作译名，非宣称官方英文商品名。启用前必须分版本复核模板，不因同属 14 Pro 自动共用 overlay。",
+      "sources": [
+        {
+          "url": "https://www.mi.com/article/detail/9daf2be668bb.html",
+          "title": "小米商城官方机型与配置清单（Xiaomi 14 Pro 各版本）"
+        }
+      ],
+      "colors": [
+        {
+          "code": "black",
+          "name_zh": "黑色",
+          "name_en": "Black",
+          "rgb": {
+            "r": 37,
+            "g": 38,
+            "b": 40
+          }
+        },
+        {
+          "code": "white",
+          "name_zh": "白色",
+          "name_en": "White",
+          "rgb": {
+            "r": 243,
+            "g": 243,
+            "b": 239
+          }
+        },
+        {
+          "code": "rock-green",
+          "name_zh": "岩石青",
+          "name_en": "Rock Green",
+          "rgb": {
+            "r": 138,
+            "g": 171,
+            "b": 163
+          }
+        },
+        {
+          "code": "titanium-special-edition",
+          "name_zh": "钛金属特别版",
+          "name_en": "Titanium Special Edition",
+          "rgb": {
+            "r": 153,
+            "g": 150,
+            "b": 142
+          }
+        },
+        {
+          "code": "elegant-gray",
+          "name_zh": "雅灰",
+          "name_en": "Elegant Gray",
+          "rgb": {
+            "r": 164,
+            "g": 165,
+            "b": 161
+          }
+        },
+        {
+          "code": "lava-orange",
+          "name_zh": "熔岩橙",
+          "name_en": "Lava Orange",
+          "rgb": {
+            "r": 217,
+            "g": 111,
+            "b": 62
+          }
+        },
+        {
+          "code": "meteor-blue",
+          "name_zh": "流星蓝",
+          "name_en": "Meteor Blue",
+          "rgb": {
+            "r": 102,
+            "g": 134,
+            "b": 176
+          }
+        },
+        {
+          "code": "gulf-blue",
+          "name_zh": "海湾蓝",
+          "name_en": "Gulf Blue",
+          "rgb": {
+            "r": 140,
+            "g": 195,
+            "b": 208
+          }
+        },
+        {
+          "code": "olive-green",
+          "name_zh": "橄榄绿",
+          "name_en": "Olive Green",
+          "rgb": {
+            "r": 126,
+            "g": 134,
+            "b": 102
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "Xiaomi 12",
+      "brand": "Xiaomi",
+      "market": "国际版",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "仅国际版三色；不跨地区加入中国版或其他版本的配色。",
+      "sources": [
+        {
+          "url": "https://www.mi.com/global/product/xiaomi-12/specs/",
+          "title": "Xiaomi 12 — Xiaomi Global specifications"
+        }
+      ],
+      "colors": [
+        {
+          "code": "gray",
+          "name_zh": "灰色",
+          "name_en": "Gray",
+          "rgb": {
+            "r": 119,
+            "g": 125,
+            "b": 131
+          }
+        },
+        {
+          "code": "blue",
+          "name_zh": "蓝色",
+          "name_en": "Blue",
+          "rgb": {
+            "r": 158,
+            "g": 190,
+            "b": 212
+          }
+        },
+        {
+          "code": "purple",
+          "name_zh": "紫色",
+          "name_en": "Purple",
+          "rgb": {
+            "r": 198,
+            "g": 187,
+            "b": 216
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "Redmi Note12 Pro+",
+      "brand": "Xiaomi",
+      "market": "未确定；已核对国际 5G 资料",
+      "connectivity": "候选 5G，待型号确认",
+      "match_status": "needs_review",
+      "notes": "候选官方名称为 Redmi Note 12 Pro+ 5G，国际配色 Polar White/Midnight Black/Sky Blue。UI 缺少 5G 与销售区域，须确认是否该版本；不混用 Pro（非 Plus）、中国特别版或其他地区命名。",
+      "sources": [
+        {
+          "url": "https://www.mi.com/global/product/redmi-note-12-pro-plus-5g/specs/",
+          "title": "Redmi Note 12 Pro+ 5G — Xiaomi Global specifications"
+        }
+      ],
+      "colors": []
+    },
+    {
+      "model_name": "Redmi 13-4G",
+      "brand": "Xiaomi",
+      "market": "国际版",
+      "connectivity": "4G LTE",
+      "match_status": "verified",
+      "notes": "UI 已明确 4G，对应官方 Redmi 13（Helio G91-Ultra）；不包含 Redmi 13 5G / 13C。",
+      "sources": [
+        {
+          "url": "https://www.mi.com/global/product/redmi-13/specs/",
+          "title": "Redmi 13 — Xiaomi Global specifications"
+        }
+      ],
+      "colors": [
+        {
+          "code": "midnight-black",
+          "name_zh": "午夜黑色",
+          "name_en": "Midnight Black",
+          "rgb": {
+            "r": 44,
+            "g": 45,
+            "b": 46
+          }
+        },
+        {
+          "code": "sandy-gold",
+          "name_zh": "沙金色",
+          "name_en": "Sandy Gold",
+          "rgb": {
+            "r": 221,
+            "g": 202,
+            "b": 170
+          }
+        },
+        {
+          "code": "pearl-pink",
+          "name_zh": "珍珠粉色",
+          "name_en": "Pearl Pink",
+          "rgb": {
+            "r": 235,
+            "g": 209,
+            "b": 210
+          }
+        },
+        {
+          "code": "ocean-blue",
+          "name_zh": "海洋蓝色",
+          "name_en": "Ocean Blue",
+          "rgb": {
+            "r": 178,
+            "g": 214,
+            "b": 231
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "iPhone 16 Pro",
+      "brand": "Apple",
+      "market": "Apple 美国英文技术规格/机型识别页；颜色参考，不承诺当地在售",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "已逐型号核对 Finish/Colors。中文为展示译名；不得据颜色名称认定有对应壳体、库存或底图。",
+      "sources": [
+        {
+          "url": "https://support.apple.com/en-us/121031",
+          "title": "iPhone 16 Pro — Technical Specifications — Apple Support"
+        },
+        {
+          "url": "https://support.apple.com/en-us/108044",
+          "title": "Identify your iPhone model — Apple Support"
+        }
+      ],
+      "colors": [
+        {
+          "code": "black-titanium",
+          "name_zh": "黑色钛金属",
+          "name_en": "Black Titanium",
+          "rgb": {
+            "r": 73,
+            "g": 73,
+            "b": 73
+          }
+        },
+        {
+          "code": "white-titanium",
+          "name_zh": "白色钛金属",
+          "name_en": "White Titanium",
+          "rgb": {
+            "r": 233,
+            "g": 230,
+            "b": 223
+          }
+        },
+        {
+          "code": "natural-titanium",
+          "name_zh": "原色钛金属",
+          "name_en": "Natural Titanium",
+          "rgb": {
+            "r": 167,
+            "g": 163,
+            "b": 152
+          }
+        },
+        {
+          "code": "desert-titanium",
+          "name_zh": "沙漠色钛金属",
+          "name_en": "Desert Titanium",
+          "rgb": {
+            "r": 205,
+            "g": 181,
+            "b": 157
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "iPhone 16",
+      "brand": "Apple",
+      "market": "Apple 美国英文技术规格/机型识别页；颜色参考，不承诺当地在售",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "已逐型号核对 Finish/Colors。中文为展示译名；不得据颜色名称认定有对应壳体、库存或底图。",
+      "sources": [
+        {
+          "url": "https://support.apple.com/en-us/108044",
+          "title": "Identify your iPhone model — Apple Support"
+        }
+      ],
+      "colors": [
+        {
+          "code": "black",
+          "name_zh": "黑色",
+          "name_en": "Black",
+          "rgb": {
+            "r": 37,
+            "g": 38,
+            "b": 40
+          }
+        },
+        {
+          "code": "white",
+          "name_zh": "白色",
+          "name_en": "White",
+          "rgb": {
+            "r": 243,
+            "g": 243,
+            "b": 239
+          }
+        },
+        {
+          "code": "pink",
+          "name_zh": "粉色",
+          "name_en": "Pink",
+          "rgb": {
+            "r": 235,
+            "g": 198,
+            "b": 207
+          }
+        },
+        {
+          "code": "teal",
+          "name_zh": "深青色",
+          "name_en": "Teal",
+          "rgb": {
+            "r": 165,
+            "g": 199,
+            "b": 191
+          }
+        },
+        {
+          "code": "ultramarine",
+          "name_zh": "群青色",
+          "name_en": "Ultramarine",
+          "rgb": {
+            "r": 135,
+            "g": 146,
+            "b": 211
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "iPhone 15 Pro",
+      "brand": "Apple",
+      "market": "Apple 美国英文技术规格/机型识别页；颜色参考，不承诺当地在售",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "已逐型号核对 Finish/Colors。中文为展示译名；不得据颜色名称认定有对应壳体、库存或底图。",
+      "sources": [
+        {
+          "url": "https://support.apple.com/en-us/111829",
+          "title": "iPhone 15 Pro — Technical Specifications — Apple Support"
+        },
+        {
+          "url": "https://support.apple.com/en-us/108044",
+          "title": "Identify your iPhone model — Apple Support"
+        }
+      ],
+      "colors": [
+        {
+          "code": "black-titanium",
+          "name_zh": "黑色钛金属",
+          "name_en": "Black Titanium",
+          "rgb": {
+            "r": 73,
+            "g": 73,
+            "b": 73
+          }
+        },
+        {
+          "code": "white-titanium",
+          "name_zh": "白色钛金属",
+          "name_en": "White Titanium",
+          "rgb": {
+            "r": 233,
+            "g": 230,
+            "b": 223
+          }
+        },
+        {
+          "code": "blue-titanium",
+          "name_zh": "蓝色钛金属",
+          "name_en": "Blue Titanium",
+          "rgb": {
+            "r": 74,
+            "g": 83,
+            "b": 100
+          }
+        },
+        {
+          "code": "natural-titanium",
+          "name_zh": "原色钛金属",
+          "name_en": "Natural Titanium",
+          "rgb": {
+            "r": 167,
+            "g": 163,
+            "b": 152
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "iPhone 15",
+      "brand": "Apple",
+      "market": "Apple 美国英文技术规格/机型识别页；颜色参考，不承诺当地在售",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "已逐型号核对 Finish/Colors。中文为展示译名；不得据颜色名称认定有对应壳体、库存或底图。",
+      "sources": [
+        {
+          "url": "https://support.apple.com/en-us/111831",
+          "title": "iPhone 15 — Technical Specifications — Apple Support"
+        },
+        {
+          "url": "https://support.apple.com/en-us/108044",
+          "title": "Identify your iPhone model — Apple Support"
+        }
+      ],
+      "colors": [
+        {
+          "code": "black",
+          "name_zh": "黑色",
+          "name_en": "Black",
+          "rgb": {
+            "r": 37,
+            "g": 38,
+            "b": 40
+          }
+        },
+        {
+          "code": "blue",
+          "name_zh": "蓝色",
+          "name_en": "Blue",
+          "rgb": {
+            "r": 158,
+            "g": 190,
+            "b": 212
+          }
+        },
+        {
+          "code": "green",
+          "name_zh": "绿色",
+          "name_en": "Green",
+          "rgb": {
+            "r": 169,
+            "g": 195,
+            "b": 173
+          }
+        },
+        {
+          "code": "yellow",
+          "name_zh": "黄色",
+          "name_en": "Yellow",
+          "rgb": {
+            "r": 242,
+            "g": 228,
+            "b": 161
+          }
+        },
+        {
+          "code": "pink",
+          "name_zh": "粉色",
+          "name_en": "Pink",
+          "rgb": {
+            "r": 235,
+            "g": 198,
+            "b": 207
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "Samsung S24",
+      "brand": "Samsung",
+      "market": "海湾地区英文支持页",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "Jade Green、Sandstone Orange、Sapphire Blue 为该页列出的 Samsung.com 专属；仅颜色资料，不承诺当前供应。",
+      "sources": [
+        {
+          "url": "https://www.samsung.com/ae/support/mobile-devices/how-many-and-what-colors-are-available-on-the-market-for-the-s24-device/",
+          "title": "Samsung Gulf — Galaxy S24 Colors & Availability"
+        }
+      ],
+      "colors": [
+        {
+          "code": "marble-gray",
+          "name_zh": "大理石灰色",
+          "name_en": "Marble Gray",
+          "rgb": {
+            "r": 200,
+            "g": 198,
+            "b": 190
+          }
+        },
+        {
+          "code": "onyx-black",
+          "name_zh": "缟玛瑙黑色",
+          "name_en": "Onyx Black",
+          "rgb": {
+            "r": 69,
+            "g": 72,
+            "b": 74
+          }
+        },
+        {
+          "code": "cobalt-violet",
+          "name_zh": "钴紫色",
+          "name_en": "Cobalt Violet",
+          "rgb": {
+            "r": 100,
+            "g": 93,
+            "b": 123
+          }
+        },
+        {
+          "code": "amber-yellow",
+          "name_zh": "琥珀黄色",
+          "name_en": "Amber Yellow",
+          "rgb": {
+            "r": 239,
+            "g": 224,
+            "b": 163
+          }
+        },
+        {
+          "code": "jade-green",
+          "name_zh": "翡翠绿色",
+          "name_en": "Jade Green",
+          "rgb": {
+            "r": 165,
+            "g": 201,
+            "b": 183
+          }
+        },
+        {
+          "code": "sandstone-orange",
+          "name_zh": "砂岩橙色",
+          "name_en": "Sandstone Orange",
+          "rgb": {
+            "r": 222,
+            "g": 194,
+            "b": 164
+          }
+        },
+        {
+          "code": "sapphire-blue",
+          "name_zh": "宝石蓝色",
+          "name_en": "Sapphire Blue",
+          "rgb": {
+            "r": 168,
+            "g": 187,
+            "b": 205
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "iPhone 17",
+      "brand": "Apple",
+      "market": "Apple 美国英文技术规格/机型识别页；颜色参考，不承诺当地在售",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "已逐型号核对 Finish/Colors。中文为展示译名；不得据颜色名称认定有对应壳体、库存或底图。",
+      "sources": [
+        {
+          "url": "https://support.apple.com/en-us/125089",
+          "title": "iPhone 17 — Technical Specifications — Apple Support"
+        },
+        {
+          "url": "https://support.apple.com/en-us/108044",
+          "title": "Identify your iPhone model — Apple Support"
+        }
+      ],
+      "colors": [
+        {
+          "code": "black",
+          "name_zh": "黑色",
+          "name_en": "Black",
+          "rgb": {
+            "r": 37,
+            "g": 38,
+            "b": 40
+          }
+        },
+        {
+          "code": "white",
+          "name_zh": "白色",
+          "name_en": "White",
+          "rgb": {
+            "r": 243,
+            "g": 243,
+            "b": 239
+          }
+        },
+        {
+          "code": "mist-blue",
+          "name_zh": "雾蓝色",
+          "name_en": "Mist Blue",
+          "rgb": {
+            "r": 187,
+            "g": 203,
+            "b": 216
+          }
+        },
+        {
+          "code": "sage",
+          "name_zh": "鼠尾草绿色",
+          "name_en": "Sage",
+          "rgb": {
+            "r": 184,
+            "g": 196,
+            "b": 174
+          }
+        },
+        {
+          "code": "lavender",
+          "name_zh": "薰衣草紫色",
+          "name_en": "Lavender",
+          "rgb": {
+            "r": 206,
+            "g": 196,
+            "b": 218
+          }
+        }
+      ]
+    },
+    {
+      "model_name": "iPhone 16e",
+      "brand": "Apple",
+      "market": "Apple 美国英文技术规格/机型识别页；颜色参考，不承诺当地在售",
+      "connectivity": "5G",
+      "match_status": "verified",
+      "notes": "已逐型号核对 Finish/Colors。中文为展示译名；不得据颜色名称认定有对应壳体、库存或底图。",
+      "sources": [
+        {
+          "url": "https://support.apple.com/en-us/108044",
+          "title": "Identify your iPhone model — Apple Support"
+        }
+      ],
+      "colors": [
+        {
+          "code": "black",
+          "name_zh": "黑色",
+          "name_en": "Black",
+          "rgb": {
+            "r": 37,
+            "g": 38,
+            "b": 40
+          }
+        },
+        {
+          "code": "white",
+          "name_zh": "白色",
+          "name_en": "White",
+          "rgb": {
+            "r": 243,
+            "g": 243,
+            "b": 239
+          }
+        }
+      ]
+    }
+  ],
+  "initialization_policy": {
+    "match_existing_models_only": true,
+    "eligible_match_status": "verified",
+    "initial_active": false,
+    "initial_default": false,
+    "overwrite_existing": false,
+    "create_missing_models": false,
+    "missing_colors_behavior": "skip_selection",
+    "preview_assets_included": false,
+    "color_value_format": "rgb_integer_channels_0_255"
+  }
+}
