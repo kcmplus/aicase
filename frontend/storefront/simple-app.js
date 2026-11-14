@@ -980,7 +980,10 @@ setInterval(async()=>{if(document.hidden||passBusy||photoBusy||aiBusy||canvasExp
 async function navigate(){
  const currentNavigation=++navigationId;
  const [route,query='']=location.hash.slice(1).split('?');const params=new URLSearchParams(query);
- if(['choose','ai','my-designs','pass','orders','payment'].includes(route))try{await syncAIAccount();}catch(error){customerUI.error=error.message;}
+ if(['choose','ai','my-designs','pass','orders','payment'].includes(route))try{await syncAIAccount();}catch(error){if(currentNavigation!==navigationId)return;customerUI.error=error.message;}
+ // Identity reads may finish after a newer navigation has already rendered.
+ // Retire the old route before it can restart loading or consume entry data.
+ if(currentNavigation!==navigationId)return;
  if(!workspace.active&&route!=='account'){render();return;}
  if(route==='choose')await refreshStockChoices();
  if(route==='my-designs'){localDesigns=[];localDesignBusy=true;render(true);await loadLocalDesigns();}

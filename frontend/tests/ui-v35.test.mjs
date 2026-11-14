@@ -725,3 +725,37 @@ test('QA a superseded orders navigation cannot leave the newer loaded page perma
  assert.equal(context.orderLoading,false,'stale navigation must not re-enable loading after the current navigation completed');
  assert.equal(context.orderRows[0].reference,'QA-SYNTHETIC');
 });
+
+test('superseded identity failures cannot overwrite the current orders error or restart its read',async()=>{
+ const {context}=await qaOrdersNavigation();
+ const pending=[];let reads=0;
+ context.syncAIAccount=()=>new Promise((resolve,reject)=>pending.push({resolve,reject}));
+ context.orderRequest=async()=>{reads++;throw Error('Current orders failure');};
+ const oldNavigation=context.navigate();
+ const newNavigation=context.navigate();
+ pending[1].resolve();await newNavigation;
+ context.customerUI.error='Current identity message';
+ pending[0].reject(Error('Stale identity failure'));await oldNavigation;
+ assert.equal(reads,1);
+ assert.equal(context.customerUI.error,'Current identity message');
+ assert.equal(context.orderError,'Current orders failure');
+ assert.equal(context.orderLoading,false);
+});
+
+test('leaving orders retires a delayed identity continuation without consuming entry data',async()=>{
+ const {context,identity}=await qaOrdersNavigation();
+ let reads=0,renders=0;
+ context.orderRequest=async()=>{reads++;return {results:[],has_more:false};};
+ context.render=()=>{renders++;};
+ const oldNavigation=context.navigate();
+ context.location.hash='#home';await context.navigate();
+ const entry={results:[{reference:'NEW-ENTRY'}],has_more:false};
+ context.entryOrders=entry;context.entryOrderError='New entry error';
+ const rendered=renders;
+ identity[0]();await oldNavigation;
+ assert.equal(reads,0);
+ assert.equal(renders,rendered);
+ assert.equal(context.orderLoading,false);
+ assert.equal(context.entryOrders,entry);
+ assert.equal(context.entryOrderError,'New entry error');
+});
