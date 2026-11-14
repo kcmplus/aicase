@@ -24,6 +24,30 @@ function errorView(){
  return {app:{textContent:'',innerHTML:'',querySelector:()=>button},clicks,get focused(){return focused;}};
 }
 
+test('startup stops when the saved draft photo cannot be read',async()=>{
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
+ const start=source.indexOf('async function startStorefront(){');
+ const end=source.indexOf("try{if(location.hash.slice(1).split('?')[0]!=='checkout')");
+ assert.ok(start>=0&&end>start);
+ const app={textContent:''};let photoRead=0;
+ const context=vm.createContext({
+  document:{querySelector:()=>app},location:{hash:'#choose',href:'http://localhost/#choose'},
+  localStorage:{getItem:()=>JSON.stringify({source:'photo',designId:'bloom'})},
+  t:value=>value,deviceScope:()=>'',scopeIds:()=>null,
+  loadCatalog:async()=>null,loadStockCatalog:async()=>null,fulfillmentConfig:async()=>({}),
+  getAIAccount:async()=>({authenticated:false}),createDesignWorkspace,createDesignLibrary,
+  readPass:()=>{},readDesign:async key=>{if(key.endsWith(':draft-photo')){photoRead++;throw Error('Synthetic read failure');}},
+  writeDesign:async()=>{},updateDesign:async(key,transform,initial)=>transform(initial),
+  freshMembership:()=>({jobs:{}}),freshOrders:()=>({orders:{}}),
+  designs:[{id:'bloom'}],phoneModels:[],stations:[],aiStyles:[],aiExamples:[],effects:[],
+  stockSelection:()=>null,exampleFor:()=>({id:'portrait',results:{anime:'synthetic'}}),
+  migrateRender:value=>value,
+ });
+ const result=await vm.runInContext(`(async()=>{${source.slice(start,end)} return {photo:state.photo,source:state.source};} return await startStorefront();})()`,context);
+ assert.equal(photoRead,1);
+ assert.equal(result,'storage-unavailable','a failed draft photo read must not silently continue with an empty photo');
+});
+
 test('storage recovery is bilingual, keyboard reachable, and only reloads when requested',()=>{
  for(const lang of ['en-US','zh-CN']){
   const view=errorView();let reloads=0;
