@@ -26,6 +26,7 @@ start/resume 默认最多 12 轮、8 小时，单次 agent 最多 60 分钟。
 可追加 --max-cycles N --max-seconds N --agent-timeout N 覆盖。
 轮数和总时长分别设为 0 表示不限，单次 agent 超时仍生效。
 status/stop/resume 只选择本任务的最近一次运行，不选择其他任务。
+默认实时显示 agent 公开说明、工具结果和交接内容；追加 --quiet 可关闭。
 保持运行终端打开；Ctrl+C 可中断，之后用 resume 继续。
 HELP
 }

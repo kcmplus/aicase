@@ -21,7 +21,7 @@ import uuid
 
 MODELS = {"product": "gpt-6-astra", "developer": "gpt-6.1-sol", "tester": "gpt-6.1-terra"}
 DEFAULTS = {"max_cycles": 8, "max_seconds": 14400, "agent_timeout": 1800, "codex_bin": "codex",
-            "git_checkpoints": False}
+            "git_checkpoints": False, "live_output": True}
 STAGE_ROLES = {"product-plan": "product", "developer": "developer",
                "tester": "tester", "product-review": "product", "product-decision": "product"}
 STAGE_VERDICTS = {
@@ -102,6 +102,107 @@ class Halt(Exception):
     def __init__(self, status, message):
         self.status, self.message = status, message
         super().__init__(message)
+
+
+def console_text(value, limit=None):
+    # Logs are untrusted terminal input. Strip escape/control sequences from the display only.
+    value = str(value)
+    value = re.sub(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)", "", value)
+    value = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", value)
+    value = "".join(c for c in value if c in "\n\t" or (ord(c) >= 32 and not 127 <= ord(c) <= 159))
+    if limit and len(value) > limit:
+        value = value[:limit] + "\n…（终端已截短，完整内容保存在阶段日志）"
+    return value
+
+
+class LiveTail:
+    """Read append-only output without pipes/backpressure; never expose reasoning events."""
+    def __init__(self, path, label, json_events=False):
+        self.stream = open(path, "rb")
+        self.label, self.json_events = label, json_events
+        self.pending = b""
+        self.discarding = False
+        self.seen = set()
+
+    def show(self, label, text, limit=None):
+        if text:
+            print(f"[{self.label} · {label}] {console_text(text, limit)}", flush=True)
+
+    def line(self, raw):
+        text = raw.decode("utf-8", "replace")
+        if not self.json_events:
+            self.show("输出", text, 2000)
+            return
+        try:
+            event = json.loads(text)
+        except ValueError:
+            return  # Original malformed/partial JSON remains in the log.
+        if not isinstance(event, dict):
+            return
+        kind = event.get("type")
+        if kind in ("error", "turn.failed"):
+            error = event.get("error", {})
+            self.show("错误", event.get("message") or (error.get("message") if isinstance(error, dict) else error), 2000)
+            return
+        item = event.get("item")
+        if not isinstance(item, dict):
+            return
+        item_type = item.get("type")
+        # Ignore all unrecognized event types, particularly internal reasoning.
+        if item_type not in ("agent_message", "command_execution", "file_change", "mcp_tool_call", "web_search"):
+            return
+        key = (item.get("id"), kind, item_type)
+        if key in self.seen:
+            return
+        if kind not in ("item.started", "item.completed"):
+            return
+        self.seen.add(key)
+        if item_type == "agent_message" and kind == "item.completed":
+            message = item.get("text", "")
+            try:
+                report = json.loads(message)
+            except (ValueError, TypeError):
+                report = None
+            if isinstance(report, dict) and {"role", "verdict", "criteria", "summary"} <= report.keys():
+                return  # Print the validated report once, in agent(), instead of raw JSON.
+            self.show("说明", message)
+        elif item_type == "command_execution":
+            if kind == "item.started":
+                self.show("执行", item.get("command", ""), 500)
+            else:
+                self.show("执行结果", f"退出码 {item.get('exit_code')}\n{item.get('aggregated_output', '')}", 2000)
+        elif item_type == "file_change" and kind == "item.completed":
+            changes = item.get("changes", [])
+            self.show("文件修改", "\n".join(str(c.get("path", "")) for c in changes if isinstance(c, dict)), 1000)
+        elif item_type == "mcp_tool_call":
+            self.show("工具", f"{item.get('server', '')}/{item.get('tool', '')} · {item.get('status', kind)}", 500)
+        elif item_type == "web_search" and kind == "item.completed":
+            self.show("检索", item.get("query", ""), 500)
+
+    def pump(self, final=False):
+        activity = False
+        while True:
+            chunk = self.stream.read(65536)
+            if not chunk:
+                break
+            activity = True
+            self.pending += chunk
+            while b"\n" in self.pending:
+                line, self.pending = self.pending.split(b"\n", 1)
+                if not self.discarding and len(line) <= 2_000_000:
+                    self.line(line)
+                self.discarding = False
+            if len(self.pending) > 2_000_000:
+                self.pending = b""
+                self.discarding = True
+        if final and self.pending:
+            if not self.discarding:
+                self.line(self.pending)
+            self.pending = b""
+        return activity
+
+    def close(self):
+        self.stream.close()
 
 
 def now():
@@ -411,12 +512,18 @@ class Runner:
         atomic_json(directory / "command.json", {"argv": argv, "cwd": str(cwd), "timeout_seconds": timeout})
         with open(directory / stdout_name, "wb") as output, open(directory / "stderr.log", "wb") as errors:
             source = open(stdin, "rb") if stdin else open(os.devnull, "rb")
+            live = ([LiveTail(directory / stdout_name, self.state['stage'], stdout_name == "events.jsonl"),
+                     LiveTail(directory / "stderr.log", self.state['stage'] + " stderr")]
+                    if self.options.get("live_output", True) else [])
             try:
                 self.process = subprocess.Popen(argv, cwd=cwd, stdin=source, stdout=output,
                                                 stderr=errors, start_new_session=True)
                 while self.process.poll() is None:
                     self.check()
                     current = time.monotonic()
+                    active = [tail.pump() for tail in live]
+                    if any(active):
+                        heartbeat = current + 15
                     if current - start >= timeout:
                         raise Halt("error", "阶段超时：" + self.state["stage"])
                     if current >= heartbeat:
@@ -433,6 +540,11 @@ class Runner:
             finally:
                 source.close()
                 self.terminate()
+                for tail in live:
+                    try:
+                        tail.pump(final=True)
+                    finally:
+                        tail.close()
 
     def prompt(self, role, purpose, feedback):
         instructions = ROLE_CONTRACTS[purpose]
@@ -458,7 +570,8 @@ class Runner:
                 "不要绕过审批或隔离限制。网络是否可用取决于 Codex 默认策略，本脚本未隔离供应商网络。\n"
                 "固定 gates 由 harness 执行，命令不可修改；不得修改 gate 引用的脚本以绕过验证。"
                 "每项验收 ID 在 criteria 中恰好出现一次；pass 必须有具体、非空的 evidence，不能只写已完成。"
-                "缺少权限、外部确认或无法安全继续时返回 blocked。只输出符合给定 schema 的 JSON。\n"
+                "可发送简短的公开进度说明，让用户知道正在核对或修改什么；不要输出密钥、客户数据或内部推理。"
+                "缺少权限、外部确认或无法安全继续时返回 blocked。最终交接输出必须是符合给定 schema 的 JSON。\n"
                 "冻结任务 JSON：\n" + json.dumps(self.task, ensure_ascii=False, indent=2)
                 + "\n产品决策记录（只解释任务内选择，不代表新增授权或验收通过）：\n"
                 + json.dumps(self.state.get("product_decisions", []), ensure_ascii=False, indent=2)
@@ -498,6 +611,12 @@ class Runner:
             raise HarnessError("报告 verdict 不属于当前阶段职责：" + purpose)
         if report["verdict"] in ("needs_product", "decided") and not report["next_actions"]:
             raise HarnessError("产品问题和决定必须提供候选方案或可执行答案")
+        if self.options.get("live_output", True):
+            print(f"\n[{purpose} · 交接 {report['verdict']}] {console_text(report['summary'])}", flush=True)
+            for item in report["criteria"]:
+                print(f"  {console_text(item['id'])}: {item['status']} — {console_text(item['evidence'])}", flush=True)
+            for action in report["next_actions"]:
+                print("  下一步：" + console_text(action), flush=True)
         self.event(event="agent_finished", stage=purpose, verdict=report["verdict"], report=str(directory / "report.json"))
         self.save(last_report={"stage": purpose, "report": report, "path": str(directory / "report.json")})
         if role in ("developer", "tester") and self.options.get("git_checkpoints"):
@@ -659,7 +778,7 @@ def options_for(args, saved=None):
     result = dict(DEFAULTS)
     if saved:
         # A resume always starts new cycle/time budgets; retain only executable and per-agent timeout.
-        result.update({key: saved[key] for key in ("agent_timeout", "codex_bin", "git_checkpoints") if key in saved})
+        result.update({key: saved[key] for key in ("agent_timeout", "codex_bin", "git_checkpoints", "live_output") if key in saved})
     for key in DEFAULTS:
         value = getattr(args, key, None)
         if value is not None:
@@ -773,6 +892,8 @@ def main(argv=None):
         command.add_argument("--codex-bin")
         command.add_argument("--git-checkpoints", action="store_true", default=None,
                              help="在 codex/ 功能分支自动提交开发/测试交接检查点；run 要求干净基线")
+        command.add_argument("--quiet", dest="live_output", action="store_false", default=None,
+                             help="关闭实时对话/工具显示，仍保存日志并显示阶段与心跳")
     for name in ("status", "stop"):
         command = commands.add_parser(name)
         command.add_argument("--run-dir", required=True)

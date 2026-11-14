@@ -1,8 +1,12 @@
 """Black-box regression tests for codex_harness; never invokes a real model."""
 import json
+import contextlib
+import importlib.util
+import io
 import os
 from pathlib import Path
 import signal
+import select
 import subprocess
 import sys
 import tempfile
@@ -22,6 +26,16 @@ log = pathlib.Path(os.environ['FAKE_LOG'])
 with log.open('a') as f:
     f.write(json.dumps({'role': role, 'stage': stage, 'args': args, 'prompt': prompt, 'pid': os.getpid()}) + '\n')
 mode = os.environ.get('FAKE_MODE', '')
+if mode in ('stream', 'stream_wait'):
+    print(json.dumps({'type':'item.completed','item':{'id':'note','type':'agent_message','text':'LIVE_PROGRESS_MARKER 正在核对页面'}}), flush=True)
+    print(json.dumps({'type':'item.completed','item':{'id':'internal','type':'reasoning','text':'INTERNAL_EVENT_MUST_NOT_DISPLAY'}}), flush=True)
+    print(json.dumps({'type':'item.started','item':{'id':'cmd','type':'command_execution','command':'inspect source'}}), flush=True)
+    print(json.dumps({'type':'item.completed','item':{'id':'cmd','type':'command_execution','exit_code':0,'aggregated_output':'TOOL_RESULT_MARKER'}}), flush=True)
+    print('STDERR_MARKER', file=sys.stderr, flush=True)
+    if mode == 'stream_wait':
+        until = time.monotonic() + 10
+        while not pathlib.Path(os.environ['STREAM_RELEASE']).exists() and time.monotonic() < until:
+            time.sleep(.05)
 schema = json.loads(pathlib.Path(args[args.index('--output-schema') + 1]).read_text())
 planning = stage == 'product-plan'
 if (mode == 'product_mutates' and role == 'product') or (mode == 'tester_mutates' and role == 'tester'):
@@ -129,6 +143,68 @@ class HarnessBlackBoxTests(unittest.TestCase):
         self.assertEqual(self.status()['status'], 'complete')
         self.assertEqual([c['role'] for c in self.calls()], ['product', 'developer', 'tester', 'product'])
         self.assertEqual(self.gate_log.read_text(), '1')
+
+    def test_live_output_and_quiet_preserve_reports(self):
+        self.env['FAKE_MODE'] = 'stream'
+        result = self.run_harness()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        for text in ['LIVE_PROGRESS_MARKER', 'TOOL_RESULT_MARKER', 'STDERR_MARKER', '交接 pass']:
+            self.assertIn(text, result.stdout)
+        self.assertNotIn('INTERNAL_EVENT_MUST_NOT_DISPLAY', result.stdout)
+        raw = next(Path(self.status()['run_dir']).glob('stages/*product-plan/events.jsonl')).read_text()
+        self.assertIn('INTERNAL_EVENT_MUST_NOT_DISPLAY', raw)
+        result = self.run_harness('--quiet', '--allow-dirty')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn('LIVE_PROGRESS_MARKER', result.stdout)
+        self.assertNotIn('TOOL_RESULT_MARKER', result.stdout)
+
+    def test_progress_is_visible_before_agent_exits(self):
+        release = self.base / 'release'
+        self.env.update(FAKE_MODE='stream_wait', STREAM_RELEASE=str(release))
+        command = [sys.executable, str(HARNESS), 'run', '--task', str(self.task),
+                   '--codex-bin', str(self.fake), '--max-cycles', '1']
+        process = subprocess.Popen(command, cwd=self.repo, env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            captured = b''
+            deadline = time.monotonic() + 7
+            while time.monotonic() < deadline and b'LIVE_PROGRESS_MARKER' not in captured:
+                if select.select([process.stdout], [], [], .1)[0]:
+                    chunk = os.read(process.stdout.fileno(), 65536)
+                    if not chunk:
+                        break
+                    captured += chunk
+            self.assertIn(b'LIVE_PROGRESS_MARKER', captured)
+            self.assertIsNone(process.poll())
+            self.assertFalse(list((self.repo / '.codex-harness/runs').glob('*/stages/*product-plan/report.json')))
+            release.touch()
+            output, errors = process.communicate(timeout=15)
+            self.assertEqual(process.returncode, 0, (captured + output + errors).decode())
+        finally:
+            if process.poll() is None:
+                process.terminate()
+                process.communicate(timeout=10)
+
+    def test_live_tail_handles_split_utf8_partial_json_and_terminal_controls(self):
+        spec = importlib.util.spec_from_file_location('harness_live_test', HARNESS)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        path = self.base / 'stream.jsonl'; path.write_bytes(b'')
+        tail = module.LiveTail(path, '产品', True)
+        data = json.dumps({'type':'item.completed','item':{'id':'a','type':'agent_message','text':'中文进度'}}, ensure_ascii=False).encode() + b'\n'
+        cut = data.index('中'.encode()) + 1
+        output = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(output):
+                with path.open('ab') as f: f.write(data[:cut])
+                tail.pump()
+                self.assertEqual(output.getvalue(), '')
+                with path.open('ab') as f: f.write(data[cut:])
+                tail.pump()
+                tail.pump(final=True)
+            self.assertEqual(output.getvalue().count('中文进度'), 1)
+            self.assertEqual(module.console_text('\x1b[2Jhello\x07'), 'hello')
+        finally:
+            tail.close()
 
     def test_checkpoints_commit_each_handoff_and_record_accepted_head(self):
         self.git('checkout', '-qb', 'codex/checkpoints')
