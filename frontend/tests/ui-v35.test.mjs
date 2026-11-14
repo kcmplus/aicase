@@ -171,7 +171,7 @@ test('orders page renders a server order and its status',async()=>{
  const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
  const declaration=source.match(/^function ordersPage\(\)\{.*$/m)?.[0];
  assert.ok(declaration,'ordersPage must exist');
- const context={stationContext:()=>'',orderError:'',orderRows:[{status:'paid',mode:'free_test',model_name:'Synthetic model',fulfillment_type:'pickup',reference:'SYNTHETIC-1',created_at:'2026-01-01T00:00:00Z',currency:'USD',amount:0}],esc:String,paymentLabel:()=>'',deliveryLabel:()=>'',locale:()=> 'en-US',orderPage:1,orderHasMore:false};
+ const context={stationContext:()=>'',orderLoading:false,orderError:'',orderRows:[{status:'paid',mode:'free_test',model_name:'Synthetic model',fulfillment_type:'pickup',reference:'SYNTHETIC-1',created_at:'2026-01-01T00:00:00Z',currency:'USD',amount:0}],esc:String,paymentLabel:()=>'',deliveryLabel:()=>'',locale:()=> 'en-US',orderPage:1,orderHasMore:false};
  const statusDeclaration=source.match(/^function orderStatus\([^\n]+$/m)?.[0]||'';
  const html=vm.runInNewContext(`${statusDeclaration}\n${declaration}\nordersPage()`,context);
  assert.match(html,/SYNTHETIC-1/);
@@ -186,7 +186,7 @@ test('orders list renders each server refund state without changing historical a
  for(const [refund,label] of [[null,'Paid'],[{status:'requested'},'Checking refund status.'],[{status:'pending'},'Refund processing.'],[{status:'succeeded'},'Payment refunded.'],[{status:'failed'},'Refund could not be completed.']]){
   const order=Object.freeze({status:'paid',refund,mode:'stripe_test',model_name:'Synthetic model',fulfillment_type:'pickup',reference:'SYNTHETIC-REFUND',created_at:'2026-01-01T00:00:00Z',currency:'USD',amount:'10.00'});
   const before=JSON.stringify(order);
-  const html=vm.runInNewContext(`${status}\n${page}\nordersPage()`,{stationContext:()=>'',orderError:'',orderRows:[order],esc:String,paymentLabel:()=>'',deliveryLabel:()=>'',locale:()=> 'en-US',orderPage:1,orderHasMore:false});
+  const html=vm.runInNewContext(`${status}\n${page}\nordersPage()`,{stationContext:()=>'',orderLoading:false,orderError:'',orderRows:[order],esc:String,paymentLabel:()=>'',deliveryLabel:()=>'',locale:()=> 'en-US',orderPage:1,orderHasMore:false});
   assert.ok(html.includes(label),`refund ${refund?.status||'none'}`);
   assert.ok(html.includes('USD 10.00'));
   assert.equal(JSON.stringify(order),before);
@@ -651,4 +651,31 @@ test('QA actual checkout bootstrap persists one-copy adjustment across reloads w
   assert.equal(stored.requestKey,original.requestKey);assert.deepEqual(stored.pass,original.pass);
  }
  assert.equal(writes,2);
+});
+
+test('checkout entity entry preserves server order, channel return and station context without inventing payment',async()=>{
+ await access(new URL('../storefront/checkout.html',import.meta.url));
+ for(const [query,route] of [['','checkout'],['view=orders','orders'],['order=SYNTHETIC-1&result=success','payment'],['view=orders&order=SYNTHETIC-1&result=cancel','payment']]){
+  const url=new URL(publicPageDestination(`https://example.test/checkout.html?${query}&device_id=D1&shop_id=S1&lang=zh#receipt`));
+  assert.equal(url.pathname,'/');assert.equal(url.hash.split('?')[0],'#'+route);
+  const params=new URLSearchParams(url.hash.split('?')[1]);
+  assert.equal(params.get('device_id'),'D1');assert.equal(params.get('shop_id'),'S1');assert.equal(params.get('lang'),'zh');assert.equal(params.get('section'),'receipt');
+  if(route==='payment'){assert.equal(params.get('order'),'SYNTHETIC-1');assert.equal(params.get('result'),query.includes('cancel')?'cancel':'success');}
+  assert.equal(url.searchParams.get('device_id'),'D1');
+ }
+ const state=paymentState({status:'pending',mode:'stripe_test'},{returned:true});
+ assert.equal(state.fulfilled,false);assert.equal(state.canPay,false);
+});
+
+test('orders loading and failure remain distinct from empty, and server text is escaped',async()=>{
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
+ const page=source.match(/^function ordersPage\(\)\{.*$/m)[0];
+ const status=source.match(/^function orderStatus\([^\n]+$/m)[0];
+ const base={stationContext:()=>'',orderLoading:false,orderError:'',orderRows:[],esc,paymentLabel:()=>'',deliveryLabel:()=>'',locale:()=> 'en-US',orderPage:2,orderHasMore:true};
+ const render=overrides=>vm.runInNewContext(`${status}\n${page}\nordersPage()`,{...base,...overrides});
+ const busy=render({orderLoading:true});assert.match(busy,/aria-busy="true"/);assert.match(busy,/role="status">Loading your orders/);assert.doesNotMatch(busy,/Your first design/);assert.match(busy,/data-action="refresh-orders" disabled/);
+ const error=render({orderError:'<script>bad</script>'});assert.match(error,/role="alert"/);assert.match(error,/&lt;script&gt;/);assert.doesNotMatch(error,/Your first design|<script>/);
+ assert.match(render({}),/Your first design/);
+ const row=Object.freeze({reference:'<img>',model_name:'<script>',status:'paid',mode:'stripe_test',currency:'USD',amount:'30.00',created_at:'2026-11-14T00:00:00Z'});
+ const list=render({orderRows:[row]});assert.match(list,/USD 30.00/);assert.match(list,/data-id="&lt;img&gt;"/);assert.match(list,/View order →/);assert.match(list,/data-page="1"/);assert.match(list,/data-page="3"/);assert.doesNotMatch(list,/<script>|pay-provider/);
 });

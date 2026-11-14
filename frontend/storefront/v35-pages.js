@@ -49,9 +49,10 @@ export function locationsPage({lang='en-US',station=null,hasScope=false,error=''
 
 // Entity aliases keep the original query (including station and language) and section.
 export function publicPageDestination(value){
- const source=new URL(value),routes={'works-center.html':'designs','work-detail.html':'work','how-to.html':'how-it-works','about.html':'about','printers.html':'printers','print-locations.html':'locations','customize.html':'choose','my-designs.html':'my-designs','account.html':'account'};
+ const source=new URL(value),routes={'works-center.html':'designs','work-detail.html':'work','how-to.html':'how-it-works','about.html':'about','printers.html':'printers','print-locations.html':'locations','customize.html':'choose','my-designs.html':'my-designs','account.html':'account','checkout.html':'checkout'};
  if(source.pathname.endsWith('/mobile-preview.html')){const target=new URL('./customize.html',source);target.search=source.search;target.hash=source.hash;return target.href;}
- const route=routes[source.pathname.split('/').at(-1)];if(!route)return null;
+ let route=routes[source.pathname.split('/').at(-1)];if(!route)return null;
+ if(route==='checkout')route=source.searchParams.get('order')?'payment':source.searchParams.get('view')==='orders'?'orders':'checkout';
  const target=new URL('./',source),params=new URLSearchParams(source.search);
  if(source.hash)params.set('section',source.hash.slice(1));
  target.search=source.search;target.hash=route+(params.size?'?'+params:'');return target.href;

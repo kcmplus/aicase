@@ -12,6 +12,8 @@ export function setLocale(value){
 }
 export const localized=(record,field='name')=>current==='zh-CN'?(record?.[field+'_zh']||t(record?.[field]||'')):(record?.[field]||'');
 const entries=[
+ ['Loading your orders…','正在读取订单列表…'],
+ ['View order →','查看订单 →'],
  ['Preview your design','预览你的设计'],
  ['My designs','我的设计'],
  ['Your sign-in needs checking. Reload to view your local designs.','请核实登录状态，重新载入后查看本机设计。'],

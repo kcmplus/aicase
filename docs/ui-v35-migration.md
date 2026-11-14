@@ -20,10 +20,10 @@
 | `works-center.html` | `#designs`、实体 HTML 别名；首页图库、菜单进入 | 现有 `simple-core.js` 六款可编辑设计 + `catalog.js` 标题／分类；`v35-pages.js` | 第二组接入作品卡片、分类、双语搜索、计数、无匹配空态及详情。现有 `GET /api/v1/catalog/` 提供价格／AI，并无公开客户作品接口；不把参考本地发布／点赞当服务端社区。自测见下文，浏览器待验。 |
 | `work-detail.html` | `#work?id=…`，兼容参考种子 `popomo-` 前缀、实体别名 | `v35-pages.js`；现有设计 ID → `#choose?design=…` 原编辑模型 | 第二组实现大图、模板说明、返回作品中心、相关推荐和实际编辑入口；未知 ID 显示失效态，不猜其他作品。无伪造点赞／作者／机型库存／本地创建订单。 |
 | `my-designs.html` | `#my-designs` 本机设计列表；旧 `#pass` 当前设计／订单保留 | `simple-storage.js` IndexedDB；服务端确认的 customer 身份用于分区 | 第三组增加列表、预览保存成功态、继续编辑、删除及空／加载／错态；按服务端身份分区，无云同步。旧无归属缓存保持原位，仅访客可主动恢复副本，不自动划入账户。Node 自测通过，浏览器待验。 |
-| `checkout.html` 结算 | `#checkout` | `order-service.js`；`POST /api/v1/store/orders/`（建单）、`orders/{reference}/checkout/`（渠道结算）；服务端金额与 request_key | 保留待第六组新版结算和单份约束。配送仅草稿，禁止收款／推单。不得迁入参考 quantity 增减和定时付款。 |
-| `checkout.html?view=orders` 列表 | `#orders` | `GET /api/v1/store/orders/?page=…`；`ordersPage` | 公共导航已接现有真实订单列表，列表视觉和全部状态待第六组。不能改为 sessionStorage 订单。 |
-| `checkout.html` 详情 | 当前 `#pass`、`#payment?order=…` 与列表 `view-order` | `GET orders/{reference}/`、print-files、fulfillment、confirm-print、retry-dispatch；`simple-app.js` | 真实手机门禁保留；新版详情、设备信息、扫码、退款取消、未知结果提示待第六组。出货不自动领取。 |
-| `checkout.html` 支付返回 | `#payment?order=…`，保留现有支付 URL 参数 | `payment-state.js`、Stripe / Airwallex 查询与渠道通知 | 保留待第六组；返回页只查询，不能写 paid。待核实／失败／关闭／退款／取消须逐项测试。 |
+| `checkout.html` 结算 | `#checkout` | `order-service.js`；`POST /api/v1/store/orders/`（建单）、`orders/{reference}/checkout/`（渠道结算）；服务端金额与 request_key | 已接实体别名及 V35 双栏预览／报价布局，新单固定一份；配送仅草稿。旧服务端多份关联替换尚未实现；浏览器与视觉待验。 |
+| `checkout.html?view=orders` 列表 | `#orders` | `GET /api/v1/store/orders/?page=…`；`ordersPage` | 已接实体别名、V35 卡片、分页及独立加载／空／错误状态；使用真实服务端订单，浏览器待验。 |
+| `checkout.html` 详情 | 当前 `#pass`、`#payment?order=…` 与列表 `view-order` | `GET orders/{reference}/`、print-files、fulfillment、confirm-print、retry-dispatch；`simple-app.js` | 已套用 V35 预览／详情样式，真实设备信息、扫码与手机门禁保留；退款取消及未知结果浏览器待验。出货不自动领取。 |
+| `checkout.html` 支付返回 | `#payment?order=…`，保留现有支付 URL 参数 | `payment-state.js`、Stripe / Airwallex 查询与渠道通知 | 已接 V35 布局，加载使用 status、错误使用 alert；实体入口保留 order/result。返回页只查询，不能写 paid；完整状态浏览器待验。 |
 | `account.html` | `#account`；权益 `#membership` 保留旧深链接 | `customer-account.js`；customer/send-code、verify、customer、credits；`ai-account/` | 第三组采用 V35 双栏故事与玻璃表单，继续使用真实邮箱码、昵称、退出、余额及流水 API；切身份清空私有视图并重载对应分区。OAuth、会员购买及头像交易入口仍不显示。真实浏览器／渠道 mock 验证待验。 |
 | `printers.html` | `#printers`、实体别名；带设备参数保留 | `device-info-service.js` / `stationIdentity`；`v35-pages.js` | 第二组展示实际名称、位置、辅助编号、有效机型与库存 ready/empty/updating；失败不展示旧资料为当前资料，无在线承诺。只对当前有效 WGS84 提供现有导航。扫码与刷新沿用真实验证服务，零／单／多订单分流未改。 |
 | `print-locations.html` | `#locations`、实体别名、菜单／页脚说明链接 | 现有扫码器、device-info、station-navigation | 第二组独立新版网点页；明确附近搜索未开放，提供扫描设备二维码、当前已核实设备和我的订单入口。没有纽约设备／距离／在线列表。 |
@@ -62,7 +62,7 @@
 - `#account`、`#ai`、`#membership`、`#checkout`、`#orders`、`#payment?order=…`、`#pass`、`#kiosk?code=…` 保留可达。第二组将 kiosk 替换为只读设备指引，code 不再触发解析或本地打印；真实订单的付款／确认门禁保持原服务。
 - `device_id` / `shop_id` 顶层／hash query、入站设备核实、读取当前用户订单和零／单／多单路由沿用原代码。`device.html` 带真实身份时保留现有只读资料入口，无身份的旧演示 URL 转入新版只读指引；不代表独立终端迁移或验收。
 - 原图导入与存储、AI 私有结果、账户邮箱码／退出／修改昵称／余额流水、订单分页／详情、Stripe／Airwallex 支付、退款、配送草稿、设备扫码／文件准备／推单／手机立即打印／重查等原功能保持原业务入口；未迁移页面不作整站通过结论。
-- 第二组已建立 works-center、work-detail、how-to、about、printers、print-locations 六个实体 `.html` 别名，保留原查询参数与章节 hash。第三组另增 customize、my-designs、account、mobile-preview 四个实体别名；checkout 实体别名仍待第六组，不静默把 404 计为成功。`mobile-preview` 必须原样携带 query/hash 交到 customize。
+- 第二组已建立 works-center、work-detail、how-to、about、printers、print-locations 六个实体 `.html` 别名，保留原查询参数与章节 hash。第三组另增 customize、my-designs、account、mobile-preview 四个实体别名；本轮补齐 checkout 实体别名，支持 view=orders 和 order/result 参数。`mobile-preview` 必须原样携带 query/hash 交到 customize。
 
 ## 第一组开发自测与验证缺口（历史记录）
 
@@ -253,3 +253,15 @@ npm start
 - 开发自测：orders/free_orders/stripe/airwallex/refunds 共 81 项，80 通过、1 项 PostgreSQL 行锁测试跳过；日志 `/tmp/v35-payment-guard.log`。`git diff --check` 通过。仅新建 Django 测试库和支付 mock，未进行浏览器或独立 QA；固定 gates 仍交 harness。
 - **未完成兼容路径**：旧服务端未付多份单仍需要单份报价、调整及显式重确认接口／页面；本轮拒付门禁不能替代该要求。旧实现没有持久化每次渠道写入尝试，因此没有本地会话 ID 不能证明远端未创建；后续实现必须先核实既有／未知渠道结果，再决定安全调整，不能直接改原订单金额或新建替代付款。完整兼容实现之前本项验收仍不通过。
 - 交测试员复验两个渠道的原失败用例、已有会话不能再次获得支付入口、未知结果保持原数据、正常单份及渠道通知／退款回归。整站页面、隔离端到端、视觉和颜色等既有缺口不缩减；未部署、未真机验证，Git 检查点由 harness 管理。
+
+
+## 第六组界面子组（2026-11-14，开发自测交接）
+
+起点 HEAD `1044be27673906a0a51153d2a95bfc75f029a2ad`，`codex/ui-v35-migration` 工作区干净。参考 HEAD 仍为冻结 `5501bedb720d3e7552428b0dc75174973e87934c`。未切换分支或自行提交。
+
+- 新增 `v35-orders.css`，按参考 checkout.css / checkout-theme.css 的紫色、白色卡片、双栏预览与报价、圆角、字体层级和移动单栏适配真实结算、订单详情及列表。原付款、推单和手机确认事件保持；确认操作留在内容流中，避免固定底栏遮挡渠道错误、同意勾选及设备状态。这是业务布局适配，尚未经逐页视觉核对。
+- 新增 `checkout.html`：默认到 checkout，view=orders 到 orders，order 参数到 payment；设备、商家、语言、result 和章节保留。不从返回 URL 推断到账。
+- 订单列表读取期间显示加载、禁用刷新，与空列表及错误分开；旧请求的失败不得覆盖新导航状态。列表操作统一为“查看订单”，避免退款单仍显示“继续支付”。支付页加载使用 status，实际失败才使用 alert。新增文案中英文齐备。
+- 开发自测 V35 49/49、现有前端 216/216，无跳过，日志 `/tmp/v35-orders-selftest.log`、`/tmp/v35-orders-regression.log`。新增断言涵盖实体入口参数、支付回跳不授权、加载/失败/空列表、文本转义、金额和分页；原断言保留，仅为 VM 注入新增加载状态。未修改后端，未操作数据库或外部业务。
+- 本子组不完成旧服务端多份单安全替换。产品候选 A 已决定，后续需实现调整意图、全部渠道尝试核实证据、服务端报价、显式重确认、唯一关联与延迟到账冲突保护；不得把当前保护性拒付或此界面交付替代该路径。
+- 待测试：390/1440px 参考对照及 320px 窄屏、双语/焦点/长订单号；实际相册到结算、订单刷新/返回、设备和支付状态。未运行浏览器，不宣称视觉一致性已验收。第七组隔离脚本、整站 gates、PostgreSQL 并发及最终产品复核仍未完成。预览沿用 `npm start` → `http://127.0.0.1:4173/checkout.html`，仅为启动说明，本轮未启动常驻服务。未部署、未真机验证。
