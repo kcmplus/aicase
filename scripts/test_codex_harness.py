@@ -21,8 +21,8 @@ import json, os, pathlib, sys, time
 args = sys.argv[1:]
 prompt = sys.stdin.read()
 model = args[args.index('--model') + 1]
-role = {'gpt-6-astra': 'product', 'gpt-6.1-sol': 'developer', 'gpt-6.1-terra': 'tester'}[model]
 stage = pathlib.Path(args[args.index('--output-last-message') + 1]).parent.name.split('-', 1)[1]
+role = 'product' if stage.startswith('product-') else stage
 log = pathlib.Path(os.environ['FAKE_LOG'])
 with log.open('a') as f:
     f.write(json.dumps({'role': role, 'stage': stage, 'args': args, 'prompt': prompt, 'pid': os.getpid()}) + '\n')
@@ -144,6 +144,43 @@ class HarnessBlackBoxTests(unittest.TestCase):
         self.assertEqual(self.status()['status'], 'complete')
         self.assertEqual([c['role'] for c in self.calls()], ['product', 'developer', 'tester', 'product'])
         self.assertEqual(self.gate_log.read_text(), '1')
+
+    def test_runtime_role_models_preserve_frozen_task_and_remain_independent(self):
+        self.env['GATE_FAIL_FIRST'] = '1'
+        result = self.run_harness()
+        self.assertNotEqual(result.returncode, 0)
+        state = self.status()
+        frozen = Path(state['run_dir']) / 'task.json'
+        original = frozen.read_bytes()
+        old_hash = state['task_hash']
+        before = len(self.calls())
+        result = self.command('resume', '--run-dir', state['run_dir'], '--max-cycles', '1',
+                              '--developer-model', 'gpt-6-astra', '--tester-model', 'gpt-6.1-sol')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(frozen.read_bytes(), original)
+        self.assertEqual(self.status()['task_hash'], old_hash)
+        calls = self.calls()[before:]
+        self.assertEqual([c['role'] for c in calls], ['product', 'developer', 'tester', 'product'])
+        self.assertEqual([c['args'][c['args'].index('--model')+1] for c in calls],
+                         ['gpt-6-astra','gpt-6-astra','gpt-6.1-sol','gpt-6-astra'])
+        events = [e for e in self.status()['history'] if e['event'] == 'models_changed']
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]['previous']['tester'], 'gpt-6.1-terra')
+        self.assertEqual(events[0]['selected']['tester'], 'gpt-6.1-sol')
+
+    def test_same_model_roles_and_saved_overrides_survive_resume(self):
+        self.env['GATE_FAIL_FIRST'] = '1'
+        result = self.run_harness('--developer-model', 'gpt-6-astra', '--tester-model', 'gpt-6.1-sol')
+        self.assertNotEqual(result.returncode, 0)
+        state = self.status()
+        before = len(self.calls())
+        result = self.command('resume', '--run-dir', state['run_dir'], '--max-cycles', '1')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        calls = self.calls()[before:]
+        self.assertEqual(calls[1]['role'], 'developer')
+        self.assertEqual(calls[1]['args'][calls[1]['args'].index('--model')+1], 'gpt-6-astra')
+        self.assertEqual(calls[2]['role'], 'tester')
+        self.assertEqual(calls[2]['args'][calls[2]['args'].index('--model')+1], 'gpt-6.1-sol')
 
     def test_live_output_and_quiet_preserve_reports(self):
         self.env['FAKE_MODE'] = 'stream'

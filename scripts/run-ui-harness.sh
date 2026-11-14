@@ -73,12 +73,14 @@ case "$ACTION" in
     [[ -f "$TASK_FILE" && -f "$HARNESS" ]] || { echo '任务文件或执行器缺失。' >&2; exit 2; }
     if [[ "$ACTION" == check ]]; then
       exec python3 "$HARNESS" run --task "$TASK_FILE" --git-checkpoints \
+        --developer-model gpt-6-astra --tester-model gpt-6.1-sol \
         --max-cycles 12 --max-seconds 28800 --agent-timeout 3600 "$@" --dry-run
     fi
     echo '启动：整站新版 UI + 现有业务接入 + 单份打印 + RGB 颜色管理。'
-    echo '产品 Astra → 开发 Sol → 独立测试 Terra → 固定检查 → 产品复核。'
+    echo '产品 Astra → 开发 Astra → 独立测试 Sol → 固定检查 → 产品复核。'
     echo '默认最多 12 轮 / 8 小时；每轮交接自动本地提交，不推送或部署。'
     exec python3 "$HARNESS" run --task "$TASK_FILE" --git-checkpoints \
+      --developer-model gpt-6-astra --tester-model gpt-6.1-sol \
       --max-cycles 12 --max-seconds 28800 --agent-timeout 3600 "$@"
     ;;
   status|stop)
@@ -90,6 +92,7 @@ case "$ACTION" in
     RUN_DIR="$(latest_run)"
     echo "继续运行：$RUN_DIR"
     exec python3 "$HARNESS" resume --run-dir "$RUN_DIR" --git-checkpoints \
+      --developer-model gpt-6-astra --tester-model gpt-6.1-sol \
       --max-cycles 12 --max-seconds 28800 --agent-timeout 3600 "$@"
     ;;
 esac

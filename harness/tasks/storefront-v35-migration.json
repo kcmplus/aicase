@@ -29,7 +29,7 @@
     "禁止真实供应商查询/写入、AI 付费外部调用、实际支付/退款、硬件、部署和推送。真实供应商/支付链路以 mock 验证，完整操作链以 config.direct_debug 隔离零元模拟验证；不得把模拟证据当成部署或真机完成。",
     "不得修改或初始化用户现有数据库和已有调试副本。迁移及初始化在新建隔离数据库验收；浏览器使用合成数据/独立会话，业务外网显式阻断或 mock。启动脚本确认独立数据库/端口并清理临时服务；不得读取输出凭证、客户照片或会话。",
     "不 reset/stash/clean/覆盖原有改动，不改默认部署开关。测试可因真实 UI/契约调整更新定位与断言，但不能删除覆盖、跳过失败、伪造通过或降低固定验收要求；任务和 gates 冻结后不得修改以求通过。",
-    "Astra 负责规划、范围内产品判断和最终逐项复核；Sol 只负责实现与开发自测；Terra 独立 QA、可改测试但不得修生产源码。各角色只交付本阶段，不自行启动其他 agent。普通产品问题通过 needs_product 交 Astra；只有 harness 可宣布整个任务 complete。",
+    "Astra 负责规划、范围内产品判断和最终逐项复核；开发 Astra 只负责实现与开发自测；Sol 独立 QA、可改测试但不得修生产源码。各角色只交付本阶段，不自行启动其他 agent。普通产品问题通过 needs_product 交 Astra；只有 harness 可宣布整个任务 complete。",
     "Git 按用户 2026-11-14 新授权执行：从 origin/main 基线建立 codex/ 功能分支并带入已提交的必要基础工作；每个大修改组由开发自测后交接，harness 使用 --git-checkpoints 自动创建本地提交（待完整验收），QA 修改亦单独记录。各 agent 不自行 git add/commit/切换分支，不推送、不合并回主分支、不部署。最终验收需记录通过的提交号。"
   ],
   "acceptance": [
@@ -168,7 +168,7 @@
   ],
   "models": {
     "product": "gpt-6-astra",
-    "developer": "gpt-6.1-sol",
-    "tester": "gpt-6.1-terra"
+    "developer": "gpt-6-astra",
+    "tester": "gpt-6.1-sol"
   }
 }

@@ -76,14 +76,17 @@
     },
     {
       "id": "direct-debug-browser-e2e",
-      "argv": ["node", "scripts/test-direct-debug-e2e.mjs"],
+      "argv": [
+        "node",
+        "scripts/test-direct-debug-e2e.mjs"
+      ],
       "cwd": ".",
       "timeout_seconds": 300
     }
   ],
   "models": {
     "product": "gpt-6-astra",
-    "developer": "gpt-6.1-sol",
-    "tester": "gpt-6.1-terra"
+    "developer": "gpt-6-astra",
+    "tester": "gpt-6.1-sol"
   }
 }

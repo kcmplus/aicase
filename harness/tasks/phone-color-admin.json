@@ -109,7 +109,7 @@
   ],
   "models": {
     "product": "gpt-6-astra",
-    "developer": "gpt-6.1-sol",
-    "tester": "gpt-6.1-terra"
+    "developer": "gpt-6-astra",
+    "tester": "gpt-6.1-sol"
   }
 }
