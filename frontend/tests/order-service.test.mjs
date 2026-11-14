@@ -72,3 +72,105 @@ test('redirect only accepts Stripe hosted checkout',()=>{
  assert.equal(stripeCheckoutUrl('https://checkout.stripe.com/c/pay/test'),'https://checkout.stripe.com/c/pay/test');
  for(const url of ['javascript:alert(1)','https://evil.test','http://checkout.stripe.com/pay','https://checkout.stripe.com.evil.test','https://user@checkout.stripe.com/pay'])assert.throws(()=>stripeCheckoutUrl(url));
 });
+
+import {airwallexOptions,openAirwallexCheckout} from '../storefront/airwallex-checkout.js';
+test('checkout freezes delivery choice while historical responses stay unclassified',()=>{
+ const draft={requestKey:crypto.randomUUID(),pass:pass(),fulfillmentType:'air'};
+ const body=checkoutBody(draft,{accepted:true,amount:'10.00'});
+ assert.equal(body.fulfillment_type,'air');
+ const data={reference:crypto.randomUUID(),snapshot:draft.pass,status:'paid',amount:'10.00',currency:'USD',mode:'airwallex_live',revision:1,created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+ assert.equal(savedOrder(data).fulfillmentType,'unspecified');
+ assert.equal(savedOrder({...data,fulfillment_type:'courier'}).fulfillmentType,'courier');
+});
+test('delivery payment status never gives station collection instructions',()=>{
+ for(const fulfillmentType of ['courier','air']){
+  const view=paymentState({status:'ready',fulfillmentType});
+  assert.equal(view.title,'Your delivery order.');
+  assert.doesNotMatch(view.message,/station|collect/i);
+ }
+});
+const airwallexData=()=>({provider:'airwallex',order:{reference:'b01737e5-c5ab-4765-8834-cbd92dfeaf81',mode:'airwallex_test',status:'pending',currency:'USD'},checkout:{env:'demo',mode:'payment',currency:'USD',intent_id:'int_test123',client_secret:'temporary-client-secret',successUrl:'https://shop.example.com/#payment?order=b01737e5-c5ab-4765-8834-cbd92dfeaf81&result=success'}});
+test('Airwallex config and order remain pending until backend confirmation',async()=>{
+ assert.deepEqual(await getPaymentConfig(async()=>({ok:true,json:async()=>({provider:'airwallex',mode:'test',available:true})})),{provider:'airwallex',mode:'test',available:true});
+ const data={reference:crypto.randomUUID(),snapshot:pass(),status:'pending',amount:'10.00',currency:'USD',mode:'airwallex_live',revision:1,created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+ assert.equal(savedOrder(data).status,'pending');assert.equal(savedOrder(data).mode,'airwallex_live');
+ const body=checkoutBody({requestKey:crypto.randomUUID(),pass:pass()},{accepted:true,amount:'10.00',provider:'airwallex',mode:'test'});
+ assert.equal(body.payment_provider,'airwallex');assert.equal(body.payment_mode,'test');
+});
+test('Airwallex SDK uses only verified checkout fields and matching environment',async()=>{
+ const calls=[];const data=airwallexData();data.checkout.untrusted='ignore';
+ await openAirwallexCheckout(data,async()=>({init:async options=>{calls.push(options);return {payments:{redirectToCheckout:async options=>calls.push(options)}}}}));
+ assert.deepEqual(calls[0],{env:'demo',enabledElements:['payments']});
+ assert.equal(calls[1].intent_id,'int_test123');assert.equal(calls[1].untrusted,undefined);
+ assert.equal(calls[1].client_secret,'temporary-client-secret');
+ data.order.mode='airwallex_live';data.checkout.env='prod';assert.equal(airwallexOptions(data).env,'prod');
+});
+test('Airwallex rejects invalid SDK options and masks SDK error details',async()=>{
+ for(const fields of [{env:'prod'},{currency:'EUR'},{mode:'subscription'},{intent_id:'../../bad'},{client_secret:''},
+   {successUrl:'http://shop.example.com/'},{successUrl:'javascript:alert(1)'},{successUrl:'https://user@shop.example.com/'},
+   {successUrl:'https://shop.example.com/#payment?order=another&result=success'}]){
+  const data=airwallexData();Object.assign(data.checkout,fields);assert.throws(()=>airwallexOptions(data));
+ }
+ const paid=airwallexData();paid.order.status='paid';assert.throws(()=>airwallexOptions(paid));
+ await assert.rejects(openAirwallexCheckout(airwallexData(),async()=>{throw Error('temporary-client-secret')}),error=>!error.message.includes('temporary-client-secret')&&error.message.includes('order is saved'));
+});
+
+import {paymentState} from '../storefront/payment-state.js';
+test('payment return never claims success or invites duplicate payment',()=>{
+ const pending=paymentState({status:'pending'},{returned:true});
+ assert.equal(pending.fulfilled,false);assert.equal(pending.showCode,false);assert.equal(pending.canPay,false);assert.equal(pending.showNewOrder,false);
+ assert.match(pending.message,/do not pay again/);
+ const delayed=paymentState({status:'pending'},{returned:true,exhausted:true});assert.match(delayed.message,/longer than usual/);
+ assert.equal(paymentState({status:'pending'}).canPay,true);
+});
+test('paid and fulfillment statuses retain receipt; cancelled and unknown do not',()=>{
+ for(const status of ['paid','printing','ready','completed','collected']){
+  const state=paymentState({status});assert.equal(state.showCode,true);assert.equal(state.canPay,false);assert.doesNotMatch(state.title,/closed/i);
+ }
+ for(const status of ['cancelled','unknown']){
+  const state=paymentState({status});assert.equal(state.showCode,false);assert.equal(state.canPay,false);
+ }
+});
+
+test('payment config retries only 503 up to three times, including HTML maintenance responses',async()=>{
+ for(const failures of [0,1,3,4]){
+  let calls=0;const delays=[],signals=[];
+  const request=getPaymentConfig(async(url,options)=>{
+   calls++;signals.push(options.signal);
+   assert.equal(options.credentials,'omit');assert.equal(options.cache,'no-store');
+   return calls<=failures?{ok:false,status:503,json:async()=>{throw Error('HTML maintenance page');}}:{ok:true,status:200,json:async()=>({provider:'airwallex',mode:'live',available:true})};
+  },{sleep:async ms=>delays.push(ms)});
+  if(failures===4)await assert.rejects(request,/after 3 retries/);
+  else assert.equal((await request).provider,'airwallex');
+  assert.equal(calls,Math.min(failures+1,4));
+  assert.deepEqual(delays,[1000,2000,4000].slice(0,failures));
+  assert.equal(new Set(signals).size,calls);
+ }
+});
+test('payment config does not retry authorization errors or malformed successful responses',async()=>{
+ for(const status of [401,403,200]){
+  let calls=0;
+  await assert.rejects(getPaymentConfig(async()=>{calls++;return {ok:status===200,status,json:async()=>({})};},{sleep:async()=>assert.fail('must not retry')}));
+  assert.equal(calls,1);
+ }
+});
+
+test('refund states suppress payment and fulfillment code without rewriting order history',()=>{
+ for(const status of ['requested','pending','succeeded','failed']){
+  const view=paymentState({status:'paid',refund:{status}},{returned:true});
+  assert.equal(view.canPay,false);assert.equal(view.showCode,false);assert.equal(view.fulfilled,false);
+  assert.match(view.title,/refund/i);
+ }
+ assert.equal(paymentState({status:'paid',refund:{status:'succeeded'}}).showNewOrder,true);
+});
+
+test('no-charge checkout is explicit and never claims money was collected',async()=>{
+ const config={provider:'free',mode:'test',available:true,zero_price_test:true};
+ assert.deepEqual(await getPaymentConfig(async()=>({ok:true,json:async()=>config})),config);
+ for(const value of [{...config,mode:'live'},{...config,zero_price_test:false}])await assert.rejects(getPaymentConfig(async()=>({ok:true,json:async()=>value})),/Invalid/);
+ const view=paymentState({mode:'free_test',status:'paid',fulfillmentType:'pickup'});
+ assert.equal(view.title,'No-charge order confirmed.');assert.equal(view.canPay,false);
+ assert.doesNotMatch(view.message,/payment is confirmed/i);
+ const body=checkoutBody({requestKey:crypto.randomUUID(),pass:pass()},{accepted:true,amount:'0.00',provider:'free',mode:'test'});
+ assert.equal(body.expected_amount,'0.00');assert.equal(body.payment_provider,'free');
+});

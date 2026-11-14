@@ -127,7 +127,11 @@ export function pngWithDpi(bytes,dpi=300){
 export async function exportCase(design,model,kind='print'){
  const template=phoneTemplate(model,design.phoneTemplateId);
  if(!template)throw Error('A print template is not available for this model yet.');
- if(!['print','preview'].includes(kind))throw Error('Invalid export type.');
+ if(template.previewOnly&&kind==='print')throw Error('This template is available for preview. Print dimensions have not been confirmed.');
+ // Supplier contract consumes its native pixel canvas. This does not assert
+ // physical DPI or turn a preview template into a calibrated local-print file.
+ if(kind==='supplier-print'&&!template.id.startsWith('supplier-'))throw Error('A supplier print template is required.');
+ if(!['print','preview','supplier-print'].includes(kind))throw Error('Invalid export type.');
  const {printWidth:w,printHeight:h}=template;
  const [{output,effectiveDpi},mask]=await Promise.all([drawArtwork(design,w,h),loadImage(template.mask)]);
  const ctx=output.getContext('2d');ctx.globalCompositeOperation='destination-in';ctx.drawImage(mask,0,0,w,h);ctx.globalCompositeOperation='source-over';
@@ -136,6 +140,6 @@ export async function exportCase(design,model,kind='print'){
   ctx.globalCompositeOperation='destination-over';ctx.fillStyle='white';ctx.fillRect(0,0,w,h);ctx.globalCompositeOperation='source-over';
  }
  const raw=await new Promise((resolve,reject)=>output.toBlob(b=>b?resolve(b):reject(Error('Image export failed. Try again.')),'image/png'));
- const blob=new Blob([pngWithDpi(new Uint8Array(await raw.arrayBuffer()),template.dpi)],{type:'image/png'});
- return {blob,filename:`${template.id}-${kind}-${template.dpi}dpi.png`,template,effectiveDpi};
+ const blob=template.dpi?new Blob([pngWithDpi(new Uint8Array(await raw.arrayBuffer()),template.dpi)],{type:'image/png'}):raw;
+ return {blob,filename:`${template.id}-${kind}${template.dpi?'-'+template.dpi+'dpi':''}.png`,template,effectiveDpi};
 }

@@ -1,10 +1,15 @@
 import os
+import json
 import base64
 import secrets
 from pathlib import Path
 from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+DIRECT_DEBUG_ENABLED = False  # Enabled only by the separate local settings module.
+DIRECT_DEBUG_DEVICE_ID = 0
+DIRECT_DEBUG_TOKEN = ''
+DIRECT_DEBUG_H5_ORIGIN = ''
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "")
 if not SECRET_KEY:
@@ -57,6 +62,16 @@ MEDIA_ROOT = Path(os.environ.get("DJANGO_MEDIA_ROOT", str(BASE_DIR / "media")))
 FILE_UPLOAD_PERMISSIONS = 0o644
 FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o755
 DATA_UPLOAD_MAX_MEMORY_SIZE = 12 * 1024 * 1024
+# Enable only after the supplier confirms saveOrder response semantics. Secrets
+# remain in each DeviceProviderConnection, not in storefront build variables.
+SUPPLIER_ORDER_ENABLED = os.environ.get('SUPPLIER_ORDER_ENABLED', '0') == '1'
+SUPPLIER_ORDER_PUBLIC_URL = os.environ.get('SUPPLIER_ORDER_PUBLIC_URL', '')
+SUPPLIER_PAYMENT_ENABLED = os.environ.get('SUPPLIER_PAYMENT_ENABLED', '0') == '1'
+# Provisional values requested by the user. Do not use them as verified physical proof.
+SUPPLIER_ORDER_STATUS_MAP = json.loads(os.environ.get('SUPPLIER_ORDER_STATUS_MAP',
+    '{"print":{"0":"idle","1":"printing","2":"printed","3":"print_failed"},'
+    '"shipment":{"0":"idle","1":"delivering","2":"dispensed","3":"delivery_failed"}}'))
+SUPPLIER_ORDER_STATUS_VERIFIED = os.environ.get('SUPPLIER_ORDER_STATUS_VERIFIED', '0') == '1'
 AI_DAILY_RENDER_LIMIT = int(os.environ.get('AI_DAILY_RENDER_LIMIT', '20'))
 AI_CONCURRENT_RENDER_LIMIT = int(os.environ.get('AI_CONCURRENT_RENDER_LIMIT', '2'))
 FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024

@@ -78,7 +78,9 @@ elif name == 'curl' and fail == 'health':
         (tree / 'frontend/storefront/index.html').write_text('test')
         (tree / 'VERSION').write_text('a' * 40 + '\n')
         (tree / 'deploy/dev').mkdir(parents=True)
-        for name in ['aicase-dev-ai-cleanup.service', 'aicase-dev-ai-cleanup.timer']:
+        for name in ['aicase-dev-ai-cleanup.service', 'aicase-dev-ai-cleanup.timer',
+                     'aicase-dev-inventory.service', 'aicase-dev-inventory.timer',
+                     'aicase-dev-supplier-orders.service', 'aicase-dev-supplier-orders.timer']:
             shutil.copyfile(Path(__file__).resolve().parents[1] / name, tree / 'deploy/dev' / name)
         with tarfile.open(self.root / 'release.tar.gz', 'w:gz') as archive:
             for path in tree.iterdir(): archive.add(path, arcname=path.name)
@@ -106,14 +108,19 @@ elif name == 'curl' and fail == 'health':
         self.assertIn('seed_phone_templates --only-supplied', calls)
         self.assertIn('systemctl enable --now aicase-dev-ai-cleanup.timer', calls)
         self.assertTrue((self.root / 'units/aicase-dev-ai-cleanup.service').exists())
+        self.assertIn('systemctl enable --now aicase-dev-inventory.timer', calls)
+        self.assertTrue((self.root / 'units/aicase-dev-inventory.service').exists())
         self.assertLess(calls.index('pg_dump '), calls.index('migrate --noinput'))
         self.assertTrue((self.state / 'backups' / self.release_id / 'COMPLETE').exists())
 
     def test_upgrade_preserves_managed_catalog(self):
         self.previous_release()
+        (self.root / 'units/aicase-dev-inventory.service').write_text('# existing timer service')
         result = self.run_deploy()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertNotIn('seed_catalog', (self.root / 'calls').read_text())
+        calls = (self.root / 'calls').read_text()
+        self.assertNotIn('seed_catalog', calls)
+        self.assertLess(calls.index('systemctl stop aicase-dev-inventory.service'), calls.index('pg_dump '))
 
     def test_failures_restore_previous_release(self):
         previous = self.previous_release()

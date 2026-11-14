@@ -7,5 +7,13 @@ PHONE_TEMPLATES = json.loads((ASSET_ROOT / 'assets/phone-templates/templates.jso
 
 
 def template_for(model, template_id=None):
-    return next((t for t in reversed(PHONE_TEMPLATES) if t['model'] == model and
-                 (template_id is None or t['id'] == template_id)), None)
+    bundled = next((t for t in reversed(PHONE_TEMPLATES) if t['model'] == model and
+                    (template_id is None or t['id'] == template_id)), None)
+    if bundled:
+        return bundled
+    from .store_catalog import available_stocks, stock_template
+    for stock in available_stocks().filter(product__phone_model__name=model).order_by('pk'):
+        template = stock_template(stock)
+        if template_id is None or template['id'] == template_id:
+            return template
+    return None

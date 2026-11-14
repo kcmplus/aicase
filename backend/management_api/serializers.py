@@ -18,6 +18,13 @@ def validate_image_path(value):
 class CatalogSerializer(serializers.ModelSerializer):
     active = serializers.BooleanField(default=True)
     image_variants = serializers.SerializerMethodField()
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        instance = type(instance).objects.select_for_update().get(pk=instance.pk)
+        if 'active' in validated_data and hasattr(instance, 'auto_publish_pending'):
+            validated_data['auto_publish_pending'] = False
+        return super().update(instance, validated_data)
+
     def get_image_variants(self, instance):
         paths = [getattr(instance, field, "") for field in ("image_path", "preview_path", "original_path")]
         if isinstance(instance, AIExample):
@@ -38,6 +45,11 @@ class BrandSerializer(CatalogSerializer):
 
 class PhoneModelSerializer(CatalogSerializer):
     brand_name = serializers.CharField(source="brand.name", read_only=True)
+    template_sources = serializers.SerializerMethodField()
+    def get_template_sources(self, instance):
+        from .supplier_templates import template_info
+        return [template_info(stock) for product in instance.supplierproduct_set.all()
+                for stock in product.device_products.all() if stock.present]
     class Meta:
         model = PhoneModel
         fields = "__all__"
@@ -154,16 +166,39 @@ class PricingPlanSerializer(CatalogSerializer):
         return attrs
 
 class PrintOrderSerializer(serializers.ModelSerializer):
+    refund_status = serializers.SerializerMethodField()
+
+    def get_refund_status(self, order):
+        refund = getattr(order, 'refund', None)
+        return {'requested': '退款待核实', 'pending': '退款处理中', 'succeeded': '已退款', 'failed': '退款失败'}.get(refund.status, '') if refund else '—'
+
     customer_id = serializers.UUIDField(read_only=True, allow_null=True)
     class Meta:
         model = PrintOrder
-        fields = ["id", "reference", "customer_id", "customer_email", "model_name", "status", "amount", "currency", "mode", "revision", "station_id", "notes", "created_at", "updated_at"]
+        fields = ["id", "reference", "customer_id", "customer_email", "model_name", "status", "amount", "currency", "mode", "revision", "station_id", "fulfillment_type", "notes", "created_at", "updated_at", "refund_status"]
         read_only_fields = [f for f in fields if f != "notes"]
 
 class PrintOrderDetailSerializer(PrintOrderSerializer):
+    refund = serializers.SerializerMethodField()
+    can_refund = serializers.SerializerMethodField()
+    fulfillment = serializers.SerializerMethodField()
+
+    def get_fulfillment(self, order):
+        from .supplier_orders import public_state
+        return public_state(order)
+
+    def get_refund(self, order):
+        from .refunds import refund_data
+        return refund_data(order, private=True)
+
+    def get_can_refund(self, order):
+        from .refunds import eligible
+        request = self.context.get('request')
+        return bool(request and request.user.is_superuser and eligible(order) and not hasattr(order, 'refund'))
+
     class Meta(PrintOrderSerializer.Meta):
-        fields = PrintOrderSerializer.Meta.fields + ["snapshot", "stripe_session_id", "stripe_payment_intent", "paid_at"]
-        read_only_fields = PrintOrderSerializer.Meta.read_only_fields + ["snapshot", "stripe_session_id", "stripe_payment_intent", "paid_at"]
+        fields = PrintOrderSerializer.Meta.fields + ["snapshot", "stripe_session_id", "stripe_payment_intent", "airwallex_payment_intent", "paid_at", "refund", "can_refund", "fulfillment"]
+        read_only_fields = PrintOrderSerializer.Meta.read_only_fields + ["snapshot", "stripe_session_id", "stripe_payment_intent", "airwallex_payment_intent", "paid_at", "refund", "can_refund", "fulfillment"]
 
 class AuditLogSerializer(serializers.ModelSerializer):
     class Meta:

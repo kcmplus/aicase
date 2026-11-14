@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {phoneBrands,findPhoneModels} from '../storefront/phone-catalog.js';
 import {selectablePhoneModels as phoneModels} from '../storefront/simple-core.js';
 
-test('the storefront offers only the two supplied case templates',()=>{
+test('the bundled fallback retains its two historical templates independently of stock choices',()=>{
  const before=[...phoneModels];
  assert.deepEqual(phoneModels,['iPhone 17','iPhone 16e']);
  assert.deepEqual(phoneBrands(phoneModels),['Apple']);

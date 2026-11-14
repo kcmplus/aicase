@@ -94,6 +94,10 @@ trap cleanup EXIT
 
 # Nginx serves 503 while draining, backing up and switching releases.
 touch "$state/deploying"
+# A stopped writer may have sent a request: its durable state is never replayed.
+if [[ -f "$unit_dir/aicase-prod-supplier-orders.service" ]]; then
+    systemctl stop aicase-prod-supplier-orders.service
+fi
 if [[ -n "$previous" && -f "$previous/backend/manage.py" ]]; then
     drained=0
     for ((attempt=0; attempt<60; attempt++)); do
@@ -130,10 +134,13 @@ mv -Tf "$base/current.next" "$base/current"
 switched=1
 systemctl start "$service"
 wait_healthy || { echo 'New release failed health checks.' >&2; exit 1; }
+install -m 644 "$release/deploy/prod/aicase-prod-supplier-orders.service" "$unit_dir/"
+install -m 644 "$release/deploy/prod/aicase-prod-supplier-orders.timer" "$unit_dir/"
 install -m 644 "$release/deploy/prod/aicase-prod-ai-cleanup.service" "$unit_dir/"
 install -m 644 "$release/deploy/prod/aicase-prod-ai-cleanup.timer" "$unit_dir/"
 systemctl daemon-reload
 systemctl enable --now aicase-prod-ai-cleanup.timer
+systemctl enable --now aicase-prod-supplier-orders.timer
 # Install the daily backup after a healthy release.
 install -m 700 "$release/deploy/prod/backup.sh" /usr/local/sbin/aicase-prod-backup
 install -m 644 "$release/deploy/prod/aicase-prod-backup.service" "$unit_dir/"
