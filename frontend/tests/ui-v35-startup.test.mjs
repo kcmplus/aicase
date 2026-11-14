@@ -64,7 +64,7 @@ test('storage recovery is bilingual, keyboard reachable, and only reloads when r
 
 // Run the complete application bootstrap, with all network reads stubbed and no
 // browser data. Storage failures must return before business events or polling.
-for(const failure of ['membership','orders','draft','migration','unknown-session-orders']){
+for(const failure of ['membership','orders','draft','draft-photo','migration','unknown-session-orders']){
  test(`actual app startup stops safely on ${failure} storage failure`,async()=>{
   const source=(await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8')).replace(/^import .*;\n/gm,'');
   const view=errorView(),writes=[],effects=[];let reloads=0;
@@ -72,14 +72,14 @@ for(const failure of ['membership','orders','draft','migration','unknown-session
   const context=vm.createContext({
    document:{querySelector:selector=>{assert.equal(selector,'#app');return view.app;}},
    location:{hash:'#choose?source=photo',href:'http://127.0.0.1:4173/?device_id=123#choose?source=photo'},
-   localStorage:{getItem:()=>null,setItem:()=>{effects.push('local write');}},
+   localStorage:{getItem:()=>failure==='draft-photo'?JSON.stringify({source:'photo',designId:'bloom'}):null,setItem:()=>{effects.push('local write');}},
    setInterval:()=>{effects.push('polling');throw Error('Polling must not start');},
    window:{addEventListener:()=>{effects.push('window event');}},
    t:value=>value,deviceScope:()=>'',scopeIds:()=>null,
    loadCatalog:async()=>null,loadStockCatalog:async()=>null,fulfillmentConfig:async()=>({}),
    getAIAccount:async()=>failure==='unknown-session-orders'?null:{authenticated:false},
    createDesignWorkspace,createDesignLibrary,readPass:()=>{},
-   readDesign:async key=>{if(failure==='draft'&&key.endsWith(':checkout-draft'))fail();},
+   readDesign:async key=>{if((failure==='draft'&&key.endsWith(':checkout-draft'))||(failure==='draft-photo'&&key.endsWith(':draft-photo')))fail();},
    writeDesign:async()=>{effects.push('design write');},
    updateDesign:async(key,transform,initial)=>{
     writes.push(key);
@@ -89,6 +89,7 @@ for(const failure of ['membership','orders','draft','migration','unknown-session
     return transform(initial);
    },
    freshMembership:()=>({jobs:{}}),freshOrders:()=>({orders:{}}),
+   designs:[{id:'bloom'}],phoneModels:[],stations:[],aiStyles:[],aiExamples:[],effects:[],
    stockSelection:()=>null,exampleFor:()=>({id:'portrait',results:{anime:'synthetic'}}),
    migrateRender:value=>value,
    showStorageStartupError:app=>showStorageStartupError(app,{lang:'zh-CN',reload:()=>{reloads++;}}),
@@ -96,7 +97,7 @@ for(const failure of ['membership','orders','draft','migration','unknown-session
   await assert.doesNotReject(vm.runInContext(`(async()=>{${source}})()`,context));
   assert.match(view.app.innerHTML,/无法访问浏览器存储/);
   assert.equal(view.focused,1);assert.deepEqual(effects,[]);
-  assert.equal(writes.length,{membership:1,orders:2,draft:2,migration:3,'unknown-session-orders':1}[failure]);
+  assert.equal(writes.length,{membership:1,orders:2,draft:2,'draft-photo':2,migration:3,'unknown-session-orders':1}[failure]);
   assert.equal(reloads,0);view.clicks.click();assert.equal(reloads,1);
  });
 }

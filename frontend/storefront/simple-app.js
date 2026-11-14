@@ -102,7 +102,7 @@ try {
     state.keepCollection=saved.keepCollection===true;
     if(effects.some(e=>e.id===saved.effect))state.effect=saved.effect;
     for(const [key,min,max] of [['intensity',0,100],['zoom',100,180],['x',0,100],['y',0,100]])if(Number.isFinite(saved[key]))state[key]=Math.max(min,Math.min(max,saved[key]));
-    try{const photo=await privateRead('draft-photo');if(isPhoto(photo))state.photo=photo;}catch{}
+    try{const photo=await privateRead('draft-photo');if(isPhoto(photo))state.photo=photo;}catch{return stopForStorage();}
     if (saved.pass) {try{state.pass=await resolvePass(saved.pass.code);}catch{}}
     if (saved.job && ['printing','ready','collected'].includes(saved.job.status) && stations.some(s=>s.id===saved.job.stationId)) {
       try{state.job={...saved.job,pass:await resolvePass(saved.job.pass.code)};}catch{}
