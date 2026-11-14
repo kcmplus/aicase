@@ -274,6 +274,10 @@ class PhoneColorTests(TestCase):
         self.assertFalse(self.model.print_ready)
         self.assertEqual(self.client.get('/api/v1/store/phone-models/').data['models'], [])
 
+    def test_out_of_range_model_filter_returns_validation_error(self):
+        response = self.client.get(self.base, {'phone_model': '999999999999999999999999999999'})
+        self.assertEqual(response.status_code, 400)
+
     def test_supplier_template_is_bound_to_model_and_replacement_invalidates_activation(self):
         from django.utils import timezone
         from .models import DeviceProviderConnection, Device, SupplierProduct, DeviceProduct
