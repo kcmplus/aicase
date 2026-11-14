@@ -5,6 +5,8 @@ import {api,can} from './api.js';
 const route=useRoute();
 const models=ref([]),modelId=ref(Number(route.query.phone_model)||null),rows=ref([]),loading=ref(false),busy=ref(false),error=ref(''),notice=ref('');
 const open=ref(false),editing=ref(null),form=reactive({rgb:{r:255,g:255,b:255}}),files=reactive({overlay:null,mask:null}),templateId=ref(''),review=ref('');
+const initOpen=ref(false),initReport=ref(null),initError=ref('');
+const initLabels={matched:'精确匹配',unmatched:'未匹配，跳过',ambiguous:'多匹配，跳过',needs_review:'待确认，跳过',would_create:'待新增停用草稿',created:'已新增停用草稿',existing:'已存在，保持原样'};
 onBeforeRouteLeave(()=>!busy.value);
 const allowed=action=>can(`management_api.${action}_phonecolor`);
 const model=computed(()=>models.value.find(m=>m.id===modelId.value));
@@ -43,11 +45,27 @@ async function upload(){
 async function verify(){
  await action(async()=>{editing.value=await api(`admin/phone-colors/${editing.value.id}/verify-resources/`,{method:'POST',body:{version:editing.value.resource.version,review_note:review.value}});},'当前资源已人工核验；启用仍需单独保存。');
 }
+async function previewInitialization(){
+ if(busy.value)return;
+ initOpen.value=true;initReport.value=null;initError.value='';busy.value=true;
+ try{initReport.value=await api('admin/phone-colors/initialize-reference/');}
+ catch(e){initError.value=e.message;}finally{busy.value=false;}
+}
+async function initializeColors(){
+ if(busy.value||!initReport.value||initReport.value.mode!=='preview')return;
+ busy.value=true;initError.value='';
+ try{
+  initReport.value=await api('admin/phone-colors/initialize-reference/',{method:'POST',body:{reference_sha256:initReport.value.reference_sha256,confirm:true}});
+  await load();
+ }catch(e){initError.value=e.message+' 可重新预览核实；已有配置不会被覆盖。';}finally{busy.value=false;}
+}
+function closeInitialization(done){if(!busy.value)done();}
 function close(done){if(!busy.value){if(typeof done==='function')done();else open.value=false;}}
 </script>
 <template>
  <section>
   <div class="page-heading"><div><p class="eyebrow">PREVIEW CONFIGURATION</p><h1>机型颜色</h1><p class="muted">RGB 是近似显示色。颜色仅用于机身预览，不改变壳体 SKU、库存、打印模板或校准状态。</p></div><el-button v-if="allowed('add')" type="primary" :disabled="!modelId||busy" @click="edit()">新增颜色草稿</el-button></div>
+  <div class="panel initialization-entry"><div><strong>参考颜色初始化</strong><p>仅按品牌与机型名称精确匹配；待确认和多匹配项跳过。只新增停用草稿，不创建机型、不覆盖人工配置、不启用或生成预览资源。</p></div><el-button :disabled="busy||loading" @click="previewInitialization">预览初始化</el-button></div>
   <div class="panel color-panel">
    <el-select v-model="modelId" filterable placeholder="选择现有机型" aria-label="选择颜色所属机型" :disabled="busy||loading" @change="load"><el-option v-for="item in models" :key="item.id" :value="item.id" :label="item.brand+' · '+item.name"/></el-select>
    <el-button :disabled="busy||loading" @click="load">刷新</el-button>
@@ -61,6 +79,22 @@ function close(done){if(!busy.value){if(typeof done==='function')done();else ope
     <el-table-column label="操作"><template #default="{row}"><el-button link type="primary" @click="edit(row)">{{allowed('change')?'管理':'查看'}}</el-button></template></el-table-column>
    </el-table>
   </div>
+  <el-drawer v-model="initOpen" title="参考颜色初始化 · 预览与结果" size="min(1000px,100vw)" :before-close="closeInitialization" :close-on-click-modal="!busy" :close-on-press-escape="!busy" :show-close="!busy" destroy-on-close>
+   <el-alert v-if="initError" :title="initError" type="error" :closable="false"/>
+   <div v-loading="busy" class="initialization-report">
+    <p>唯一资料：phone-color-reference.json。RGB 为近似显示色，官方资料核实不代表预览资源核验、库存可售或打印校准。当前机型筛选不限制此操作；以下列出全库实际匹配情况。展开内容为参考值；已有项保留实际配置，不用参考值覆盖。</p>
+    <template v-if="initReport">
+     <el-alert :title="initReport.mode==='executed'?'本次执行已保存；新增项全部停用且无资源。':'以下为只读预览，尚未写入。执行时重新核对数据库，结果可能随配置变化。'" :type="initReport.mode==='executed'?'success':'info'" :closable="false"/>
+     <p class="reference-digest">资料 v{{initReport.reference_version}} · {{initReport.researched_at}} · SHA-256 {{initReport.reference_sha256}}</p>
+     <dl class="initialization-counts"><template v-for="[key,label] in [['total_models','参考机型'],['verified_models','已核实机型'],['reference_colors','参考颜色'],['matched_models','匹配机型'],['unmatched_models','未匹配'],['ambiguous_models','多匹配'],['needs_review_models','待确认'],['new_colors',initReport.mode==='executed'?'本次新增':'预计新增'],['existing_colors','已有保留']]" :key="key"><div><dt>{{label}}</dt><dd>{{initReport.summary[key]}}</dd></div></template></dl>
+     <el-table :data="initReport.items" row-key="model_name">
+      <el-table-column type="expand"><template #default="{row}"><p v-if="!row.colors.length">{{initLabels[row.result]}}；未导入颜色，未猜测其他机型或共用模板。</p><el-table v-else :data="row.colors"><el-table-column prop="code" label="编码" min-width="150"/><el-table-column prop="name" label="辅助名称" min-width="170"/><el-table-column label="近似 RGB" min-width="150"><template #default="{row:color}"><span class="swatch" :style="{background:swatch(color.rgb)}"></span>{{color.rgb.r}}, {{color.rgb.g}}, {{color.rgb.b}}</template></el-table-column><el-table-column label="处理" min-width="170"><template #default="{row:color}">{{initLabels[color.result]}}</template></el-table-column><el-table-column prop="region_note" label="区域 / 网络 / 特别版" min-width="250"/><el-table-column prop="source" label="来源（不抓取）" min-width="250"/></el-table></template></el-table-column>
+      <el-table-column prop="brand" label="品牌" width="100"/><el-table-column prop="model_name" label="参考机型" min-width="190"/><el-table-column label="处理结果" min-width="160"><template #default="{row}">{{initLabels[row.result]}}</template></el-table-column><el-table-column label="现有机型 ID" min-width="130"><template #default="{row}">{{row.candidate_ids.join(', ')||'—'}}</template></el-table-column><el-table-column prop="notes" label="核实 / 待确认说明" min-width="250"/>
+     </el-table>
+    </template>
+   </div>
+   <template #footer><el-button :disabled="busy" @click="previewInitialization">重新预览</el-button><el-button v-if="allowed('add')" type="primary" :loading="busy" :disabled="busy||initReport?.mode!=='preview'" @click="initializeColors">确认仅新增停用草稿</el-button></template>
+  </el-drawer>
   <el-drawer v-model="open" :title="(editing?'管理':'新增')+' · '+(model?.name||'机型')+'颜色'" size="min(760px,100vw)" :before-close="close" :close-on-click-modal="!busy" :close-on-press-escape="!busy" :show-close="!busy" destroy-on-close>
    <el-alert v-if="error" :title="error" type="error" :closable="false"/><el-alert v-if="notice" :title="notice" type="success" :closable="false"/>
    <el-form label-position="top" :disabled="busy||!(editing?allowed('change'):allowed('add'))" @submit.prevent="save">
@@ -86,4 +120,5 @@ function close(done){if(!busy.value){if(typeof done==='function')done();else ope
 </template>
 <style scoped>
 .color-panel{padding:20px}.color-panel>.el-select{width:330px;max-width:75%;margin-right:12px}.swatch{display:inline-block;width:20px;height:20px;border:1px solid #aaa;border-radius:50%;vertical-align:middle;margin-right:8px}.rgb-fields{display:flex;flex-wrap:wrap;gap:12px;align-items:center}.rgb-fields .el-input-number{width:100px}.resource-panel{margin-top:24px;padding:0}.resource-panel p{font-size:13px;line-height:1.8;color:#65716b}.previews{display:flex;gap:20px}.previews figure{margin:0}.previews img{width:130px;max-height:260px;object-fit:contain;background:repeating-conic-gradient(#ddd 0% 25%,#fff 0% 50%) 0/16px 16px}.previews figcaption{font-size:12px}fieldset{border:1px solid #ddd;border-radius:8px;margin-top:20px;padding:16px;min-width:0}fieldset>label{display:block;margin:16px 0}input[type=file]{max-width:100%}
+.initialization-entry{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px;margin-bottom:20px}.initialization-entry p,.initialization-report p{font-size:13px;line-height:1.8;color:#65716b}.initialization-counts{display:flex;flex-wrap:wrap;gap:20px}.initialization-counts dt{font-size:12px;color:#65716b}.initialization-counts dd{margin:6px 0;font-size:22px}.reference-digest{overflow-wrap:anywhere}.initialization-report{min-height:130px}@media(max-width:600px){.initialization-entry{align-items:flex-start;flex-direction:column}}
 </style>

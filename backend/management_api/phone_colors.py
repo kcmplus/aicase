@@ -192,9 +192,27 @@ class PhoneColorViewSet(viewsets.ModelViewSet):
         return qs
 
     def get_permissions(self):
-        if self.action in ('upload_resources', 'verify_resources'):
+        if self.action in ('upload_resources', 'verify_resources', 'initialize_colors'):
             return [IsAdminUser()]
         return super().get_permissions()
+
+    @action(detail=False, methods=['get', 'post'], url_path='initialize-reference')
+    def initialize_colors(self, request):
+        from .phone_color_initialization import initialize_reference
+        perms = ['management_api.view_phonecolor']
+        if request.method == 'POST':
+            perms.append('management_api.add_phonecolor')
+        if not request.user.has_perms(perms):
+            raise PermissionDenied('预览需要颜色查看权限；初始化还需要颜色新增权限。')
+        if request.method == 'GET':
+            return Response(initialize_reference(request))
+        if (not isinstance(request.data, dict)
+                or set(request.data) != {'reference_sha256', 'confirm'}
+                or request.data['confirm'] is not True
+                or not isinstance(request.data['reference_sha256'], str)):
+            raise serializers.ValidationError('请先预览，再提交 reference_sha256 和 confirm=true；不接受自定义资料。')
+        return Response(initialize_reference(request, execute=True,
+                                             expected_digest=request.data['reference_sha256']))
 
     @action(detail=False, methods=['get'])
     def options_catalog(self, request):

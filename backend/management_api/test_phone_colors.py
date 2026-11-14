@@ -1,5 +1,6 @@
 """Development regression: synthetic assets, temporary media and Django's isolated test DB."""
 import hashlib
+import json
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -322,6 +323,222 @@ class PhoneColorTests(TestCase):
         stock.template_image = 'synthetic-replacement.png'; stock.save()
         self.assertEqual(self.enable(color).status_code, 400)
         self.assertEqual(self.verify(color).status_code, 400)
+
+
+class PhoneColorInitializationTests(TestCase):
+    """Run the actual checked-in reference against new synthetic model rows."""
+    @classmethod
+    def setUpTestData(cls):
+        from .phone_color_initialization import REFERENCE_PATH
+        cls.raw_reference = REFERENCE_PATH.read_bytes()
+        cls.reference = json.loads(cls.raw_reference)
+        cls.admin = User.objects.create_user('initialization-admin', is_staff=True, is_superuser=True)
+        cls.staff = User.objects.create_user('initialization-staff', is_staff=True)
+        cls.url = '/api/v1/admin/phone-colors/initialize-reference/'
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+        network = patch('requests.sessions.Session.request', side_effect=AssertionError('external network forbidden'))
+        network.start()
+        self.addCleanup(network.stop)
+
+    def populate(self):
+        brands = {}
+        for index, entry in enumerate(self.reference['models']):
+            brand = brands.get(entry['brand'])
+            if brand is None:
+                brand = Brand.objects.create(name=entry['brand'], code=f'synthetic-brand-{index}')
+                brands[entry['brand']] = brand
+            PhoneModel.objects.create(brand=brand, code=f'synthetic-model-{index}',
+                name=entry['model_name'], preview_family='iphone', active=False, notes='manual model notes')
+
+    def preview(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200, response.data)
+        return response.data
+
+    def execute(self, preview=None):
+        response = self.client.post(self.url, {'reference_sha256': (preview or self.preview())['reference_sha256'],
+                                              'confirm': True}, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        return response.data
+
+    def test_preview_uses_all_50_reference_models_and_218_colors_without_writes(self):
+        self.populate()  # Include even the six unverified models to prove they are skipped.
+        models_before = list(PhoneModel.objects.values())
+        preview = self.preview()
+        self.assertEqual(preview['mode'], 'preview')
+        self.assertEqual(preview['reference_sha256'], hashlib.sha256(self.raw_reference).hexdigest())
+        self.assertEqual(preview['summary'], dict(total_models=50, verified_models=44, reference_colors=218,
+            matched_models=44, unmatched_models=0, ambiguous_models=0, needs_review_models=6,
+            new_colors=218, existing_colors=0))
+        self.assertEqual(len(preview['items']), 50)
+        for item in preview['items']:
+            if item['match_status'] == 'needs_review':
+                self.assertEqual(item['result'], 'needs_review')
+                self.assertIsNone(item['phone_model'])
+                self.assertEqual(item['colors'], [])
+            else:
+                self.assertEqual(item['result'], 'matched')
+                self.assertTrue(all(c['result'] == 'would_create' and c['id'] is None for c in item['colors']))
+        self.assertEqual(PhoneColor.objects.count(), 0)
+        self.assertEqual(AuditLog.objects.count(), 0)
+        self.assertEqual(list(PhoneModel.objects.values()), models_before)
+
+    def test_two_executions_are_idempotent_and_preserve_every_manual_field_and_model(self):
+        self.populate()
+        models_before = list(PhoneModel.objects.values())
+        first = self.execute()
+        self.assertEqual(first['mode'], 'executed')
+        self.assertEqual(first['summary']['new_colors'], 218)
+        self.assertEqual(first['summary']['existing_colors'], 0)
+        self.assertEqual(PhoneColor.objects.count(), 218)
+        self.assertFalse(PhoneColor.objects.filter(active=True).exists())
+        self.assertFalse(PhoneColor.objects.filter(is_default=True).exists())
+        self.assertFalse(PhoneColor.objects.filter(current_resource__isnull=False).exists())
+        self.assertEqual(PhoneColorResource.objects.count(), 0)
+        self.assertEqual(AuditLog.objects.filter(action='initialize').count(), 219)
+        color = PhoneColor.objects.first()
+        # Represent an already configured historical preview; initialization must
+        # never validate, replace, disable, or otherwise modify existing records.
+        resource = PhoneColorResource.objects.create(color=color, version=7, template_id='synthetic-version',
+            width=100, height=200, overlay='synthetic-overlay', mask='synthetic-mask',
+            overlay_sha256='a'*64, mask_sha256='b'*64, uploaded_by='manual')
+        color.rgb = {'r': 1, 'g': 2, 'b': 3}
+        color.name = '人工修改'
+        color.source = 'manual source'
+        color.region_note = 'manual special edition'
+        color.sort_order = 999
+        color.is_default = color.active = True
+        color.current_resource = resource
+        color.save()
+        colors_before = list(PhoneColor.objects.values())
+        resources_before = list(PhoneColorResource.objects.values())
+        second = self.execute(first)
+        self.assertEqual(second['summary']['new_colors'], 0)
+        self.assertEqual(second['summary']['existing_colors'], 218)
+        self.assertEqual(list(PhoneColor.objects.values()), colors_before)
+        self.assertEqual(list(PhoneColorResource.objects.values()), resources_before)
+        self.assertEqual(list(PhoneModel.objects.values()), models_before)
+        self.assertTrue(all(c['result'] == 'existing' for item in second['items'] for c in item['colors']))
+        log = AuditLog.objects.filter(action='initialize').order_by('-id').first()
+        self.assertIn(second['reference_sha256'], log.summary)
+        self.assertIn('新增 0，已有 218', log.summary)
+        self.assertEqual(log.actor_id, self.admin.pk)
+
+    def test_exact_brand_and_name_only_ambiguities_and_unknown_models_are_skipped(self):
+        apple = Brand.objects.create(name='Apple', code='apple')
+        other = Brand.objects.create(name='Other', code='other')
+        for index, (brand, name) in enumerate([(apple, 'iPhone 13 Pro'), (apple, 'iPhone 13 Pro'),
+                (apple, 'iPhone 17 Pro'), (other, 'iPhone 17 Pro Max'), (apple, 'iphone 17 Pro Max'),
+                (apple, 'iPhone 11 Pro '), (apple, 'Samsung A56')]):
+            PhoneModel.objects.create(brand=brand, name=name, code=f'mixed-{index}', preview_family='iphone')
+        result = self.execute()
+        self.assertEqual(result['summary']['matched_models'], 1)
+        self.assertEqual(result['summary']['ambiguous_models'], 1)
+        self.assertEqual(result['summary']['unmatched_models'], 42)
+        self.assertEqual(result['summary']['needs_review_models'], 6)
+        self.assertEqual(result['summary']['new_colors'], 3)
+        self.assertEqual(PhoneModel.objects.count(), 7)
+        self.assertEqual(set(PhoneColor.objects.values_list('phone_model__name', flat=True)), {'iPhone 17 Pro'})
+        self.assertEqual(len(result['items'][0]['candidate_ids']), 2)
+
+    def test_imported_values_and_special_edition_notes_remain_exactly_from_reference(self):
+        self.populate()
+        result = self.execute()
+        for entry, item in zip(self.reference['models'], result['items']):
+            for index, (source, row) in enumerate(zip(entry['colors'], item['colors'])):
+                color = PhoneColor.objects.get(pk=row['id'])
+                self.assertEqual(color.rgb, source['rgb'])
+                self.assertEqual(color.code, source['code'])
+                self.assertEqual(color.name, f"{source['name_zh']} / {source['name_en']}")
+                self.assertEqual(color.sort_order, index)
+                self.assertEqual(color.region_note, '；'.join(entry.get(k, '') for k in ('market', 'connectivity', 'notes')))
+                for source in entry['sources']:
+                    self.assertIn(source['url'], color.source)
+                self.assertFalse(color.active)
+
+    def test_execution_recomputes_current_matches_and_preserves_intervening_manual_add(self):
+        empty_preview = self.preview()
+        self.assertEqual(empty_preview['summary']['new_colors'], 0)
+        self.populate()
+        model = PhoneModel.objects.get(name='iPhone 13 Pro')
+        existing = PhoneColor.objects.create(phone_model=model, code='graphite', rgb={'r': 0, 'g': 0, 'b': 0},
+                                              source='manual', is_default=True)
+        before = PhoneColor.objects.filter(pk=existing.pk).values().get()
+        result = self.execute(empty_preview)
+        self.assertEqual(result['summary']['new_colors'], 217)
+        self.assertEqual(result['summary']['existing_colors'], 1)
+        self.assertEqual(PhoneColor.objects.filter(pk=existing.pk).values().get(), before)
+
+    def test_execution_rejects_stale_reference_and_all_caller_supplied_data(self):
+        self.populate()
+        digest = self.preview()['reference_sha256']
+        for payload in ({}, {'confirm': True, 'reference_sha256': '0'*64},
+                {'confirm': 'true', 'reference_sha256': digest}, {'confirm': 1, 'reference_sha256': digest},
+                {'confirm': False, 'reference_sha256': digest}, {'confirm': True, 'reference_sha256': None},
+                {'confirm': True, 'reference_sha256': digest, 'path': '/tmp/other.json'},
+                {'confirm': True, 'reference_sha256': digest, 'colors': []}):
+            with self.subTest(payload=payload):
+                self.assertEqual(self.client.post(self.url, payload, format='json').status_code, 400)
+        self.assertEqual(PhoneColor.objects.count(), 0)
+        self.assertEqual(AuditLog.objects.count(), 0)
+
+    def test_changed_reference_requires_new_preview_and_invalid_rgb_never_partially_imports(self):
+        self.populate()
+        digest = self.preview()['reference_sha256']
+        with TemporaryDirectory() as temporary:
+            source = Path(temporary) / 'reference.json'
+            source.write_bytes(self.raw_reference + b'\n')
+            with patch('management_api.phone_color_initialization.REFERENCE_PATH', source):
+                response = self.client.post(self.url, {'confirm':True,'reference_sha256':digest}, format='json')
+                self.assertEqual(response.status_code, 400)
+                self.assertIn('重新预览', str(response.data))
+                self.assertNotEqual(self.preview()['reference_sha256'], digest)
+            invalid = json.loads(self.raw_reference)
+            invalid['models'][1]['colors'][0]['rgb']['r'] = True
+            source.write_text(json.dumps(invalid))
+            with patch('management_api.phone_color_initialization.REFERENCE_PATH', source):
+                digest = hashlib.sha256(source.read_bytes()).hexdigest()
+                response = self.client.post(self.url, {'confirm':True,'reference_sha256':digest}, format='json')
+                self.assertEqual(response.status_code, 400)
+                self.assertIn('RGB', str(response.data))
+        self.assertEqual(PhoneColor.objects.count(), 0)
+        self.assertEqual(AuditLog.objects.count(), 0)
+
+    def test_initialization_requires_independent_color_view_and_add_permissions(self):
+        digest = hashlib.sha256(self.raw_reference).hexdigest()
+        for permissions, get_status, post_status in [([],403,403), (['view_phonecolor'],200,403),
+                (['add_phonecolor'],403,403), (['view_phonemodel','change_phonemodel'],403,403),
+                (['view_phonecolor','add_phonecolor'],200,200)]:
+            with self.subTest(permissions=permissions):
+                self.staff.user_permissions.set(Permission.objects.filter(codename__in=permissions))
+                self.client.force_authenticate(User.objects.get(pk=self.staff.pk))
+                self.assertEqual(self.client.get(self.url).status_code, get_status)
+                self.assertEqual(self.client.post(self.url, {'reference_sha256':digest,'confirm':True}, format='json').status_code, post_status)
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+        self.assertEqual(self.client.post(self.url, {'reference_sha256':digest,'confirm':True}, format='json').status_code, 403)
+
+    def test_session_initialization_requires_csrf(self):
+        client = APIClient(enforce_csrf_checks=True)
+        client.force_login(self.admin)
+        preview = client.get(self.url)
+        self.assertEqual(preview.status_code, 200)
+        payload = {'reference_sha256': preview.data['reference_sha256'], 'confirm': True}
+        self.assertEqual(client.post(self.url, payload, format='json').status_code, 403)
+        token = client.get('/api/v1/auth/csrf/').data['csrfToken']
+        self.assertEqual(client.post(self.url, payload, format='json', HTTP_X_CSRFTOKEN=token).status_code, 200)
+
+    def test_audit_failure_rolls_back_entire_import_and_does_not_leave_partial_colors(self):
+        self.populate()
+        preview = self.preview()
+        with patch('management_api.phone_color_initialization.audit', side_effect=RuntimeError('synthetic audit failure')):
+            with self.assertRaisesRegex(RuntimeError, 'synthetic audit failure'):
+                self.execute(preview)
+        self.assertEqual(PhoneColor.objects.count(), 0)
+        self.assertEqual(AuditLog.objects.count(), 0)
 
 
 class PhoneColorMigrationTests(TransactionTestCase):
