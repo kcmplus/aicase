@@ -182,7 +182,18 @@ class Snapshot(Layout):
             raise serializers.ValidationError('Unexpected photo in a collection design.')
         return data
 
+class SinglePrintQuantity(serializers.Field):
+    def to_internal_value(self, value):
+        if type(value) is not int or value != 1:
+            raise serializers.ValidationError('Printing supports exactly one copy per order.')
+        return 1
+
+    def to_representation(self, value):
+        return value
+
+
 class Checkout(StrictSerializer):
+    quantity = SinglePrintQuantity(default=1)
     fulfillment_type = serializers.ChoiceField(choices=['pickup', 'courier', 'air'], default='pickup')
     payment_mode = serializers.ChoiceField(choices=['demo', 'test', 'live'], default='demo')
     payment_provider = serializers.ChoiceField(choices=['demo', 'stripe', 'airwallex', 'free'], default='demo')
@@ -199,6 +210,7 @@ class Checkout(StrictSerializer):
         return value
 
 class Revision(StrictSerializer):
+    quantity = SinglePrintQuantity(default=1)
     revision = serializers.IntegerField(min_value=1)
     accepted = serializers.BooleanField()
     snapshot = Snapshot()
@@ -268,6 +280,14 @@ class StoreOrders(APIView):
         plan = PricingPlan.objects.select_for_update().filter(kind='print', active=True).first()
         if not isinstance(request.data, dict):
             raise serializers.ValidationError({'detail':'Expected an order object.'})
+        # Validate the quantity envelope even on an idempotent retry. Do not
+        # revalidate mutable inventory or reprice an already frozen order.
+        SinglePrintQuantity().run_validation(request.data.get('quantity', 1))
+        if set(request.data) - set(Checkout().fields):
+            raise serializers.ValidationError({'detail': 'Unsupported order fields.'})
+        snapshot = request.data.get('snapshot')
+        if isinstance(snapshot, dict) and set(snapshot) - set(Snapshot().fields):
+            raise serializers.ValidationError({'snapshot': 'Unsupported design fields.'})
         request_key = serializers.UUIDField().run_validation(request.data.get('request_key'))
         existing = PrintOrder.objects.filter(request_key=request_key).first()
         if existing:
@@ -314,6 +334,8 @@ class StoreOrder(StoreOrders):
         serializer = Revision(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        if order.snapshot.get('quantity', 1) != 1:
+            raise Conflict('This historical multi-print order cannot be edited. Its original snapshot is preserved.')
         if order.mode != 'demo' or order.status != 'paid':
             raise Conflict('This order can no longer be edited. Create a new order.')
         if data['snapshot'] == order.snapshot and data['revision'] + 1 == order.revision:

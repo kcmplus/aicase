@@ -1,3 +1,4 @@
+import {singlePrintDraft} from '../storefront/order-service.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -13,7 +14,7 @@ test('an unavailable design database shows a recoverable startup error', async (
  const end=source.indexOf("let orderBook=await updateDesign('print-orders-v1'",start);
  assert.ok(start>=0&&end>start,'startup block must be present');
  const app={textContent:'Loading POPOMO…'};
- const context=vm.createContext({app,initialData:[null,null,null,null,{authenticated:false}],workspace:{active:true},
+ const context=vm.createContext({singlePrintDraft,app,initialData:[null,null,null,null,{authenticated:false}],workspace:{active:true},
   freshMembership:()=>({jobs:{}}),privateUpdate:async()=>{throw new Error('Synthetic IndexedDB SecurityError');}});
  await assert.doesNotReject(vm.runInContext(`(async()=>{${source.slice(start,end)}})()`,context));
  assert.match(app.textContent,/storage|database|save|reload|存储|保存|重试/i);
@@ -31,7 +32,7 @@ test('startup stops when the saved draft photo cannot be read',async()=>{
  const end=source.indexOf("try{if(location.hash.slice(1).split('?')[0]!=='checkout')");
  assert.ok(start>=0&&end>start);
  const app={textContent:''};let photoRead=0;
- const context=vm.createContext({
+ const context=vm.createContext({singlePrintDraft,
   document:{querySelector:()=>app},location:{hash:'#choose',href:'http://localhost/#choose'},
   localStorage:{getItem:()=>JSON.stringify({source:'photo',designId:'bloom'})},
   t:value=>value,deviceScope:()=>'',scopeIds:()=>null,
@@ -74,7 +75,7 @@ test('a transient photo read failure preserves the scoped draft for a later star
  let failPhoto=true;
  async function startup(id){
   const app={textContent:''};const location={hash:'#choose?source=photo',href:'http://localhost/?device_id=123#choose?source=photo'};
-  const context=vm.createContext({document:{querySelector:()=>app},location,
+  const context=vm.createContext({singlePrintDraft,document:{querySelector:()=>app},location,
    localStorage:{getItem:key=>editor.get(key)||null},t:value=>value,deviceScope:()=>'',scopeIds:()=>null,
    loadCatalog:async()=>null,loadStockCatalog:async()=>null,fulfillmentConfig:async()=>({}),
    getAIAccount:async()=>({authenticated:true,customer:{id}}),createDesignWorkspace,createDesignLibrary,readPass:()=>{},
@@ -104,7 +105,7 @@ for(const failure of ['membership','orders','draft','draft-photo','migration','u
   const source=(await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8')).replace(/^import .*;\n/gm,'');
   const view=errorView(),writes=[],effects=[];let reloads=0;
   const fail=()=>{throw Object.assign(new Error('Synthetic private storage error'),{name:'SecurityError'});};
-  const context=vm.createContext({
+  const context=vm.createContext({singlePrintDraft,
    document:{querySelector:selector=>{assert.equal(selector,'#app');return view.app;}},
    location:{hash:'#choose?source=photo',href:'http://127.0.0.1:4173/?device_id=123#choose?source=photo'},
    localStorage:{getItem:()=>failure==='draft-photo'?JSON.stringify({source:'photo',designId:'bloom'}):null,setItem:()=>{effects.push('local write');}},

@@ -1,3 +1,4 @@
+import {singlePrintDraft} from '../storefront/order-service.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile,access} from 'node:fs/promises';
@@ -521,7 +522,7 @@ async function startColorDraft(editor,response){
  const refreshEnd=source.indexOf('\nsetInterval(async()=>',refreshStart);
  assert.ok(start>=0&&end>start&&refreshStart>0&&refreshEnd>refreshStart);
  let currentResponse=response;
- const context=vm.createContext({
+ const context=vm.createContext({singlePrintDraft,
   document:{querySelector:()=>({textContent:''})},location:{hash:'#choose',href:'http://localhost/#choose'},
   localStorage:{getItem:key=>editor.get(key)||null,setItem:(key,value)=>editor.set(key,value)},
   t:value=>value,deviceScope:()=>'',scopeIds:()=>null,loadCatalog:async()=>null,
@@ -612,4 +613,22 @@ test('local design restore retains a valid frozen color during catalog failure a
   assert.equal(context.state.artworkLayouts.bloom.zoom,113);assert.equal(context.state.artworkLayouts.bloom.x,42);assert.equal(saves,1);
   assert.equal(JSON.stringify(pass),before);
  }
+});
+
+test('single-print local draft adjustment preserves artwork, idempotency and historical edits',async()=>{
+ const {singlePrintDraft,singlePrintNotice,checkoutBody}=await import('../storefront/order-service.js');
+ const original={quantity:4,requestKey:'existing-key',pass:{photo:'synthetic',x:32},expectedAmount:'40.00'};
+ const draft=singlePrintDraft(original);
+ assert.equal(draft.quantity,1);assert.equal(draft.quantityAdjusted,true);
+ assert.equal(draft.pass,original.pass);assert.equal(draft.requestKey,original.requestKey);
+ assert.equal(original.quantity,4);
+ assert.deepEqual(singlePrintDraft(draft),draft);
+ for(const lang of ['en','zh-CN'])assert.match(singlePrintNotice(draft,lang),/role="status"/);
+ assert.equal(singlePrintNotice(singlePrintDraft({pass:{}})), '');
+ const historical={...original,editId:'paid-order'};
+ assert.equal(singlePrintDraft(historical),historical);
+ assert.throws(()=>checkoutBody(original,{accepted:true,amount:'10.00'}),/single-print/);
+ const body=checkoutBody(draft,{accepted:true,amount:'10.00'});
+ assert.equal(body.quantity,1);assert.equal(body.expected_amount,'10.00');
+ assert.equal(body.request_key,'existing-key');assert.equal(body.snapshot,original.pass);
 });

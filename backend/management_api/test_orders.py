@@ -260,3 +260,57 @@ class StoreOrderTests(TestCase):
     def test_non_object_payload_returns_validation_error(self):
         self.assertEqual(self.client.post('/api/v1/store/orders/', [], format='json').status_code,400)
         self.assertEqual(self.client.post('/api/v1/store/orders/', {}, format='json').status_code,400)
+
+    def test_single_quantity_is_strict_on_create_and_idempotent_retry(self):
+        invalid = [0, 2, -1, True, False, '1', 1.0, None, [], {}]
+        for quantity in invalid:
+            with self.subTest(quantity=quantity):
+                response = self.client.post('/api/v1/store/orders/', {**self.payload, 'quantity': quantity}, format='json')
+                self.assertEqual(response.status_code, 400, response.data)
+        self.assertFalse(PrintOrder.objects.exists())
+        self.payload['quantity'] = 1
+        order = self.create()
+        before = list(PrintOrder.objects.values())
+        for quantity in invalid:
+            response = self.client.post('/api/v1/store/orders/', {**self.payload, 'quantity': quantity}, format='json')
+            self.assertEqual(response.status_code, 400)
+        for patch in ({'count': 2}, {'copies': 2}, {'amount': '20.00'},
+                      {'snapshot': {**self.payload['snapshot'], 'quantity': 2}}):
+            self.assertEqual(self.client.post('/api/v1/store/orders/', {**self.payload, **patch}, format='json').status_code, 400)
+        self.assertEqual(list(PrintOrder.objects.values()), before)
+        self.assertEqual(self.client.post('/api/v1/store/orders/', self.payload, format='json').data['reference'], order['reference'])
+
+    def test_single_quantity_revision_cannot_override_frozen_amount(self):
+        order = self.create()
+        snapshot = {**order['snapshot'], 'code': 'POP-C-FEDCBA9876543210'}
+        payload = {'revision': 1, 'accepted': True, 'snapshot': snapshot, 'quantity': 2}
+        self.assertEqual(self.client.patch(self.endpoint(order), payload, format='json').status_code, 400)
+        payload['quantity'] = 1
+        response = self.client.patch(self.endpoint(order), payload, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(str(response.data['amount']), '10.00')
+        payload['quantity'] = 2
+        self.assertEqual(self.client.patch(self.endpoint(order), payload, format='json').status_code, 400)
+        self.assertEqual(PrintOrder.objects.get().revision, 2)
+
+    def test_historical_multi_snapshot_reads_and_retry_never_recalculate(self):
+        order = self.create()
+        original = PrintOrder.objects.get()
+        original.snapshot = {**original.snapshot, 'quantity': 3}
+        original.amount = '30.00'
+        original.save()
+        for status in ('pending', 'paid', 'printing', 'completed', 'cancelled'):
+            PrintOrder.objects.filter(pk=original.pk).update(status=status)
+            before = list(PrintOrder.objects.values())
+            detail = self.client.get(self.endpoint(order))
+            self.assertEqual(detail.data['snapshot']['quantity'], 3)
+            self.assertEqual(str(detail.data['amount']), '30.00')
+            self.client.get('/api/v1/store/orders/')
+            retry = self.client.post('/api/v1/store/orders/', self.payload, format='json')
+            self.assertEqual(retry.status_code, 200)
+            self.assertEqual(retry.data['snapshot']['quantity'], 3)
+            self.assertEqual(list(PrintOrder.objects.values()), before)
+            revision = {'revision': original.revision, 'accepted': True, 'quantity': 1,
+                        'snapshot': {**self.payload['snapshot'], 'code': 'POP-C-FEDCBA9876543210'}}
+            self.assertEqual(self.client.patch(self.endpoint(order), revision, format='json').status_code, 409)
+            self.assertEqual(list(PrintOrder.objects.values()), before)
