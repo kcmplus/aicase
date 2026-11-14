@@ -28,8 +28,9 @@ function creditActivity(ui){
 export function customerPage(account,ui){
  const signedIn=account.authenticated===true,gift=Math.max(0,Number(account.signupCredits)||0);
  const subscription=account.subscription, balance={trial:signedIn?Math.max(0,Number(account.trialRemaining)||0):0,monthly:signedIn&&subscription&&Date.now()<subscription.endsAt?Math.max(0,(Number(subscription.monthlyLimit)||0)-(Number(subscription.used)||0)):0};
+ const zh=locale()==='zh-CN';
  const customer=account.customer||{},joined=customer.joinedAt?new Date(customer.joinedAt).toLocaleDateString(locale()):'';
- return `<section class="flow wrap account-flow"><a class="back-link" href="#choose">← Back to your design</a><div class="account-card"><span class="account-symbol" aria-hidden="true">${icon(signedIn?'check':'spark',28)}</span><p class="eyebrow">YOUR POPOMO ACCOUNT</p><h1>${signedIn?'A little more you.':gift?'Your first look is on us.':'Sign in to use AI Studio'}</h1>
+ return `<section class="flow wrap account-flow v35-account-layout"><aside class="v35-account-story"><p class="v35-kicker">YOUR MOMENTS. MADE YOURS.</p><h2>${zh?'多一点，<br><em>你的风格。</em>':'A little more<br><em>you.</em>'}</h2><p>${zh?'把喜欢的照片变成灵感，把创意带在身边。':'A favorite photo. A new idea. A case that feels like you.'}</p><div class="v35-account-art" aria-hidden="true">✳</div><a class="text-button" href="#my-designs">${zh?'本机保存的设计 →':'Saved on this browser →'}</a><p>${zh?'设计按当前身份保存在本浏览器，退出或换号不会将草稿归入其他账户，不提供云同步。':'Local designs stay with their original identity on this browser when you sign out or change accounts. No cloud sync.'}</p></aside><div class="v35-account-form"><a class="back-link" href="#choose">← Back to your design</a><div class="account-card"><span class="account-symbol" aria-hidden="true">${icon(signedIn?'check':'spark',28)}</span><p class="eyebrow">YOUR POPOMO ACCOUNT</p><h1>${signedIn?'A little more you.':gift?'Your first look is on us.':'Sign in to use AI Studio'}</h1>
  ${signedIn?`<p class="account-email" translate="no">${esc(customer.email)}</p><span class="account-verified">${icon('check',14)} Email verified</span>
  <div class="account-balances"><div class="account-balance"><strong>${balance.trial}</strong><span>Gift generations remaining</span></div><div class="account-balance"><strong>${balance.monthly}</strong><span>Monthly generations remaining</span></div></div>
  <p class="account-credit-note">Signup gifts and extra credits share one balance. Failed renders return your generation.</p>
@@ -43,5 +44,5 @@ export function customerPage(account,ui){
  <button class="button primary full" type="submit" ${ui.busy?'disabled':''}>${ui.busy?'Please wait…':ui.codeSent?'Verify & continue':'Send sign-in code'}</button></form>
  ${ui.codeSent?`<div class="account-secondary"><button class="text-button" data-customer-action="resend" ${ui.busy||Date.now()<ui.resendAt?'disabled':''}>Resend code</button><button class="text-button" data-customer-action="change-email" ${ui.busy?'disabled':''}>Use another email</button></div>`:''}<p class="account-note">We only send account emails. Your photo stays in your design.</p>`}
  ${ui.success?`<p class="account-sent" role="status">${esc(ui.success)}</p>`:''}
- ${ui.error?`<p class="account-error" role="alert">${esc(ui.error)}</p>`:''}</div></section>`;
+ ${ui.error?`<p class="account-error" role="alert">${esc(ui.error)}</p>`:''}</div></div></section>`;
 }

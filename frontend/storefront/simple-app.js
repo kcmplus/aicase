@@ -32,8 +32,9 @@ import {aiStyles,refreshAIOrder,canApplyAIOrder} from './ai-core.js';
 import {createLiveRender,getAIAccount,changeAIAccount,submitLiveRender,refreshLiveRender,cancelLiveRender} from './ai-service.js';
 import {importPhoto} from './simple-upload.js';
 import {customerPage,sendEmailCode,verifyEmailCode,signOutCustomer,updateCustomerName,getCustomerCredits} from './customer-account.js';
+import {createDesignWorkspace,createDesignLibrary,designOwner} from './design-workspace.js';
+import {myDesignsPage,designReview} from './v35-designs.js';
 
-const KEY = 'popomo-simple-v1';
 const app = document.querySelector('#app');
 app.textContent=t('Loading POPOMO…');
 const stockScope=deviceScope();
@@ -42,8 +43,17 @@ const scannedIds=scopeIds(stockScope);
 let stationError='',lastScannedStation=null;
 async function readScannedStation(){if(!scannedIds)return null;try{const data=await loadDeviceInfo({deviceId:scannedIds.device_id,shopId:scannedIds.shop_id});stationError='';lastScannedStation=data;return data;}catch(error){stationError=error.message||'connection';if(stationError!=='connection')lastScannedStation=null;return null;}}
 let scannedStation=null;
-const initialData=await Promise.all([loadCatalog(),loadStockCatalog(undefined,stockScope),fulfillmentConfig(),readScannedStation()]);
+const initialData=await Promise.all([loadCatalog(),loadStockCatalog(undefined,stockScope),fulfillmentConfig(),readScannedStation(),getAIAccount().catch(()=>null)]);
 const devicePrinting=initialData[2];scannedStation=initialData[3];
+const workspace=createDesignWorkspace(initialData[4],{read:readDesign,write:writeDesign,update:updateDesign});
+const KEY=workspace.active?workspace.key('editor'):null;
+// Orders retain their existing browser access contract. Private design/AI data
+// has its own namespace and cannot be restored from an old unassigned cache.
+const privateRead=name=>workspace.active?workspace.read(name):Promise.resolve(undefined);
+const privateWrite=(name,value)=>workspace.write(name,value);
+const privateUpdate=(name,transform,initial)=>workspace.update(name,transform,initial);
+const library=createDesignLibrary(workspace,{validate:pass=>readPass(pass.code,pass)});
+let localDesigns=[],localDesignError='',localDesignBusy=false,reviewPass=null,reviewSaved=false,noticeTimer;
 let state = {designId:'bloom',model:'',pass:null,stationId:'DEMO-01',job:null,source:'collection',photo:'',effect:'original',intensity:65,zoom:100,x:50,y:50,aiStyle:'anime',aiExample:'portrait',artworkLayouts:{},photoArtwork:[],keepCollection:false,photoPlacement:null,photoOrigin:'upload',ai:null,aiJobId:null};
 let storageWarning = false;
 let aiJob=null,aiBusy=false;
@@ -52,15 +62,16 @@ let cleanupAIStudio=()=>{};
 let cleanupShell=()=>{};
 const customerUI={email:'',codeSent:false,busy:false,error:'',success:'',ledger:[],ledgerNext:null,ledgerOpen:false,ledgerBusy:false,ledgerError:'',resendAt:0,next:'choose'};
 let resendTimer;
-let membership=await updateDesign('ai-membership-v1',a=>({...refreshMembership(a),server:true,authenticated:false,customer:null,trialRemaining:0,subscription:null}),freshMembership());
+let membership={...freshMembership(),server:true,authenticated:false,customer:null,...(initialData[4]||{})};
+if(workspace.active)membership=await privateUpdate('ai-membership-v1',a=>({...a,...membership,jobs:a.jobs||{}}),freshMembership());
 let orderBook=await updateDesign('print-orders-v1',v=>v,freshOrders());
-let checkoutDraft=await readDesign('checkout-draft');
+let checkoutDraft=await privateRead('checkout-draft');
 for(const order of Object.values(orderBook.orders||{}))if(order.phoneTemplate)try{registerSupplierTemplates([order.phoneTemplate]);}catch{}
 if(checkoutDraft?.phoneTemplate)try{registerSupplierTemplates([checkoutDraft.phoneTemplate]);}catch{}
 let orderRows=[],orderPage=1,orderHasMore=false,orderError='',entryOrders=null,entryOrderError='';
 let paymentConfig=null,paymentError='',paymentOrder=null,paymentPollTimer,paymentPollCount=0,paymentLoading=false,navigationId=0;
 try {
-  const saved = JSON.parse(localStorage.getItem(KEY));
+  const saved = KEY?JSON.parse(localStorage.getItem(KEY)):null;
   if (saved) {
     if (designs.some(d=>d.id===saved.designId)) state.designId=saved.designId;
     if (phoneModels.includes(saved.model)) state.model=saved.model;
@@ -71,7 +82,7 @@ try {
     state.photoOrigin=aiExamples.some(e=>e.origin===saved.photoOrigin)?saved.photoOrigin:'upload';
     if(typeof saved.editOrderId==='string')state.editOrderId=saved.editOrderId;
     if(saved.ai&&/^[a-zA-Z0-9_-]{1,80}$/.test(saved.ai.styleId||''))state.ai=saved.ai;
-    if(typeof saved.aiJobId==='string'){try{aiJob=await updateDesign('ai-job:'+saved.aiJobId,refreshAIOrder);state.aiJobId=aiJob.id;}catch{}
+    if(typeof saved.aiJobId==='string'){try{aiJob=await privateUpdate('ai-job:'+saved.aiJobId,refreshAIOrder);state.aiJobId=aiJob.id;}catch{}
       if(membership.jobs[saved.aiJobId]){aiJob=membership.jobs[saved.aiJobId];state.aiJobId=aiJob.id;}}
     if(saved.artworkLayouts&&typeof saved.artworkLayouts==='object')for(const [id,layout] of Object.entries(saved.artworkLayouts)){
       try{const p=createPersonalPass({source:'collection',designId:id,model:phoneModels[0]||'iPhone 17',effect:'original',intensity:0,zoom:layout.zoom,x:layout.x,y:layout.y,artworkEdits:layout.artworkEdits,addedArtwork:layout.addedArtwork});state.artworkLayouts[id]={zoom:p.zoom,x:p.x,y:p.y,artworkEdits:p.artworkEdits||{},addedArtwork:p.addedArtwork||[]};}catch{}
@@ -81,7 +92,7 @@ try {
     state.keepCollection=saved.keepCollection===true;
     if(effects.some(e=>e.id===saved.effect))state.effect=saved.effect;
     for(const [key,min,max] of [['intensity',0,100],['zoom',100,180],['x',0,100],['y',0,100]])if(Number.isFinite(saved[key]))state[key]=Math.max(min,Math.min(max,saved[key]));
-    try{const photo=await readDesign('draft-photo');if(isPhoto(photo))state.photo=photo;}catch{}
+    try{const photo=await privateRead('draft-photo');if(isPhoto(photo))state.photo=photo;}catch{}
     if (saved.pass) {try{state.pass=await resolvePass(saved.pass.code);}catch{}}
     if (saved.job && ['printing','ready','collected'].includes(saved.job.status) && stations.some(s=>s.id===saved.job.stationId)) {
       try{state.job={...saved.job,pass:await resolvePass(saved.job.pass.code)};}catch{}
@@ -91,11 +102,10 @@ try {
 state.phoneTemplateId=stockSelection(state.model)?.templateId;
 state.aiExample=exampleFor(state.aiExample).id;
 if(!exampleFor(state.aiExample).results[state.aiStyle])state.aiStyle=Object.keys(exampleFor(state.aiExample).results)[0]||'';
-membership=await updateDesign('ai-membership-v1',a=>migrateRender(a,aiJob),freshMembership());
+if(workspace.active)membership=await privateUpdate('ai-membership-v1',a=>migrateRender(a,aiJob),freshMembership());
 if(aiJob)aiJob=membership.jobs[aiJob.id];
 if(aiJob?.status==='awaiting_confirmation')customerUI.next='ai';
 try{if(location.hash.slice(1).split('?')[0]!=='checkout')await syncAIAccount();if(aiJob?.mode==='live')await rememberLiveJob(await refreshLiveRender(aiJob));}catch{/* A saved job can be resumed when the service returns. */}
-let noticeTimer;
 let comparing=false,photoBusy=false,passBusy=false;
 let effectPanelOpen=false,cropPanelOpen=false,selectedArtwork=null,libraryExpanded=false;
 const editorPanels={collection:false,graphics:false};
@@ -124,7 +134,7 @@ function clearPreviousPhotoArtwork(){
 // Saved orders and render snapshots have their own copies and remain resumable.
 async function clearPhotoDraft(){
  finishInlineText();
- await writeDesign('draft-photo','');
+ await privateWrite('draft-photo','');
  Object.assign(state,{photo:'',photoOrigin:'upload',ai:null,effect:'original',intensity:65,zoom:100,x:50,y:50});
  clearPreviousPhotoArtwork();selectedArtwork=null;
  effectPanelOpen=false;cropPanelOpen=false;
@@ -221,7 +231,7 @@ async function resolvePass(code){
  const key=String(code).trim().toUpperCase();orderBook=await readDesign('print-orders-v1')||freshOrders();let order=orderForCode(orderBook,key);
  if(order?.server)order=await refreshOrder(order.id);
  if(order)return currentOrder(orderBook,key).pass;
- return readPass(key,key.startsWith('POP-C-')?await readDesign(key):undefined);
+ return readPass(key,key.startsWith('POP-C-')?await privateRead(key):undefined);
 }
 async function orderAction(order,action,stationId){
  const data=await orderRequest(order.id+'/actions/',{method:'POST',body:{revision:order.revision,action,code:order.pass.code,...(stationId?{station_id:stationId}:{})}});
@@ -301,8 +311,8 @@ const arrow = () => icon('arrow',18);
 const currentDesign = id => designs.find(d=>d.id===id) || designs[0];
 const casePreview = (id,model=phoneModels[0]) => phone(designFor(id),model,'',{loading:'lazy',sizes:'(max-width: 700px) 100px, 180px'}).replace(/aria-label="[^"]*"/,`aria-label="${esc(currentDesign(id).name+' on '+model)}"`);
 function save() {
-  try {const ref=p=>p?.version===2?{code:p.code}:p;localStorage.setItem(KEY,JSON.stringify({...state,photo:undefined,pass:ref(state.pass),job:state.job?{...state.job,pass:ref(state.job.pass)}:null}));storageWarning=false;}
-  catch {storageWarning=true;notify('Your browser could not save this pass. Download the QR code or write down the code.');}
+  try {workspace.check();const ref=p=>p?.version===2?{code:p.code}:p;localStorage.setItem(KEY,JSON.stringify({...state,photo:undefined,pass:ref(state.pass),job:state.job?{...state.job,pass:ref(state.job.pass)}:null}));storageWarning=false;}
+  catch {storageWarning=true;notify('Your design could not be saved on this browser. Please reload and try again.');}
 }
 function notify(message) {
   const el=document.querySelector('#notice');el.textContent=t(message);el.classList.add('visible');
@@ -393,7 +403,7 @@ async function receivePhoto(file,{startFresh=false}={}){
  photoBusy=true;render(true);
  try{
   const photo=await importPhoto(file);
-  await writeDesign('draft-photo',photo);
+  await privateWrite('draft-photo',photo);
   Object.assign(state,{photo,photoOrigin:'upload',ai:null,effect:'original',source:'photo',zoom:100,x:50,y:50,intensity:65});
   clearPreviousPhotoArtwork();
   // A homepage upload starts a new design only after the image is safely saved.
@@ -419,7 +429,7 @@ app.addEventListener('drop',async event=>{
 });
 function choose() {
  const d=currentDesign(state.designId),own=state.source==='photo',hasPhoto=Boolean(state.photo);
- return `<section class="flow wrap editor-flow">${stationContext()}${steps(0)}${phonePicker()}
+ return `<section class="flow wrap editor-flow v35-editor">${stationContext()}<div class="v35-editor-heading"><div><p class="v35-kicker">A LITTLE MORE YOU.</p><h1>${locale()==='zh-CN'?'让灵感，成为你的设计。':'Make it yours.'}</h1></div><a class="text-button" href="#my-designs">${locale()==='zh-CN'?'本机保存的设计 →':'Saved on this browser →'}</a></div>${phonePicker()}
  <div class="choose-layout">
   <div class="source-switch editor-sources" role="group" aria-label="Design source"><button type="button" data-source="collection" aria-pressed="${!own}" ${photoBusy?'disabled':''}>The collection</button><button type="button" data-source="photo" aria-pressed="${own}" aria-busy="${photoBusy}" ${photoBusy?'disabled':''}>${photoBusy?'<i class="studio-spinner"></i> Reading your photo…':icon('upload',15)+' Your photo'}</button></div>
   <div class="large-preview" ${own?'data-photo-drop':''} aria-busy="${photoBusy}" style="--card:${own?'#eeece7':d.color}">
@@ -431,10 +441,35 @@ function choose() {
    ${own?'':`<details class="editor-panel" data-editor-panel="collection" ${editorPanels.collection?'open':''}><summary><span class="editor-tool-icon" aria-hidden="true">${icon('image',18)}</span><span>Collection</span><small>${esc(d.name)}</small><span class="editor-chevron" aria-hidden="true">⌄</span></summary><div class="editor-panel-body"><fieldset class="design-choices visual-design-choices"><legend class="sr-only">Pick a design</legend>${designs.map(item=>`<button type="button" data-design="${item.id}" class="design-thumbnail ${d.id===item.id?'selected':''}" aria-label="${item.name}" aria-pressed="${d.id===item.id}" style="--swatch:${designFor(item.id).background}"><span class="design-thumbnail-case">${casePreview(item.id,state.model||phoneModels[0])}</span><span class="design-thumbnail-check" aria-hidden="true">${d.id===item.id?'✓':''}</span></button>`).join('')}</fieldset></div></details>`}
    ${stylePanel(state,aiJob,effectPanelOpen,membership,aiUi)}${creativeLibrary()}
    ${own&&state.ai?'<p class="effect-selection">✓ AI image applied · You can adjust the crop or replace the photo above.</p>':''}
-   <div class="editor-next"><form id="design-form"><button class="button primary full" type="submit" ${photoBusy||passBusy||own&&!hasPhoto||!PRINT_AVAILABLE&&!state.editOrderId?'disabled':''}>${passBusy?'Saving your design…':'Next'} ${arrow()}</button></form></div>
+   <div class="editor-next"><form id="design-form"><button class="button primary full" type="submit" ${photoBusy||passBusy||own&&!hasPhoto?'disabled':''}>${passBusy?'Saving your design…':'Preview your design'} ${arrow()}</button></form><p class="v35-page-note">${locale()==='zh-CN'?'预览后可保存本机副本，再确认订单。':'Preview and save a local copy before reviewing your order.'}</p></div>
   </div>
  </div>${canvasEditor()}</section>`;
 }
+function privateWorkspaceNotice(){
+ const zh=locale()==='zh-CN';
+ return `<section class="v35-page v35-wrap v35-empty"><h1>${zh?'请先核实登录状态。':'Check your sign-in first.'}</h1><p role="alert">${zh?'当前私有视图已清空，设计仍保留在原身份的本机空间。重新载入后从服务端核实身份。':'The private view is cleared. Designs remain in their original local workspace. Reload to verify your session with the server.'}</p><button class="button primary" data-action="reload-private-workspace">${zh?'重新载入':'Reload'}</button><a class="text-button" href="#home">${zh?'返回首页':'Home'}</a></section>`;
+}
+async function loadLocalDesigns(){
+ localDesignBusy=true;localDesignError='';
+ try{
+  // Frozen preview templates can survive their removal from the current catalog.
+  const rows=await privateRead('saved-designs')||[];
+  for(const row of rows)if(row.phoneTemplate?.id?.startsWith('supplier-'))registerSupplierTemplates([row.phoneTemplate]);
+  localDesigns=await library.list();
+ }catch(error){localDesigns=[];localDesignError=error.message;}
+ finally{localDesignBusy=false;}
+}
+async function restoreLocalDesign(pass){
+ const p=readPass(pass.code,pass);
+ if(p.source==='photo')await privateWrite('draft-photo',p.photo);
+ workspace.check();finishInlineText();
+ Object.assign(state,{source:p.source,designId:p.designId,model:phoneModels.includes(p.model)?p.model:'',phoneTemplateId:p.phoneTemplateId,photo:p.source==='photo'?p.photo:'',effect:p.effect,intensity:p.intensity,zoom:p.zoom,x:p.x,y:p.y,ai:p.ai||null,aiJobId:null,photoOrigin:'upload',photoArtwork:p.source==='photo'?structuredClone(p.addedArtwork||[]):[],photoPlacement:structuredClone(p.photoPlacement||null),keepCollection:Boolean(p.collectionLayout),artworkLayouts:{},pass:null,job:null,editOrderId:null});
+ if(p.source==='collection')state.artworkLayouts[p.designId]={zoom:p.zoom,x:p.x,y:p.y,artworkEdits:structuredClone(p.artworkEdits||{}),addedArtwork:structuredClone(p.addedArtwork||[])};
+ if(p.collectionLayout)state.artworkLayouts[p.designId]={...structuredClone(p.collectionLayout),addedArtwork:[]};
+ aiJob=null;selectedArtwork=null;comparing=false;reviewPass=null;save();go('choose');
+ if(!state.model)notify('This phone model is out of stock or unavailable. Please choose again.');
+}
+function closeDesignReview(){reviewPass=null;reviewSaved=false;document.querySelector('.v35-design-review')?.close();render(true);document.querySelector('#design-form button')?.focus({preventScroll:true});}
 function passPage() {
  const pass=state.pass,zh=locale()==='zh-CN',say=(en,cn)=>zh?cn:en;
  if(!pass)return `<section class="empty wrap"><h1>${say('Choose your photo first.','先选择你的照片。')}</h1><a class="button primary" href="#choose">${say('Create a design','开始设计')}</a></section>`;
@@ -537,17 +572,20 @@ function render(preserveScroll=false) {
   cleanupShell();
   const oldY=window.scrollY;
   const [route='home',query='']=location.hash.slice(1).split('?');
+  if(route!=='choose'){reviewPass=null;reviewSaved=false;}
   canvasObserver?.disconnect();canvasObserver=null;canvasHome=null;
   if(route!=='choose')canvasExpanded=false;
   if(route!=='choose')effectPanelOpen=false;
   document.body.classList.toggle('canvas-editor-open',canvasExpanded);
-  const pages={account:()=>customerPage(membership,customerUI),choose,pass:passPage,kiosk:()=>publicStationPage(true),designs:()=>worksPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),work:()=>workDetailPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),'how-it-works':()=>tutorialPage({lang:locale()}),about:()=>aboutPage({lang:locale()}),locations:publicStationPage,printers:publicStationPage,ai:()=>aiPage(aiJob,membership,aiBusy,aiUi),membership:()=>membershipInfoPage({account:membership,lang:locale()}),checkout:checkoutPage,orders:ordersPage,payment:paymentPage};
+  const pages={account:()=>customerPage(membership,customerUI),'my-designs':()=>myDesignsPage({rows:localDesigns,lang:locale(),preview:passPreview,error:localDesignError,busy:localDesignBusy,guest:workspace.owner==='guest'}),choose,pass:passPage,kiosk:()=>publicStationPage(true),designs:()=>worksPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),work:()=>workDetailPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),'how-it-works':()=>tutorialPage({lang:locale()}),about:()=>aboutPage({lang:locale()}),locations:publicStationPage,printers:publicStationPage,ai:()=>aiPage(aiJob,membership,aiBusy,aiUi),membership:()=>membershipInfoPage({account:membership,lang:locale()}),checkout:checkoutPage,orders:ordersPage,payment:paymentPage};
   app.classList.toggle('is-ai-studio',route==='ai'&&aiJob?.mode==='live');
   app.classList.toggle('is-editor',route==='choose');
   document.body.classList.toggle('v35-home-page',!Object.hasOwn(pages,route));
-  app.innerHTML=header()+`<main id="main" tabindex="-1">${catalogStatus==='unavailable'?'<div class="catalog-warning" role="status">Prices and AI previews could not be loaded. Your saved designs are still available. <button class="text-button" data-action="reload-catalog">Try again</button></div>':''}${(Object.hasOwn(pages,route)?pages[route]:home)()}</main>`+footer();
+  const privateRoute=['choose','pass','ai','membership','my-designs','checkout','orders','payment'].includes(route);
+  document.body.dataset.v35Route=route;
+  app.innerHTML=header()+`<main id="main" tabindex="-1">${catalogStatus==='unavailable'?'<div class="catalog-warning" role="status">Prices and AI previews could not be loaded. Your saved designs are still available. <button class="text-button" data-action="reload-catalog">Try again</button></div>':''}${!workspace.active&&privateRoute?privateWorkspaceNotice():(Object.hasOwn(pages,route)?pages[route]:home)()}${route==='choose'&&workspace.active?designReview({pass:reviewPass,preview:passPreview,lang:locale(),busy:passBusy,saved:reviewSaved}):''}</main>`+footer();
   if(aiBusy)document.querySelectorAll('[data-ai-action],#ai-credit-form button,#ai-subscription-form button').forEach(el=>el.disabled=true);
-  const title=({account:'My account',choose:'Choose your case',pass:'Your design pass',kiosk:'Print locations',designs:'Works center',work:'Design details','how-it-works':'How to use',about:'About POPOMO',locations:'Print locations',printers:'Print locations',ai:'Your AI render',membership:'AI membership',checkout:'Review print order',orders:'My orders',payment:'Payment status'})[route];
+  const title=({account:'My account','my-designs':'My designs',choose:'Choose your case',pass:'Your design pass',kiosk:'Print locations',designs:'Works center',work:'Design details','how-it-works':'How to use',about:'About POPOMO',locations:'Print locations',printers:'Print locations',ai:'Your AI render',membership:'AI membership',checkout:'Review print order',orders:'My orders',payment:'Payment status'})[route];
   document.title=title?`${t(title)} · POPOMO`:t('POPOMO — A little more you.');
   localize(app);document.querySelector('.skip-link').textContent=t('Skip to content');
   cleanupAIStudio=mountAIStudio(app,aiJob,aiUi);
@@ -556,6 +594,8 @@ function render(preserveScroll=false) {
   document.querySelectorAll('[data-editor-panel]').forEach(bindEditorPanel);
   document.querySelector('.canvas-editor')?.addEventListener('cancel',event=>{event.preventDefault();closeCanvasEditor();});
   document.querySelector('.look-browser')?.addEventListener('cancel',event=>{event.preventDefault();closeAIStudio();});
+  const review=document.querySelector('.v35-design-review');
+  if(review){review.addEventListener('cancel',event=>{event.preventDefault();closeDesignReview();});review.showModal();}
   if(canvasExpanded)openCanvasEditor();
   else if(effectPanelOpen)openAIStudio();
   highlightArtwork();
@@ -653,7 +693,7 @@ app.addEventListener('change',async event=>{
     if(passBusy)return;
     if(!['pickup','courier','air'].includes(event.target.value))return;
     checkoutDraft.fulfillmentType=event.target.value;checkoutDraft.requestKey=crypto.randomUUID();
-    await writeDesign('checkout-draft',checkoutDraft);render(true);return;
+    await privateWrite('checkout-draft',checkoutDraft);render(true);return;
   }
   if(event.target.id==='language'){
     if(aiBusy||photoBusy||passBusy)return;
@@ -684,6 +724,7 @@ app.addEventListener('input',event=>{
   if(event.target.id==='effect-strength'){state.intensity=Number(event.target.value);document.getElementById('intensity-value').textContent=state.intensity+'%';document.getElementById('selected-strength').textContent=state.intensity+'%';updatePreview();save();}
 });
 app.addEventListener('submit',async event=>{
+  if(sessionCheckBusy){event.preventDefault();return;}
   if(event.target.id==='customer-profile-form'){event.preventDefault();await handleCustomer('profile',new FormData(event.target));return;}
   if(event.target.id==='customer-email-form'){event.preventDefault();const fields=new FormData(event.target);await handleCustomer(customerUI.codeSent?'verify':'send',fields);return;}
   if(event.target.id==='ai-credit-form'||event.target.id==='ai-subscription-form'){
@@ -694,18 +735,19 @@ app.addEventListener('submit',async event=>{
   if(event.target.id==='print-checkout-form'){event.preventDefault();if(passBusy||!checkoutDraft)return;passBusy=true;
     const button=event.target.querySelector('button');button.disabled=true;button.textContent=t('Saving your order…');
     try{
+      await syncAIAccount();workspace.check();
       const values=new FormData(event.target),accepted=values.has('accepted'),existing=orderBook.orders[checkoutDraft.editId];let order;
       if(!existing&&checkoutDraft.fulfillmentType&&checkoutDraft.fulfillmentType!=='pickup')throw Error('Courier and air delivery are not available for checkout yet. Your design is saved; no payment has been taken.');
       if(!existing&&!paymentConfig?.available)throw Error('Payment is unavailable. Please reload and try again.');
       if(checkoutDraft.editId&&!existing)throw Error('This order could not be loaded. Open it from My orders and retry.');
       if(existing&&!existing.server){let result;orderBook=await updateDesign('print-orders-v1',b=>{result=commitPrintOrder(b,checkoutDraft.pass,{accepted,editId:existing.id});return result.book;},freshOrders());order=result.order;}
       else{
-        checkoutDraft.requestKey||=crypto.randomUUID();await writeDesign('checkout-draft',checkoutDraft);
+        checkoutDraft.requestKey||=crypto.randomUUID();await privateWrite('checkout-draft',checkoutDraft);
         const data=existing?await orderRequest(existing.id+'/',{method:'PATCH',body:{accepted,revision:checkoutDraft.revision??existing.revision,snapshot:checkoutDraft.pass}}):await orderRequest('',{method:'POST',body:checkoutBody(checkoutDraft,{accepted,email:String(values.get('email')||''),account:membership,amount:(PRINT_PRICE_CENTS/100).toFixed(2),provider:paymentConfig.provider,mode:paymentConfig.mode})});
         order=await rememberOrder(data);
       }
       if(devicePrinting.enabled&&isProviderOrder(order))order=await prepareDeviceOrder(order,stockScope,{save:rememberOrder});
-      state.pass=order.pass;state.job=null;state.editOrderId=null;checkoutDraft=null;await writeDesign('checkout-draft',null);save();
+      state.pass=order.pass;state.job=null;state.editOrderId=null;checkoutDraft=null;await privateWrite('checkout-draft',null);save();
       if(isProviderOrder(order)){paymentOrder=order;go('payment?order='+order.id);if(order.status==='pending'){render(true);await openPaymentCheckout(order.id);}}else go('pass');
     }
     catch(error){if(paymentOrder)paymentError=error.message;if(error.message==='Your sign-in changed. Reload checkout to review your email.'){paymentError=error.message;paymentConfig=null;}notify(error.message);}finally{passBusy=false;render(true);}return;
@@ -720,15 +762,52 @@ app.addEventListener('submit',async event=>{
       if(!available)throw Error('This phone model is out of stock or unavailable. Please choose again.');
       if(submitted.phoneTemplateId&&submitted.phoneTemplateId!==available.templateId){state.phoneTemplateId=available.templateId;throw Error('The phone template changed. Please review your design again.');}
       const pass=createPersonalPass({...layoutSelection(submitted),phoneTemplateId:available.templateId});
-      checkoutDraft={pass,fulfillmentType:orderBook.orders[state.editOrderId]?.fulfillmentType||checkoutDraft?.fulfillmentType||'pickup',phoneTemplate:phoneTemplate(pass.model,pass.phoneTemplateId),editId:state.editOrderId||null,requestKey:crypto.randomUUID(),revision:orderBook.orders[state.editOrderId]?.revision};await writeDesign('checkout-draft',checkoutDraft);comparing=false;go('checkout');
+      reviewPass=pass;reviewSaved=false;comparing=false;
     }catch(error){notify(error.message||'The design could not be saved. Please try again.');}
     finally{passBusy=false;if(location.hash.startsWith('#choose'))render(true);}
   }
   if(event.target.id==='v35-work-search'){event.preventDefault();const fields=new FormData(event.target),params=new URLSearchParams({category:String(fields.get('category')||'all'),q:String(fields.get('q')||'').slice(0,100)});go('designs?'+params);}
 });
 app.addEventListener('click',async event=>{
-  const el=event.target.closest('[data-phone-brand],[data-phone-model],[data-action],[data-design],[data-start-design],[data-source],[data-effect],[data-ai-action],[data-ai-look-example],[data-ai-look-step],[data-look-action],[data-look-mode],[data-ai-group],[data-ai-view],[data-artwork-item],[data-add-graphic],[data-quick-font],[data-quick-color]');if(!el||el.disabled||photoBusy||passBusy||aiBusy)return;
+  const el=event.target.closest('[data-phone-brand],[data-phone-model],[data-action],[data-design],[data-start-design],[data-source],[data-effect],[data-ai-action],[data-ai-look-example],[data-ai-look-step],[data-look-action],[data-look-mode],[data-ai-group],[data-ai-view],[data-artwork-item],[data-add-graphic],[data-quick-font],[data-quick-color]');if(!el||el.disabled||photoBusy||passBusy||aiBusy||sessionCheckBusy)return;
   if(el.dataset.action==='home-photo'){openPhotoPicker();return;}
+  if(el.dataset.action==='reload-private-workspace'){location.reload();return;}
+  if(el.dataset.action==='close-design-review'){closeDesignReview();return;}
+  if(['save-local-design','continue-design-checkout','restore-design','delete-design','refresh-designs','restore-legacy-draft'].includes(el.dataset.action)){
+   event.preventDefault();passBusy=true;
+   try{
+    workspace.check();
+    if(el.dataset.action==='save-local-design'){
+     if(!reviewPass)throw Error('Preview your design again before saving.');
+     await library.save(reviewPass,phoneTemplate(reviewPass.model,reviewPass.phoneTemplateId));reviewSaved=true;
+     notify(locale()==='zh-CN'?'设计已保存到当前身份的本机空间。':'Design saved on this browser for your current account.');
+    }else if(el.dataset.action==='continue-design-checkout'){
+     if(!reviewPass)throw Error('Preview your design again before ordering.');
+     if(!PRINT_AVAILABLE&&!state.editOrderId)throw Error('Printing is unavailable. Your local design can still be saved.');
+     await refreshStockChoices();const available=stockSelection(reviewPass.model);
+     if(!available||available.templateId!==reviewPass.phoneTemplateId)throw Error('The phone template changed. Please review your design again.');
+     const pass=reviewPass;
+     checkoutDraft={pass,fulfillmentType:orderBook.orders[state.editOrderId]?.fulfillmentType||checkoutDraft?.fulfillmentType||'pickup',phoneTemplate:phoneTemplate(pass.model,pass.phoneTemplateId),editId:state.editOrderId||null,requestKey:crypto.randomUUID(),revision:orderBook.orders[state.editOrderId]?.revision};
+     await privateWrite('checkout-draft',checkoutDraft);reviewPass=null;go('checkout');
+    }else if(el.dataset.action==='refresh-designs')await loadLocalDesigns();
+    else if(el.dataset.action==='delete-design'){
+     await library.remove(el.dataset.id);await loadLocalDesigns();
+    }else if(el.dataset.action==='restore-design'){
+     const row=localDesigns.find(row=>row.id===el.dataset.id);if(!row)throw Error('This saved design could not be found.');
+     await restoreLocalDesign(row.pass);
+    }else if(el.dataset.action==='restore-legacy-draft'){
+     if(workspace.owner!=='guest')throw Error('Older browser drafts are separate from signed-in accounts.');
+     const legacy=JSON.parse(localStorage.getItem('popomo-simple-v1')||'null');
+     if(!legacy)throw Error('No older browser draft was found.');
+     const photo=await readDesign('draft-photo');
+     // Copy only validated design fields, never legacy identity, jobs or orders.
+     const pass=createPersonalPass({...layoutSelection({...legacy,photo:legacy.source==='photo'?photo:''}),ai:null});
+     await restoreLocalDesign(pass);
+    }
+   }catch(error){notify(error.message);}
+   finally{passBusy=false;render(true);}
+   return;
+  }
   if(el.dataset.lookAction==='open'){openAIStudio();return;}
   if(el.dataset.lookAction==='close'){closeAIStudio();return;}
   if(el.dataset.lookAction==='zoom'){zoomAIStudio();return;}
@@ -829,7 +908,7 @@ if(selectedArtwork==='all'){const layout=artworkLayout();layout.zoom=100;layout.
     if(el.dataset.action==='reset-crop'){state.zoom=100;state.x=50;state.y=50;save();render(true);}
     if(['edit-pass','new-order-from-pass'].includes(el.dataset.action)){
       event.preventDefault();const current=orderForCode(orderBook,state.pass.code);if(current?.server){const latest=await refreshOrder(current.id);state.pass=latest.pass;}const p=state.pass;orderBook=await readDesign('print-orders-v1')||freshOrders();const order=orderForCode(orderBook,p.code);selectedArtwork=null;if(p.source==='collection')state.artworkLayouts[p.designId]={zoom:p.zoom,x:p.x,y:p.y,artworkEdits:structuredClone(p.artworkEdits||{}),addedArtwork:structuredClone(p.addedArtwork||[])};state.editOrderId=el.dataset.action==='edit-pass'&&order?.mode==='demo'&&order?.status==='paid'?order.id:null;
-      if(p.version===2){if(p.source==='photo')await writeDesign('draft-photo',p.photo);Object.assign(state,{source:p.source,designId:p.designId,model:p.model,photo:p.source==='photo'?p.photo:state.photo,effect:p.effect,intensity:p.intensity,zoom:p.zoom,x:p.x,y:p.y,ai:p.ai||null,photoOrigin:'upload',...(p.source==='photo'?{photoArtwork:structuredClone(p.addedArtwork||[]),photoPlacement:structuredClone(p.photoPlacement||null),keepCollection:Boolean(p.collectionLayout)}:{})});}
+      if(p.version===2){if(p.source==='photo')await privateWrite('draft-photo',p.photo);Object.assign(state,{source:p.source,designId:p.designId,model:p.model,photo:p.source==='photo'?p.photo:state.photo,effect:p.effect,intensity:p.intensity,zoom:p.zoom,x:p.x,y:p.y,ai:p.ai||null,photoOrigin:'upload',...(p.source==='photo'?{photoArtwork:structuredClone(p.addedArtwork||[]),photoPlacement:structuredClone(p.photoPlacement||null),keepCollection:Boolean(p.collectionLayout)}:{})});}
       else Object.assign(state,{source:'collection',designId:p.designId,model:p.model,effect:'original'});
       if(!phoneModels.includes(state.model))state.model='';
       if(p.source==='photo'&&p.collectionLayout)state.artworkLayouts[p.designId]={...structuredClone(p.collectionLayout),addedArtwork:structuredClone(p.addedArtwork||[])};
@@ -859,7 +938,10 @@ setInterval(async()=>{if(document.hidden||passBusy||photoBusy||aiBusy||canvasExp
 async function navigate(){
  const currentNavigation=++navigationId;
  const [route,query='']=location.hash.slice(1).split('?');const params=new URLSearchParams(query);
+ if(['choose','ai','my-designs','pass','orders','payment'].includes(route))try{await syncAIAccount();}catch(error){customerUI.error=error.message;}
+ if(!workspace.active&&route!=='account'){render();return;}
  if(route==='choose')await refreshStockChoices();
+ if(route==='my-designs'){localDesigns=[];localDesignBusy=true;render(true);await loadLocalDesigns();}
  if(route==='account'||route==='membership')try{await syncAIAccount();if(route==='account'&&membership.authenticated)await loadCustomerCredits(true);}catch(error){customerUI.error=error.message;}
  clearTimeout(paymentPollTimer);paymentPollCount=0;
  if(route==='checkout'){
@@ -907,6 +989,17 @@ if(entry&&location.hash===entryHash){
  if(location.hash===entryHash)history.replaceState(null,'','#'+target);
 }
 window.addEventListener('hashchange',navigate);
+let sessionCheckBusy=false;
+async function checkVisibleSession(){
+ if(document.hidden||sessionCheckBusy)return;
+ sessionCheckBusy=true;
+ try{await syncAIAccount();}catch(error){customerUI.error=error.message;render(true);}
+ finally{sessionCheckBusy=false;}
+}
+// Another tab can change the session. Block submissions during this check;
+// keep the file input alive when the native picker returns window focus.
+window.addEventListener('focus',checkVisibleSession);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkVisibleSession();});
 window.addEventListener('resize',()=>{if(!artworkDrag)highlightArtwork();});
 app.addEventListener('load',event=>{if(!artworkDrag&&event.target.closest?.('.artwork-canvas'))highlightArtwork();},true);
 for(const type of ['load','error'])app.addEventListener(type,event=>{if(event.target.matches?.('.look-comparison img'))updateLookImageState(document.querySelector('.look-browser'));},true);
@@ -917,14 +1010,28 @@ async function loadAssetPhoto(url){
  const blob=await response.blob();return importPhoto(new File([blob],'sample.png',{type:blob.type}));
 }
 async function mergeAIAccount(data){
+ const owner=designOwner(data);
+ if(!owner)throw Error('Your sign-in could not be verified. Please reload.');
+ if(!workspace.active||owner!==workspace.owner){
+  lockPrivateWorkspace();location.reload();
+  throw Error('Your sign-in changed. Reloading your private workspace.');
+ }
  if(membership.customer?.id!==data.customer?.id)Object.assign(customerUI,{ledger:[],ledgerNext:null,ledgerError:'',ledgerBusy:false,ledgerOpen:false});
  if(aiJob&&(aiJob.customerId&&aiJob.customerId!==data.customer?.id||aiJob.remoteId&&!aiJob.customerId)){aiJob=null;state.aiJobId=null;save();}
- membership=await updateDesign('ai-membership-v1',a=>({...a,...data,jobs:a.customer?.id===data.customer?.id?a.jobs||{}:{}}),freshMembership());
+ membership=await privateUpdate('ai-membership-v1',a=>({...a,...data,jobs:a.customer?.id===data.customer?.id?a.jobs||{}:{}}),freshMembership());
 }
-async function syncAIAccount(){await mergeAIAccount(await getAIAccount());}
+function lockPrivateWorkspace(){
+ workspace.lock();
+ // Keep committed data in its original namespace while removing private views.
+ Object.assign(state,{photo:'',pass:null,job:null,ai:null,aiJobId:null,artworkLayouts:{},photoArtwork:[],photoPlacement:null,editOrderId:null});
+ reviewPass=null;reviewSaved=false;checkoutDraft=null;aiJob=null;localDesigns=[];orderRows=[];paymentOrder=null;orderBook=freshOrders();
+ membership={...freshMembership(),server:true,authenticated:false,customer:null};
+ Object.assign(customerUI,{email:'',codeSent:false,ledger:[],ledgerNext:null,ledgerOpen:false});
+}
+async function syncAIAccount(){try{await mergeAIAccount(await getAIAccount());}catch(error){lockPrivateWorkspace();throw error;}}
 async function rememberLiveJob(job){
  job={...job,customerId:job.customerId||membership.customer?.id||null};
- membership=await updateDesign('ai-membership-v1',a=>({...a,jobs:{...a.jobs,[job.id]:job}}),freshMembership());
+ membership=await privateUpdate('ai-membership-v1',a=>({...a,jobs:{...a.jobs,[job.id]:job}}),freshMembership());
  aiJob=job;state.aiJobId=job.id;save();
 }
 async function confirmAI(generation,accepted){
@@ -932,6 +1039,7 @@ async function confirmAI(generation,accepted){
  if(!membership.authenticated){customerUI.next='ai';go('account');return;}
  aiBusy=true;aiUi.error='';aiUi.accepted=accepted;render(true);
  try{
+  await syncAIAccount();workspace.check();
   if(generation){
    if(aiJob?.mode!=='live')throw Error('Choose your photo and start a new AI render.');
    await rememberLiveJob(await submitLiveRender(aiJob,accepted));
@@ -960,7 +1068,7 @@ async function handleAI(action){
   }
   if(action==='stop-renewal'||action==='resume-renewal')await mergeAIAccount(await changeAIAccount(action,true));
   if(action==='sample'){
-   const example=exampleFor(state.aiExample);const photo=await loadAssetPhoto(example.original);await writeDesign('draft-photo',photo);
+   const example=exampleFor(state.aiExample);const photo=await loadAssetPhoto(example.original);await privateWrite('draft-photo',photo);
    Object.assign(state,{photo,source:'photo',photoOrigin:example.origin,ai:null,effect:'original',intensity:65,zoom:100,x:50,y:50});clearPreviousPhotoArtwork();effectPanelOpen=true;save();render(true);
   }
   if(action==='create'){
@@ -973,7 +1081,7 @@ async function handleAI(action){
    if(aiJob?.mode!=='live')throw Error('Choose your photo and start a new AI render.');
    await rememberLiveJob(await refreshLiveRender(aiJob));
    if(!canApplyAIOrder(aiJob))throw Error('Wait until the render is ready before using its result.');
-   const photo=aiJob.resultPhoto;await writeDesign('draft-photo',photo);
+   const photo=aiJob.resultPhoto;await privateWrite('draft-photo',photo);
    Object.assign(state,{photo,source:'photo',photoOrigin:'upload',effect:'original',zoom:100,x:50,y:50,photoPlacement:null,ai:{styleId:aiJob.styleId,jobId:aiJob.id,mode:'live'}});
    save();go('choose');notify('AI image applied. Adjust your crop, then review your print order.');
   }
@@ -1028,9 +1136,8 @@ async function handleCustomer(action,fields){
    await verifyEmailCode(customerUI.email,code);await syncAIAccount();customerUI.codeSent=false;
    customerUI.busy=false;go(customerUI.next==='ai'&&aiJob?'ai':'choose');
   }else if(action==='logout'){
-   await signOutCustomer();
-   await mergeAIAccount({server:true,authenticated:false,customer:null,trialRemaining:0,trialGranted:0,subscription:null,demoSubscriptionsAvailable:false});
-   customerUI.email='';customerUI.codeSent=false;await syncAIAccount();
+   try{await signOutCustomer();}finally{lockPrivateWorkspace();}
+   location.reload();return;
   }
  }catch(error){customerUI.error=error.message;}
  finally{customerUI.busy=false;render(true);if(customerUI.codeSent)document.getElementById('customer-code')?.focus({preventScroll:true});}

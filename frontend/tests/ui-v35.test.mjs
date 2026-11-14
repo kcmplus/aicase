@@ -8,6 +8,12 @@ import {normalizeLocale} from '../storefront/simple-i18n.js';
 import {paymentState} from '../storefront/payment-state.js';
 import {esc} from '../storefront/art.js';
 import vm from 'node:vm';
+import {createDesignWorkspace,createDesignLibrary,designOwner} from '../storefront/design-workspace.js';
+import {myDesignsPage,designReview} from '../storefront/v35-designs.js';
+import {createPersonalPass,readPass} from '../storefront/simple-core.js';
+import {phoneTemplates,phoneTemplate} from '../storefront/phone-templates.js';
+import {makePersonalDesign} from '../storefront/simple-personalize.js';
+import {customerPage} from '../storefront/customer-account.js';
 
 test('V35 home prioritizes the real album handler and preserves gallery and AI editor destinations',()=>{
  const html=homePresentation({gallery:'<section id="designs">CATALOG</section>'});
@@ -231,4 +237,150 @@ test('saved design, payment page and order receipt render shared statuses from s
    }
   }
  }
+});
+
+// Development coverage for local design storage and the actual app handlers.
+// These use synthetic state, not customer images or a real identity/AI channel.
+function memoryDesignStorage(){
+ const rows=new Map();
+ return {rows,read:async key=>structuredClone(rows.get(key)),write:async(key,value)=>{rows.set(key,structuredClone(value));},update:async(key,transform,initial)=>{const value=transform(structuredClone(rows.get(key)??initial));rows.set(key,structuredClone(value));return value;}};
+}
+const customerIdentity=id=>({server:true,authenticated:true,customer:{id}});
+function syntheticPass(){return createPersonalPass({source:'photo',designId:'bloom',model:phoneTemplates[0].model,phoneTemplateId:phoneTemplates[0].id,photo:'data:image/png;base64,aGVsbG8=',effect:'original',intensity:0,zoom:127,x:32,y:68,photoPlacement:{x:32,y:68,scale:127,rotation:23},collectionLayout:{zoom:113,x:46,y:54,artworkEdits:{}},addedArtwork:[{id:'extra-synthetic',type:'text',text:'Synthetic only',font:'sans',color:'#a234fd',x:36,y:61,scale:92,rotation:-12}]});}
+const validateLocal=pass=>readPass(pass.code,pass);
+test('verified identity selects a separate workspace; unknown sessions never read or inherit legacy caches',async()=>{
+ const storage=memoryDesignStorage();storage.rows.set('draft-photo','old-unassigned');storage.rows.set('ai-membership-v1',{authenticated:true,customer:{id:8}});
+ const guest=createDesignWorkspace({authenticated:false},storage),a=createDesignWorkspace(customerIdentity(8),storage),b=createDesignWorkspace(customerIdentity(9),storage);
+ for(const [workspace,photo] of [[guest,'guest'],[a,'account-a'],[b,'account-b']])await workspace.write('draft-photo',photo);
+ assert.equal(await a.read('draft-photo'),'account-a');assert.equal(await b.read('draft-photo'),'account-b');assert.equal(await guest.read('draft-photo'),'guest');
+ assert.equal(storage.rows.get('draft-photo'),'old-unassigned');assert.equal(storage.rows.get('ai-membership-v1').customer.id,8);
+ for(const account of [null,{}, {authenticated:true},{authenticated:true,customer:{id:'../../guest'}},{authenticated:true,customer:{id:true}}]){
+  assert.equal(designOwner(account),null);const unavailable=createDesignWorkspace(account,storage);
+  await assert.rejects(unavailable.read('draft-photo'),/sign-in needs checking/);await assert.rejects(unavailable.write('draft-photo','bad'),/sign-in needs checking/);
+ }
+});
+test('a locked workspace rejects delayed reads and queued writes while preserving already committed data',async()=>{
+ const storage=memoryDesignStorage(),workspace=createDesignWorkspace(customerIdentity(8),storage);
+ await workspace.write('draft-photo','original');let release;
+ const delayed=createDesignWorkspace(customerIdentity(8),{...storage,read:()=>new Promise(resolve=>release=resolve)});
+ const pending=delayed.read('draft-photo');delayed.lock();release('private-image');await assert.rejects(pending,/sign-in needs checking/);
+ let commit;const queued=createDesignWorkspace(customerIdentity(8),{...storage,update:(key,transform,initial)=>new Promise((resolve,reject)=>{commit=()=>{try{const value=transform(initial);storage.rows.set(key,value);resolve(value);}catch(error){reject(error);}};})});
+ const write=queued.update('draft-photo',()=> 'late-write','original');queued.lock();commit();await assert.rejects(write,/sign-in needs checking/);
+ assert.equal(await workspace.read('draft-photo'),'original');workspace.lock();await assert.rejects(workspace.read('draft-photo'),/sign-in needs checking/);
+});
+test('local library preserves exact composition, template and input pixels across save/reopen, without granting payment',async()=>{
+ const storage=memoryDesignStorage(),workspace=createDesignWorkspace(customerIdentity(8),storage),library=createDesignLibrary(workspace,{validate:validateLocal,now:()=>1234});
+ const pass=syntheticPass(),before=structuredClone(pass),template=phoneTemplate(pass.model,pass.phoneTemplateId);
+ await library.save(pass,template);await library.save(pass,template);pass.photoPlacement.rotation=0;
+ const reopened=createDesignLibrary(createDesignWorkspace(customerIdentity(8),storage),{validate:validateLocal});
+ const rows=await reopened.list();assert.equal(rows.length,1);assert.deepEqual(rows[0].pass,before);assert.deepEqual(rows[0].phoneTemplate,template);
+ assert.deepEqual(makePersonalDesign(rows[0].pass),makePersonalDesign(before));assert.equal(rows[0].pass.photo,before.photo);
+ assert.equal(rows[0].updatedAt,1234);assert.equal(rows[0].paid,undefined);assert.equal(rows[0].pass.status,undefined);
+ assert.deepEqual(await createDesignLibrary(createDesignWorkspace(customerIdentity(9),storage),{validate:validateLocal}).list(),[]);
+ rows[0].pass.photo='altered-view';assert.deepEqual((await reopened.list())[0].pass,before);
+ await reopened.remove(before.code);assert.deepEqual(await reopened.list(),[]);
+});
+test('storage and invalid snapshot failures remain failures, with existing records preserved',async()=>{
+ const storage=memoryDesignStorage(),workspace=createDesignWorkspace(customerIdentity(8),storage),library=createDesignLibrary(workspace,{validate:validateLocal});
+ const pass=syntheticPass();await library.save(pass);
+ await assert.rejects(library.save({...pass,photo:'https://arbitrary.example/private.jpg'}),/photo/);
+ assert.equal((await library.list()).length,1);
+ const broken=createDesignLibrary(createDesignWorkspace(customerIdentity(8),{...storage,update:async()=>{throw Error('Quota exceeded');}}),{validate:validateLocal});
+ await assert.rejects(broken.save(pass),/Quota exceeded/);assert.equal((await library.list()).length,1);
+});
+test('local design pages expose distinct empty/loading/error states and bilingual real actions without private-data HTML injection',()=>{
+ for(const lang of ['en-US','zh-CN']){
+  const empty=myDesignsPage({lang});assert.match(empty,lang==='en-US'?/No cloud sync/:/不提供云同步/);assert.doesNotMatch(empty,/data-action="restore-legacy-draft"/);
+  const busy=myDesignsPage({lang,busy:true});assert.match(busy,/role="status"/);
+  const error=myDesignsPage({lang,error:'<unsafe>'});assert.match(error,/&lt;unsafe&gt;/);assert.match(error,/data-action="refresh-designs"/);
+  const populated=myDesignsPage({lang,guest:true,rows:[{id:'"><script>',pass:{model:'<Synthetic>'},updatedAt:1234}],preview:()=>'<div>SYNTHETIC PREVIEW</div>'});
+  assert.match(populated,/data-action="restore-design"/);assert.match(populated,/data-action="delete-design"/);assert.match(populated,/data-action="restore-legacy-draft"/);assert.match(populated,/SYNTHETIC PREVIEW/);assert.match(populated,/&lt;Synthetic&gt;/);assert.doesNotMatch(populated,/<script>/);
+  const preview=designReview({pass:syntheticPass(),preview:()=>'<div>SYNTHETIC PREVIEW</div>',lang,busy:true});
+  assert.match(preview,/<dialog .*aria-labelledby="v35-review-title"/);assert.match(preview,/data-action="save-local-design" disabled/);assert.match(preview,/data-action="continue-design-checkout" disabled/);assert.match(preview,/data-action="close-design-review"/);
+  assert.doesNotMatch(preview,/Design saved on this browser/);assert.match(designReview({pass:syntheticPass(),preview:()=>'',lang,saved:true}),/role="status"/);
+  assert.doesNotMatch(preview,/sessionStorage|pay_status|QRCode|setTimeout|data-action="confirm-device-print"/);
+ }
+ const account=customerPage({...customerIdentity(8),customer:{id:8,email:'synthetic@example.test'},trialRemaining:2},{email:''});
+ assert.match(account,/v35-account-story/);assert.match(account,/href="#my-designs"/);assert.match(account,/customer-profile-form/);assert.doesNotMatch(account,/OAuth|data-avatar|data-action="subscribe"/);
+});
+test('editor/account/design aliases retain original device, language and fragment data; mobile preview redirects through customize',async()=>{
+ for(const [name,route] of [['customize','choose'],['account','account'],['my-designs','my-designs']]){
+  const url=new URL(publicPageDestination(`http://127.0.0.1:4173/${name}.html?device_id=123&shop_id=351&lang=zh&source=photo#edit`));
+  assert.equal(url.hash.split('?')[0],'#'+route);const params=new URLSearchParams(url.hash.split('?')[1]);
+  for(const [key,value] of Object.entries({device_id:'123',shop_id:'351',lang:'zh',source:'photo',section:'edit'}))assert.equal(params.get(key),value);
+  assert.match(await readFile(new URL(`../storefront/${name}.html`,import.meta.url),'utf8'),/src="\.\/v35-page-entry.js"/);
+ }
+ const original=new URL('http://127.0.0.1:4173/mobile-preview.html?device_id=123&shop_id=351&lang=zh&design=bloom#edit');
+ const target=new URL(publicPageDestination(original));assert.equal(target.pathname,'/customize.html');assert.equal(target.search,original.search);assert.equal(target.hash,original.hash);
+ assert.match(shellHeader(),/href="#my-designs"/);
+});
+function appFunction(source,name){
+ const begin=source.indexOf(`function ${name}(`);assert.ok(begin>=0,name);
+ const end=source.indexOf('\nfunction ',begin+1),asyncEnd=source.indexOf('\nasync function ',begin+1);
+ const ends=[end,asyncEnd].filter(value=>value>=0);
+ return (source.slice(Math.max(0,begin-6),begin)==='async '?'async ':'')+source.slice(begin,Math.min(...ends));
+}
+test('actual editor submit opens a validated preview; saving stays local and only review-order creates a checkout draft',async()=>{
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8'),storage=memoryDesignStorage();
+ const workspace=createDesignWorkspace(customerIdentity(8),storage),library=createDesignLibrary(workspace,{validate:validateLocal});
+ let submit,click;const writes=[],routes=[],notices=[];const pass=syntheticPass();
+ const context={app:{addEventListener:(name,fn)=>{if(name==='submit')submit=fn;else click=fn;}},sessionCheckBusy:false,photoBusy:false,aiBusy:false,passBusy:false,reviewPass:null,reviewSaved:false,comparing:false,
+  state:{...pass,editOrderId:null},phoneModels:[pass.model],refreshStockChoices:async()=>{},stockSelection:()=>({templateId:pass.phoneTemplateId}),createPersonalPass,layoutSelection:value=>value,workspace,library,
+  phoneTemplate,orderBook:{orders:{}},checkoutDraft:null,PRINT_AVAILABLE:true,privateWrite:async(name,value)=>{writes.push({name,value});await workspace.write(name,value);},crypto,
+  location:{hash:'#choose'},render:()=>{},notify:message=>notices.push(message),go:route=>routes.push(route),locale:()=> 'en-US'};
+ const submitStart=source.indexOf("app.addEventListener('submit',async event=>{");
+ const clickStart=source.indexOf("app.addEventListener('click',async event=>{",submitStart);
+ const clickEnd=source.indexOf("  if(el.dataset.lookAction==='open')",clickStart);
+ vm.createContext(context);vm.runInContext(source.slice(submitStart,clickStart)+source.slice(clickStart,clickEnd)+'});',context);
+ await submit({target:{id:'design-form'},preventDefault(){}});
+ assert.ok(context.reviewPass);assert.deepEqual(context.reviewPass.photoPlacement,pass.photoPlacement);assert.equal(context.checkoutDraft,null);assert.equal(writes.length,0);assert.equal(routes.length,0);
+ const button=action=>({preventDefault(){},target:{closest:()=>({dataset:{action},disabled:false})}});
+ await click(button('save-local-design'));assert.equal((await library.list()).length,1);assert.equal(writes.length,0);assert.equal(routes.length,0);assert.equal(notices.length,1);
+ await click(button('continue-design-checkout'));assert.equal(writes.length,1);assert.equal(writes[0].name,'checkout-draft');assert.deepEqual(writes[0].value.pass.photoPlacement,pass.photoPlacement);assert.equal(routes.at(-1),'checkout');assert.equal(context.reviewPass,null);
+});
+test('actual restore handler retains rotations, text, crop and original bytes while clearing order authority',async()=>{
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8'),pass=syntheticPass(),before=JSON.stringify(pass),writes=[],routes=[];
+ const context={readPass,phoneModels:[pass.model],privateWrite:async(name,value)=>writes.push([name,value]),workspace:{check(){}},finishInlineText:()=>{},state:{pass:{paid:true},job:{status:'printing'},editOrderId:'OLD'},structuredClone,
+  aiJob:{id:'OLD'},selectedArtwork:'OLD',comparing:true,reviewPass:{},save:()=>{},go:route=>routes.push(route),notify:()=>{},pass};
+ await vm.runInNewContext(appFunction(source,'restoreLocalDesign')+'\nrestoreLocalDesign(pass)',context);
+ assert.equal(context.state.pass,null);assert.equal(context.state.job,null);assert.equal(context.state.editOrderId,null);assert.equal(context.aiJob,null);
+ assert.equal(context.state.photo,pass.photo);assert.deepEqual(context.state.photoPlacement,pass.photoPlacement);assert.deepEqual(context.state.photoArtwork,pass.addedArtwork);
+ assert.equal(context.state.artworkLayouts.bloom.zoom,113);assert.equal(context.state.zoom,127);assert.equal(writes[0][0],'draft-photo');assert.equal(writes[0][1],pass.photo);assert.equal(routes.at(-1),'choose');assert.equal(JSON.stringify(pass),before);
+});
+test('the actual library loader keeps bundled templates valid instead of treating them as supplier uploads',async()=>{
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8'),storage=memoryDesignStorage(),workspace=createDesignWorkspace(customerIdentity(8),storage),library=createDesignLibrary(workspace,{validate:validateLocal});
+ const pass=syntheticPass();await library.save(pass,phoneTemplate(pass.model,pass.phoneTemplateId));let registrations=0;
+ const context={privateRead:key=>workspace.read(key),library,localDesigns:[],localDesignError:'',localDesignBusy:false,registerSupplierTemplates(){registrations++;throw Error('Invalid supplier template');}};
+ await vm.runInNewContext(appFunction(source,'loadLocalDesigns')+'\nloadLocalDesigns()',context);
+ assert.equal(registrations,0);assert.equal(context.localDesigns.length,1);assert.equal(context.localDesignError,'');assert.equal(context.localDesignBusy,false);
+});
+test('actual identity merge clears private memory on a changed session before reload and rejects late AI results',async()=>{
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8'),storage=memoryDesignStorage(),workspace=createDesignWorkspace(customerIdentity(8),storage);
+ await workspace.write('draft-photo','synthetic-private-photo');let reloads=0;
+ const context={workspace,designOwner,freshMembership:()=>({jobs:{}}),freshOrders:()=>({orders:{}}),privateUpdate:(...args)=>workspace.update(...args),save:()=>{},state:{photo:'synthetic-private-photo',pass:{code:'private'},artworkLayouts:{secret:{}},photoArtwork:[{}]},membership:customerIdentity(8),aiJob:{customerId:8,remoteId:'private'},checkoutDraft:{},reviewPass:{},localDesigns:[{}],orderRows:[{}],paymentOrder:{},customerUI:{ledger:[{}]},location:{reload(){reloads++;}},data:customerIdentity(9)};
+ vm.createContext(context);vm.runInContext(appFunction(source,'lockPrivateWorkspace')+'\n'+appFunction(source,'mergeAIAccount')+'\n'+appFunction(source,'rememberLiveJob'),context);
+ await assert.rejects(vm.runInContext('mergeAIAccount(data)',context),/sign-in changed/);
+ assert.equal(reloads,1);assert.equal(workspace.active,false);assert.equal(context.state.photo,'');assert.equal(context.state.pass,null);assert.equal(context.aiJob,null);assert.equal(context.checkoutDraft,null);assert.equal(context.localDesigns.length,0);assert.equal(context.customerUI.ledger.length,0);
+ assert.equal(storage.rows.get('v35:customer-8:draft-photo'),'synthetic-private-photo');assert.equal(storage.rows.has('v35:customer-9:draft-photo'),false);
+ await assert.rejects(vm.runInContext("rememberLiveJob({id:'late-private-result',status:'ready',customerId:8})",context),/sign-in needs checking/);assert.equal(context.aiJob,null);
+});
+
+test('actual sign-out failure still clears the private view, and rejected verification codes never sign in',async()=>{
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
+ for(const action of ['logout','verify']){
+  const storage=memoryDesignStorage(),workspace=createDesignWorkspace(customerIdentity(8),storage);let verificationCalls=0,syncCalls=0,navigations=0;
+  const context={workspace,customerUI:{busy:false,email:'synthetic@example.test',ledger:[{}],codeSent:false},state:{photo:'synthetic-private'},membership:customerIdentity(8),aiJob:{},localDesigns:[{}],orderRows:[],reviewPass:{},paymentOrder:{},checkoutDraft:{},freshOrders:()=>({orders:{}}),freshMembership:()=>({jobs:{}}),
+   render:()=>{},signOutCustomer:async()=>{throw Error('Unknown sign-out result');},verifyEmailCode:async(email,code)=>{verificationCalls++;assert.equal(code,'123456');throw Error('Code expired');},syncAIAccount:async()=>{syncCalls++;},go:()=>{navigations++;},location:{reload(){navigations++;}}};
+  vm.createContext(context);vm.runInContext(appFunction(source,'lockPrivateWorkspace')+'\n'+appFunction(source,'handleCustomer'),context);
+  await vm.runInContext(`handleCustomer('${action}',new Map([['code','123456']]))`,context);
+  assert.equal(navigations,0);assert.equal(syncCalls,0);assert.equal(context.customerUI.busy,false);
+  if(action==='logout'){assert.equal(workspace.active,false);assert.equal(context.state.photo,'');assert.equal(context.membership.authenticated,false);assert.equal(context.customerUI.ledger.length,0);assert.match(context.customerUI.error,/Unknown sign-out/);}
+  else{assert.equal(verificationCalls,1);assert.match(context.customerUI.error,/Code expired/);}
+ }
+});
+test('AI submission requires the current server identity and cannot start after account verification fails',async()=>{
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');let submissions=0;
+ const context={aiBusy:false,aiUi:{},membership:{authenticated:true},aiJob:{mode:'live',status:'awaiting_confirmation'},render:()=>{},notify:()=>{},location:{hash:'#choose'},syncAIAccount:async()=>{throw Error('Session unavailable');},workspace:{check(){}},submitLiveRender:async()=>{submissions++;}};
+ await vm.runInNewContext(appFunction(source,'confirmAI')+'\nconfirmAI(true,true)',context);
+ assert.equal(submissions,0);assert.equal(context.aiBusy,false);assert.equal(context.aiJob.status,'awaiting_confirmation');assert.match(context.aiUi.error,/Session unavailable/);
 });

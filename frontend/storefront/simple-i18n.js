@@ -12,6 +12,19 @@ export function setLocale(value){
 }
 export const localized=(record,field='name')=>current==='zh-CN'?(record?.[field+'_zh']||t(record?.[field]||'')):(record?.[field]||'');
 const entries=[
+ ['Preview your design','预览你的设计'],
+ ['My designs','我的设计'],
+ ['Your sign-in needs checking. Reload to view your local designs.','请核实登录状态，重新载入后查看本机设计。'],
+ ['Your design could not be saved on this browser. Please reload and try again.','设计未能保存到本机，请重新载入后重试。'],
+ ['Your saved designs could not be loaded.','未能读取本机保存的设计。'],
+ ['Preview your design again before saving.','请重新预览设计后保存。'],
+ ['Preview your design again before ordering.','请重新预览设计后确认订单。'],
+ ['Printing is unavailable. Your local design can still be saved.','当前无法打印，仍可保存本机设计。'],
+ ['This saved design could not be found.','未找到此本机设计。'],
+ ['Older browser drafts are separate from signed-in accounts.','旧浏览器草稿与已登录账户分开保留。'],
+ ['No older browser draft was found.','没有找到旧浏览器草稿。'],
+ ['Your sign-in changed. Reloading your private workspace.','登录状态已变化，正在重新载入对应的本机空间。'],
+ ['Your sign-in could not be verified. Please reload.','未能核实登录状态，请重新载入。'],
  ['Works center','作品中心'],['Design details','作品详情'],['How to use','如何使用'],['About POPOMO','关于 POPOMO'],['Print locations','打印网点'],['View design','查看设计'],
  ['No-charge order confirmed.','免付订单已确认。'],
  ['No payment is required. Confirm the station to send this test order.','无需付款，请确认设备后推送此联调订单。'],
