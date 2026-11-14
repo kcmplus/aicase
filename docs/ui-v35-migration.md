@@ -102,6 +102,16 @@
 
 本轮本地代码交测试，不代表部署、真机、整站通过。可复现入口仍为 `npm start` → `http://127.0.0.1:4173/`；新增 `/#designs`、`/#work?id=bloom`、`/#how-it-works`、`/#about`、`/#locations`、`/#printers` 与六个 HTML 别名。本轮环境不能监听，因此没有常驻服务或当前可访问地址的运行证据。
 
+## 第二组 QA 回归修复开发交接（2026-11-14，待独立复验）
+
+- 起始 HEAD `10e730b`，工作区干净；本轮只处理 QA 发现的订单状态渲染回归，不启动第三组。Git 检查点仍交 harness，不自行暂存、提交或切换分支。
+- 修复前运行 `node --test frontend/tests/ui-v35.test.mjs`，复现 14 通过、1 失败，非空订单列表抛出 `ReferenceError: orderStatus is not defined`。第二组移除旧设备演示页面时误删了共用函数；`ordersPage`、`passPage`、`providerOrderPage`（包括订单收据）均仍引用该函数。
+- 在 `simple-app.js` 恢复迁移前的原有 `orderStatus(status, refund)` 映射；订单状态、退款优先级、历史已完成／已领取映射保持原语义。没有改写服务端状态、金额或快照，没有修改付款／打印门禁及重试行为。
+- 原 QA 非空服务端订单断言保持不变。新增开发测试覆盖待付款／已付／打印中／待取／历史完成／领取／取消／未知状态，以及退款待核实／处理中／成功／失败／未知状态；用合成不可变快照实际执行设计详情及 Stripe、Airwallex、free_test 支付页与收据渲染，检查状态转义、支付回跳不确认到账、退款和关闭状态不显示付款按钮，渲染不修改订单。
+- 修复后开发自测：`npm test` **216/216**、`node --test frontend/tests/ui-v35.test.mjs` **17/17**，均无跳过；`node --check frontend/storefront/simple-app.js` 和 `git diff --check` 通过。这些是本地 Node 渲染／单元自测，未取得浏览器或视觉证据，不是独立 QA。
+- 本轮没有启动本地服务、读取或修改数据库、调用外部业务、部署或真机操作。既有浏览器权限问题没有在本轮重新验证。交测试员在隔离环境复验 `#orders` 非空列表、`#pass`、`#payment?order=…`、支付返回和退款收据，并继续保留 390/1440 视觉对照与 320px 主流程验证缺口。
+- 第三至第七组和全部整站验收范围仍保留。上轮 harness 的 `backend-contracts` 缺 `test_phone_colors.py`、`whole-site-browser` 缺 `test-ui-v35-e2e.mjs` 失败未在本轮修复；本轮不为消除缺失模块错误而建立空测试或占位脚本。全部冻结 gates、独立 QA 与产品复核仍待后续。
+
 ## 本地预览与后续交接
 
 ```sh

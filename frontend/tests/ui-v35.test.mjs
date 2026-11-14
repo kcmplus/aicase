@@ -5,6 +5,8 @@ import {shellHeader,shellFooter,homePresentation,shellInfo,mountShell} from '../
 import {worksPage,workDetailPage,matchingWorks,tutorialPage,aboutPage,locationsPage,membershipInfoPage,publicPageDestination} from '../storefront/v35-pages.js';
 import {designs} from '../storefront/simple-core.js';
 import {normalizeLocale} from '../storefront/simple-i18n.js';
+import {paymentState} from '../storefront/payment-state.js';
+import {esc} from '../storefront/art.js';
 import vm from 'node:vm';
 
 test('V35 home prioritizes the real album handler and preserves gallery and AI editor destinations',()=>{
@@ -162,4 +164,56 @@ test('orders page renders a server order and its status',async()=>{
  const html=vm.runInNewContext(`${statusDeclaration}\n${declaration}\nordersPage()`,context);
  assert.match(html,/SYNTHETIC-1/);
  assert.match(html,/Paid/);
+});
+
+test('order status labels preserve historical fulfillment and refund precedence without mutating orders',async()=>{
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
+ const declaration=source.match(/^function orderStatus\([^\n]+$/m)?.[0];
+ assert.ok(declaration,'shared order status renderer must exist');
+ const labels={pending:'Awaiting payment',paid:'Paid',printing:'Printing',ready:'Ready to collect',completed:'Collected',collected:'Collected',cancelled:'Cancelled',unknown:'unknown'};
+ const refunds={requested:'Checking refund status.',pending:'Refund processing.',succeeded:'Payment refunded.',failed:'Refund could not be completed.',unknown:'Checking refund status.'};
+ for(const [status,label] of Object.entries(labels)){
+  assert.equal(vm.runInNewContext(`${declaration}\norderStatus(status)`,{status}),label);
+  for(const [refundStatus,refundLabel] of Object.entries(refunds)){
+   const refund=Object.freeze({status:refundStatus});
+   assert.equal(vm.runInNewContext(`${declaration}\norderStatus(status,refund)`,{status,refund}),refundLabel);
+   assert.equal(refund.status,refundStatus);
+  }
+ }
+});
+
+test('saved design, payment page and order receipt render shared statuses from synthetic server snapshots',async()=>{
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
+ const names=['orderStatus','isProviderOrder','providerName','paymentLabel','passPage','providerOrderPage','paymentPage'];
+ const declarations=names.map(name=>{
+  const start=source.indexOf(`function ${name}(`);
+  assert.ok(start>=0,`${name} must exist`);
+  const end=source.indexOf('\nfunction ',start+1);
+  assert.ok(end>start,`${name} must have a following function boundary`);
+  return source.slice(start,end);
+ }).join('\n');
+ const pass=Object.freeze({code:'SYNTHETIC-DESIGN',model:'Synthetic model'});
+ for(const [status,refund,label] of [['pending',null,'Awaiting payment'],['paid',null,'Paid'],['ready',null,'Ready to collect'],['completed',null,'Collected'],['cancelled',null,'Cancelled'],['paid',{status:'pending'},'Refund processing.'],['paid',{status:'succeeded'},'Payment refunded.'],['paid',{status:'failed'},'Refund could not be completed.'],['<unknown>',null,'&lt;unknown&gt;']]){
+  for(const mode of ['demo','stripe_test','airwallex_test','free_test']){
+   const order=Object.freeze({id:'SYNTHETIC-ORDER',server:true,pass,status,refund,mode,priceCents:0,currency:'USD',fulfillmentType:'pickup'});
+   const before=JSON.stringify(order);
+   const context={state:{pass},orderBook:{},orderForCode:()=>order,locale:()=> 'en-US',esc,
+    money:()=> '0.00',PRINT_PRICE:'0.00',passPreview:()=>'',passName:()=> 'Synthetic design',effectCaption:()=>'',
+    previewStationPanel:()=>'',scannedStation:null,stockScope:'',paymentState,paymentOrder:order,paymentPollCount:0,paymentError:'',passBusy:false,
+    document:{querySelector:()=>null},location:{hash:'#payment?order=SYNTHETIC-ORDER&result=success'},URLSearchParams,
+    fulfillmentView:()=>({state:'test'}),deviceFulfillmentPanel:()=>'',deliveryStatusPanel:()=>'',deliveryLabel:()=> 'On-site pickup',isPickup:()=>true};
+   const html=vm.runInNewContext(`${declarations}\n${mode==='demo'?'passPage()':'paymentPage()'}`,context);
+   assert.ok(html.includes(label),`${mode} ${status} ${refund?.status||''}: ${label}`);
+   assert.ok(html.includes('SYNTHETIC-ORDER'));
+   assert.equal(JSON.stringify(order),before,'rendering cannot change server order state');
+   if(mode!=='demo'){
+    assert.match(html,/<dt>Order status<\/dt><dd>/);
+    if(status!=='pending'||refund)assert.doesNotMatch(html,/data-action="pay-provider"/);
+    if(status==='pending'){
+     assert.match(html,/Confirming your payment/);
+     assert.doesNotMatch(html,/data-action="pay-provider"|Payment received/);
+    }
+   }
+  }
+ }
 });
