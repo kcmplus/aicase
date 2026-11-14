@@ -166,6 +166,21 @@ test('orders page renders a server order and its status',async()=>{
  assert.match(html,/Paid/);
 });
 
+test('orders list renders each server refund state without changing historical amount',async()=>{
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
+ const status=source.match(/^function orderStatus\([^\n]+$/m)?.[0];
+ const page=source.match(/^function ordersPage\(\)\{.*$/m)?.[0];
+ assert.ok(status&&page);
+ for(const [refund,label] of [[null,'Paid'],[{status:'requested'},'Checking refund status.'],[{status:'pending'},'Refund processing.'],[{status:'succeeded'},'Payment refunded.'],[{status:'failed'},'Refund could not be completed.']]){
+  const order=Object.freeze({status:'paid',refund,mode:'stripe_test',model_name:'Synthetic model',fulfillment_type:'pickup',reference:'SYNTHETIC-REFUND',created_at:'2026-01-01T00:00:00Z',currency:'USD',amount:'10.00'});
+  const before=JSON.stringify(order);
+  const html=vm.runInNewContext(`${status}\n${page}\nordersPage()`,{stationContext:()=>'',orderError:'',orderRows:[order],esc:String,paymentLabel:()=>'',deliveryLabel:()=>'',locale:()=> 'en-US',orderPage:1,orderHasMore:false});
+  assert.ok(html.includes(label),`refund ${refund?.status||'none'}`);
+  assert.ok(html.includes('USD 10.00'));
+  assert.equal(JSON.stringify(order),before);
+ }
+});
+
 test('order status labels preserve historical fulfillment and refund precedence without mutating orders',async()=>{
  const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
  const declaration=source.match(/^function orderStatus\([^\n]+$/m)?.[0];
