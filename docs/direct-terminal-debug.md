@@ -50,3 +50,25 @@ npm run dev:direct -- --backend-dir /path/to/aicase --device-id 401 --shop-id 14
 按 Ctrl+C 停止所有调试进程。后台 Python 代码改动后重新运行命令。单独准备或运行后端可在 `aicase` 根目录执行 `npm run backend:direct -- --check` 或 `npm run backend:direct`；该命令本身不会启动手机和设备页面。
 
 这是本地可运行版本；不代表已部署到测试站，也不代表真机打印验收。
+
+## V35 自动化隔离配置基础（开发交付，非完整浏览器入口）
+
+`config.direct_debug` 新增显式 `DIRECT_DEBUG_ISOLATED=1` 分支。默认未设置时，上述既有调试启动行为不变。V35 自动化不得使用旧的 `backend:direct` 启动器复制用户数据库，必须由后续浏览器启动器创建全新临时目录和合成数据。
+
+隔离分支在导入基础 settings 前检查以下参数，缺失或不合法即停止，不回退本地凭证：
+
+| 参数 | 要求 |
+| --- | --- |
+| `DJANGO_DEBUG` | 显式 `1` |
+| `DIRECT_DEBUG_ISOLATED_ROOT` | 用 `tempfile.mkdtemp(prefix='aicase-v35-')` 新建的绝对路径；父子进程保持相同 `TMPDIR` |
+| `DJANGO_SECRET_KEY`、`DIRECT_DEBUG_TOKEN` | 每轮生成至少 32 字符的随机值，不打印或提交 |
+| `AI_CONFIG_ENCRYPTION_KEY` | 每轮生成 32 字节随机值的 URL-safe Base64 |
+| `DIRECT_DEBUG_DEVICE_ID` | 合成设备的正整数 ID |
+| `DIRECT_DEBUG_API_PORT` | 独立 1024–65535 端口，排除 8000/8001 |
+| `DIRECT_DEBUG_H5_ORIGIN` | `http://127.0.0.1:独立端口`，与 API 不同，排除 4173/4174/5173，不带路径或认证信息 |
+
+数据库固定为临时目录的 `db.sqlite3`，媒体和静态输出分别为 `media/`、`static/`。不接受 PostgreSQL 环境选择、软链接或硬链接。配置允许同一轮迁移和服务进程复用临时数据库；**新建目录、端口占用检查、按 API 端口启动服务以及 finally 清理仍由启动器负责**，配置本身不证明目录内容是新数据，也不替代端口绑定参数。
+
+此模式关闭供应商推单和放行，邮件使用内存后端，并阻断当前 Python 进程的 socket 连接、UDP 发送及非本地 DNS 解析。它不构成操作系统沙箱，不约束子进程或浏览器；浏览器外网阻断和外部渠道 mock 仍须由后续 E2E 脚本实现。不能以此启用真实渠道。
+
+开发自测命令（不读取现有数据库或本地凭证）：在 `backend/` 执行 `.venv/bin/python -m unittest management_api.test_direct_debug_isolation -v`。测试创建临时目录、合成密钥和全新 SQLite，执行真实迁移和健康接口请求，结束后清理。本子组未提供常驻预览服务或整站浏览器证据。
