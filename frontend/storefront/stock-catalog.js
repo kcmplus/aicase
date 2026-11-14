@@ -1,4 +1,5 @@
 import {registerSupplierTemplates} from './phone-templates.js';
+import {validPhoneColors} from './phone-colors.js';
 export const stockedPhoneModels=[];
 export let stockCatalogStatus='loading';
 let records=[];
@@ -11,7 +12,7 @@ export function applyStockCatalog(data){
   names.add(r.name);
  }
  registerSupplierTemplates(data.templates,{select:true});
- records=data.models.map(r=>({...r}));stockedPhoneModels.splice(0,stockedPhoneModels.length,...records.map(r=>r.name));stockCatalogStatus=data.availability==='updating'?'updating':'ready';
+ records=data.models.map(r=>({...r,colors:validPhoneColors(r.colors,data.templates.find(t=>t.id===r.templateId))}));stockedPhoneModels.splice(0,stockedPhoneModels.length,...records.map(r=>r.name));stockCatalogStatus=data.availability==='updating'?'updating':'ready';
 }
 export function unavailableStockCatalog(){
  records=[];stockedPhoneModels.splice(0);registerSupplierTemplates([],{select:true});stockCatalogStatus='unavailable';

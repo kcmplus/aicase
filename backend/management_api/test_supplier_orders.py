@@ -95,6 +95,19 @@ class SupplierOrderTests(TestCase):
         self.stock.save()
         self.assertEqual(self.post('device/', self.target).status_code, 409)
 
+    def test_explicit_device_template_change_preserves_frozen_color_without_restricting_stock(self):
+        color = {'code': 'natural', 'resource': {'templateId': 'old-template'}}
+        self.order.snapshot['phoneColor'] = color
+        self.order.snapshot['_inventory_item'] = 999
+        self.order.save()
+        response = self.post('device/', {**self.target, 'accept_template': True})
+        self.assertEqual(response.status_code, 200, response.content)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.snapshot['phoneColor'], color)
+        self.assertEqual(self.order.snapshot['phoneTemplateId'], stock_template(self.stock)['id'])
+        self.bind()
+        self.assertEqual(SupplierOrder.objects.count(), 1)
+
     def test_first_binding_can_explicitly_accept_the_scanned_devices_template(self):
         self.order.snapshot['_inventory_item'] = 999
         self.order.snapshot['photo'] = 'kept-artwork'

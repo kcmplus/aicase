@@ -1,4 +1,5 @@
 import {phoneTemplate} from './phone-templates.js';
+import {frozenPhoneColor} from './phone-colors.js';
 import {aiStyles} from './ai-core.js';
 import {designFor,stickers,templates} from './catalog.js';
 import {createBeautyPreview} from './beautify-core.js';
@@ -46,7 +47,7 @@ export function collectionForPhoto(selection,photoArtwork=[]){
  const addedArtwork=validateAddedArtwork([...existing,...validateAddedArtwork(selection.addedArtwork).filter(a=>!ids.has(a.id))]);
  return {collectionLayout,addedArtwork};
 }
-export function makePersonalDesign({source='collection',designId='bloom',photo='',effect='original',intensity=65,zoom=100,x=50,y=50,artworkEdits={},addedArtwork=[],photoPlacement,collectionLayout,phoneTemplateId},original=false) {
+export function makePersonalDesign({source='collection',designId='bloom',photo='',effect='original',intensity=65,zoom=100,x=50,y=50,artworkEdits={},addedArtwork=[],photoPlacement,collectionLayout,phoneTemplateId,phoneColor},original=false) {
   if(!effects.some(e=>e.id===effect))throw Error('Choose an available effect.');
   if(source==='photo'&&!isPhoto(photo))throw Error('Upload a JPG, PNG or WebP photo first.');
   let design=source==='photo'?{art:'solid',image:photo,background:'#fef4e8',style:'original',zoom:clamp(zoom,100,180,100),photoX:clamp(x,0,100,50),photoY:clamp(y,0,100,50),layers:[],caption:'',enhance:false}:designFor(designId);
@@ -62,6 +63,7 @@ export function makePersonalDesign({source='collection',designId='bloom',photo='
   if(source==='photo'&&photoPlacement){design.photoPlacement=validatePlacement(photoPlacement);design.zoom=100;}
   if(effect!=='original'&&!original)design=createBeautyPreview(design,{preset:effect,intensity:clamp(intensity,0,100,65)});
   if(phoneTemplateId)design.phoneTemplateId=phoneTemplateId;
+  if(phoneColor)design.phoneColor=frozenPhoneColor(phoneColor);
   return design;
 }
 export function validatePersonalPass(pass) {
@@ -73,7 +75,8 @@ export function validatePersonalPass(pass) {
   const collectionLayout=pass.source==='photo'&&pass.collectionLayout!==undefined?validateCollectionLayout(pass.designId,pass.collectionLayout):undefined;
   const addedArtwork=validateAddedArtwork(pass.addedArtwork),photoPlacement=pass.source==='photo'&&pass.photoPlacement?validatePlacement(pass.photoPlacement):undefined;
   if(pass.phoneTemplateId!==undefined)phoneTemplate(pass.model,pass.phoneTemplateId);
+  const phoneColor=pass.phoneColor?frozenPhoneColor(pass.phoneColor):null;
   // Store declarative selections, then reconstruct with trusted local renderers.
-  return structuredClone({version:2,...(pass.phoneTemplateId?{phoneTemplateId:pass.phoneTemplateId}:{}),code:pass.code,source:pass.source,designId:pass.designId,model:pass.model,photo:pass.source==='photo'?pass.photo:'',effect:pass.effect,intensity:pass.intensity,zoom:pass.zoom,x:pass.x,y:pass.y,...(addedArtwork.length?{addedArtwork}:{}),...(photoPlacement?{photoPlacement}:{}),...(collectionLayout?{collectionLayout}:{}),...(Object.keys(artworkEdits).length?{artworkEdits}:{}),...(pass.source==='photo'&&['demo','live'].includes(pass.ai?.mode)&&/^[a-zA-Z0-9_-]{1,80}$/.test(pass.ai.styleId||'')?{ai:{styleId:pass.ai.styleId,jobId:String(pass.ai.jobId||'').slice(0,50),mode:pass.ai.mode}}:{})});
+  return structuredClone({version:2,...(phoneColor?{phoneColor}:{}),...(pass.phoneTemplateId?{phoneTemplateId:pass.phoneTemplateId}:{}),code:pass.code,source:pass.source,designId:pass.designId,model:pass.model,photo:pass.source==='photo'?pass.photo:'',effect:pass.effect,intensity:pass.intensity,zoom:pass.zoom,x:pass.x,y:pass.y,...(addedArtwork.length?{addedArtwork}:{}),...(photoPlacement?{photoPlacement}:{}),...(collectionLayout?{collectionLayout}:{}),...(Object.keys(artworkEdits).length?{artworkEdits}:{}),...(pass.source==='photo'&&['demo','live'].includes(pass.ai?.mode)&&/^[a-zA-Z0-9_-]{1,80}$/.test(pass.ai.styleId||'')?{ai:{styleId:pass.ai.styleId,jobId:String(pass.ai.jobId||'').slice(0,50),mode:pass.ai.mode}}:{})});
 }
 export function personalPassName(pass,designs) {return pass.source==='photo'?'Your photo':designs.find(d=>d.id===pass.designId)?.name||'Your design';}

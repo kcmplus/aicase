@@ -46,6 +46,30 @@ def resolve_stock_template(model, template_id):
     return None, None
 
 
+def available_colors(model, template):
+    """Optional body previews; invalid colors never remove a saleable base model."""
+    from .phone_colors import checked_resource, validate_rgb
+    result = []
+    for color in model.colors.filter(active=True).select_related('current_resource', 'phone_model').order_by('sort_order', 'pk'):
+        try:
+            validate_rgb(color.rgb)
+            resource = color.current_resource
+            if not resource or not resource.verified_at or resource.template_id != template['id']:
+                continue
+            resource = checked_resource(color)
+            if (resource.width, resource.height) != (template['sourceWidth'], template['sourceHeight']):
+                continue
+        except serializers.ValidationError:
+            continue
+        result.append({'code': color.code, 'name': color.name, 'rgb': color.rgb,
+                       'isDefault': color.is_default, 'resource': {
+                           'version': resource.version, 'templateId': resource.template_id,
+                           'width': resource.width, 'height': resource.height,
+                           'overlay': default_storage.url(resource.overlay),
+                           'mask': default_storage.url(resource.mask)}})
+    return result
+
+
 def store_models(params):
     stocks = available_stocks()
     candidates = catalog_stocks()
@@ -72,7 +96,8 @@ def store_models(params):
         seen.add(model.pk)
         template = stock_template(stock)
         models.append({'name': model.name, 'code': model.code, 'brand': model.brand.name,
-                       'templateId': template['id'], 'inventoryItemId': stock.pk})
+                       'templateId': template['id'], 'inventoryItemId': stock.pk,
+                       'colors': available_colors(model, template)})
         templates.append(template)
     availability = 'ready' if models else 'updating' if candidates.exists() else 'empty'
     return {'version': 1, 'models': models, 'templates': templates, 'device_id': device_id, 'availability': availability,

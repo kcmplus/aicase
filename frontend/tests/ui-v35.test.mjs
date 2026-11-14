@@ -13,6 +13,11 @@ import {myDesignsPage,designReview} from '../storefront/v35-designs.js';
 import {createPersonalPass,readPass} from '../storefront/simple-core.js';
 import {phoneTemplates,phoneTemplate} from '../storefront/phone-templates.js';
 import {makePersonalDesign} from '../storefront/simple-personalize.js';
+import {validatePhoneColor,validPhoneColors,reconcilePhoneColor,colorPicker} from '../storefront/phone-colors.js';
+import {phone} from '../storefront/art.js';
+import {exportCase} from '../storefront/print-export.js';
+import {orderRequest,savedOrder} from '../storefront/order-service.js';
+import {applyStockCatalog,stockSelection} from '../storefront/stock-catalog.js';
 import {customerPage} from '../storefront/customer-account.js';
 
 test('V35 home prioritizes the real album handler and preserves gallery and AI editor destinations',()=>{
@@ -331,7 +336,7 @@ test('actual editor submit opens a validated preview; saving stays local and onl
  const submitStart=source.indexOf("app.addEventListener('submit',async event=>{");
  const clickStart=source.indexOf("app.addEventListener('click',async event=>{",submitStart);
  const clickEnd=source.indexOf("  if(el.dataset.lookAction==='open')",clickStart);
- vm.createContext(context);vm.runInContext(source.slice(submitStart,clickStart)+source.slice(clickStart,clickEnd)+'});',context);
+ vm.createContext(context);vm.runInContext(appFunction(source,'assertCurrentColor')+'\n'+source.slice(submitStart,clickStart)+source.slice(clickStart,clickEnd)+'});',context);
  await submit({target:{id:'design-form'},preventDefault(){}});
  assert.ok(context.reviewPass);assert.deepEqual(context.reviewPass.photoPlacement,pass.photoPlacement);assert.equal(context.checkoutDraft,null);assert.equal(writes.length,0);assert.equal(routes.length,0);
  const button=action=>({preventDefault(){},target:{closest:()=>({dataset:{action},disabled:false})}});
@@ -341,8 +346,8 @@ test('actual editor submit opens a validated preview; saving stays local and onl
 test('actual restore handler retains rotations, text, crop and original bytes while clearing order authority',async()=>{
  const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8'),pass=syntheticPass(),before=JSON.stringify(pass),writes=[],routes=[];
  const context={readPass,phoneModels:[pass.model],privateWrite:async(name,value)=>writes.push([name,value]),workspace:{check(){}},finishInlineText:()=>{},state:{pass:{paid:true},job:{status:'printing'},editOrderId:'OLD'},structuredClone,
-  aiJob:{id:'OLD'},selectedArtwork:'OLD',comparing:true,reviewPass:{},save:()=>{},go:route=>routes.push(route),notify:()=>{},pass};
- await vm.runInNewContext(appFunction(source,'restoreLocalDesign')+'\nrestoreLocalDesign(pass)',context);
+  stockSelection:()=>null,reconcilePhoneColor,colorNotice:false,aiJob:{id:'OLD'},selectedArtwork:'OLD',comparing:true,reviewPass:{},save:()=>{},go:route=>routes.push(route),notify:()=>{},pass};
+ await vm.runInNewContext(appFunction(source,'syncDraftColor')+'\n'+appFunction(source,'restoreLocalDesign')+'\nrestoreLocalDesign(pass)',context);
  assert.equal(context.state.pass,null);assert.equal(context.state.job,null);assert.equal(context.state.editOrderId,null);assert.equal(context.aiJob,null);
  assert.equal(context.state.photo,pass.photo);assert.deepEqual(context.state.photoPlacement,pass.photoPlacement);assert.deepEqual(context.state.photoArtwork,pass.addedArtwork);
  assert.equal(context.state.artworkLayouts.bloom.zoom,113);assert.equal(context.state.zoom,127);assert.equal(writes[0][0],'draft-photo');assert.equal(writes[0][1],pass.photo);assert.equal(routes.at(-1),'choose');assert.equal(JSON.stringify(pass),before);
@@ -383,4 +388,124 @@ test('AI submission requires the current server identity and cannot start after 
  const context={aiBusy:false,aiUi:{},membership:{authenticated:true},aiJob:{mode:'live',status:'awaiting_confirmation'},render:()=>{},notify:()=>{},location:{hash:'#choose'},syncAIAccount:async()=>{throw Error('Session unavailable');},workspace:{check(){}},submitLiveRender:async()=>{submissions++;}};
  await vm.runInNewContext(appFunction(source,'confirmAI')+'\nconfirmAI(true,true)',context);
  assert.equal(submissions,0);assert.equal(context.aiBusy,false);assert.equal(context.aiJob.status,'awaiting_confirmation');assert.match(context.aiUi.error,/Session unavailable/);
+});
+
+const previewColor=(template=phoneTemplates[0],code='natural',version=1)=>({code,name:'Natural <body>',rgb:{r:10,g:120,b:230},isDefault:false,resource:{version,templateId:template.id,width:template.sourceWidth,height:template.sourceHeight,overlay:'/media/phone-colors/'+String(version).padStart(32,'0')+'/overlay.png',mask:'/media/phone-colors/'+String(version).padStart(32,'0')+'/mask.png'}});
+test('managed preview colors validate RGB, exact template, dimensions and local versioned paths',()=>{
+ const template=phoneTemplates[0],color=previewColor(template);
+ assert.deepEqual(validatePhoneColor(color,template),color);
+ for(const rgb of [{r:true,g:1,b:2},{r:'1',g:1,b:2},{r:1.2,g:1,b:2},{r:256,g:1,b:2},{r:-1,g:1,b:2},{r:1,g:2}])assert.throws(()=>validatePhoneColor({...color,rgb},template));
+ for(const changes of [{version:0},{version:'1'},{templateId:'wrong'},{width:1},{overlay:'https://evil.test/a.png'},{mask:'/media/../private.png'}])assert.throws(()=>validatePhoneColor({...color,resource:{...color.resource,...changes}},template));
+ assert.deepEqual(validPhoneColors([color,color,{...color,code:'bad',resource:null}],template),[color]);
+});
+test('no colors skip the picker; defaults, single/multiple colors and stale selections stay model-specific',()=>{
+ const one=previewColor(),two={...previewColor(undefined,'other'),isDefault:true};
+ for(const colors of [undefined,[],null])assert.equal(colorPicker(colors||[],null),'');
+ assert.equal(reconcilePhoneColor(null,[one]).color.code,one.code);
+ assert.equal(reconcilePhoneColor(null,[one,two]).color.code,two.code);
+ assert.equal(reconcilePhoneColor(one,[one,two]).color.code,one.code);
+ assert.equal(reconcilePhoneColor(one,[]).color,null);assert.equal(reconcilePhoneColor(one,[]).changed,true);
+ assert.equal(reconcilePhoneColor(one,[previewColor(undefined,'natural',2)]).changed,true);
+ assert.equal(reconcilePhoneColor(one,[{...one,rgb:{r:0,g:0,b:0}}]).changed,true);
+ for(const lang of ['en-US','zh-CN']){
+  const html=colorPicker([one,two],two,lang,true);
+  assert.match(html,/background:rgb\(10,120,230\)/);assert.match(html,/data-phone-color="other" aria-pressed="true"/);
+  assert.match(html,/role="status"/);assert.match(html,/&lt;body&gt;/);assert.doesNotMatch(html,/<body>/);
+  assert.match(colorPicker([],null,lang,true),/role="status"/);assert.doesNotMatch(colorPicker([],null,lang,true),/fieldset/);
+ }
+});
+test('actual draft reconciliation clears an old model color, selects its own default and reports resource changes',async()=>{
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
+ const old=previewColor(),fresh=previewColor(undefined,'new',2);
+ const context={state:{model:'new-model',phoneColor:old},stockSelection:()=>({colors:[fresh]}),reconcilePhoneColor,colorNotice:false};
+ vm.createContext(context);vm.runInContext(appFunction(source,'syncDraftColor')+'\n'+appFunction(source,'assertCurrentColor'),context);
+ vm.runInContext('syncDraftColor(true)',context);assert.equal(context.state.phoneColor.code,'new');assert.equal(context.colorNotice,false);
+ context.state.phoneColor=old;vm.runInContext('syncDraftColor()',context);assert.equal(context.colorNotice,true);assert.equal(context.state.phoneColor.code,'new');
+ context.locale=()=> 'en-US';context.selection={phoneColor:old};context.available={colors:[fresh]};
+ assert.throws(()=>vm.runInContext('assertCurrentColor(selection,available)',context),/preview your design again/);
+ context.stockSelection=()=>({colors:[]});vm.runInContext('syncDraftColor()',context);assert.equal(context.state.phoneColor,null);
+});
+test('a local design and server order retain their frozen body preview after current colors disappear',()=>{
+ const template=phoneTemplates[0],color=previewColor(template);
+ const pass=createPersonalPass({source:'collection',designId:'bloom',model:template.model,phoneTemplateId:template.id,phoneColor:color,effect:'original',intensity:0,zoom:100,x:50,y:50});
+ const copy=readPass(pass.code,pass);assert.deepEqual(copy.phoneColor,color);
+ const design=makePersonalDesign(copy),html=phone(design,copy.model);
+ assert.match(html,new RegExp(color.resource.overlay));assert.match(html,new RegExp(color.resource.mask));
+ const without=makePersonalDesign({...copy,phoneColor:null});delete design.phoneColor;assert.deepEqual(design,without);
+ const order=savedOrder({reference:'frozen-color',snapshot:pass,status:'paid',mode:'demo',amount:'10.00',currency:'USD',revision:1});
+ assert.deepEqual(order.pass.phoneColor,color);assert.equal(order.priceCents,1000);
+});
+test('order writes send only color code and version, leaving local frozen previews untouched',async()=>{
+ const template=phoneTemplates[0],color=previewColor(template),snapshot={code:'synthetic',phoneColor:color},before=structuredClone(snapshot),sent=[];
+ const fetcher=async(url,options)=>{sent.push({url,options});return {ok:true,json:async()=>url.includes('csrf')?{csrfToken:'synthetic'}:{reference:'synthetic'}};};
+ for(const method of ['POST','PATCH'])await orderRequest('',{method,body:{snapshot},key:'a'.repeat(64),fetcher});
+ for(const request of sent.filter(r=>r.url.includes('/orders/')))assert.deepEqual(JSON.parse(request.options.body).snapshot.phoneColor,{code:'natural',version:1});
+ assert.deepEqual(snapshot,before);
+});
+test('actual export uses body assets only for preview and keeps native print dimensions and mask',async()=>{
+ const template=phoneTemplates[0],color=previewColor(template),loads=[],canvases=[];
+ const encoded=await readFile(new URL('../storefront'+template.mask,import.meta.url));
+ const original={document:globalThis.document,Image:globalThis.Image,location:globalThis.location};
+ const context={fillRect(){},save(){},restore(){},translate(){},rotate(){},scale(){},drawImage(){},filter:'none'};
+ try{
+  globalThis.location={href:'http://localhost/'};
+  globalThis.Image=class{naturalWidth=600;naturalHeight=1200;set src(value){loads.push(value);queueMicrotask(()=>this.onload());}};
+  globalThis.document={fonts:{ready:Promise.resolve()},createElement(){const c={width:0,height:0,getContext:()=>({...context}),toBlob:fn=>fn(new Blob([encoded]))};canvases.push(c);return c;}};
+  const design={art:'solid',layers:[],phoneTemplateId:template.id,phoneColor:color};
+  await exportCase(design,template.model,'print');
+  assert.ok(loads.some(s=>s.endsWith(template.mask)));assert.ok(loads.every(s=>!s.includes('/phone-colors/')));
+  assert.equal(canvases[0].width,template.printWidth);assert.equal(canvases[0].height,template.printHeight);
+  loads.length=0;await exportCase(design,template.model,'preview');
+  assert.ok(loads.some(s=>s.endsWith(color.resource.mask)));assert.ok(loads.some(s=>s.endsWith(color.resource.overlay)));
+ }finally{for(const [key,value] of Object.entries(original)){if(value===undefined)delete globalThis[key];else globalThis[key]=value;}}
+});
+
+test('public color extensions preserve the stocked base template and discard only invalid variants',()=>{
+ const template={...phoneTemplates[0],id:'supplier-887-'+ 'd'.repeat(20),inventoryItemId:887,dpi:null,previewOnly:true,model:'Synthetic Color Model',
+  overlay:'/media/supplier-templates/'+'e'.repeat(64)+'-overlay.png',previewOverlay:'/media/supplier-templates/'+'e'.repeat(64)+'-overlay.png',mask:'/media/supplier-templates/'+'f'.repeat(64)+'-mask.png'};
+ const color=previewColor(template);
+ const catalog=colors=>({version:1,templates:[template],models:[{name:template.model,brand:'Synthetic',templateId:template.id,inventoryItemId:887,colors}]});
+ for(const colors of [undefined,[],[{...color,resource:null}],[{...color,rgb:{r:0,g:0,b:999}}]]){
+  applyStockCatalog(catalog(colors));assert.ok(stockSelection(template.model));assert.deepEqual(stockSelection(template.model).colors,[]);
+  assert.equal(phoneTemplate(template.model).mask,template.mask);
+ }
+ applyStockCatalog(catalog([color]));assert.deepEqual(stockSelection(template.model).colors,[color]);
+ const next={...color,rgb:{r:255,g:0,b:0}};applyStockCatalog(catalog([next]));assert.deepEqual(stockSelection(template.model).colors[0].rgb,next.rgb);
+ applyStockCatalog({version:1,models:[],templates:[]});assert.equal(stockSelection(template.model),null);
+});
+
+test('a frozen color survives an explicit device template change without painting incompatible assets',()=>{
+ const original=phoneTemplates[0],color=previewColor(original);
+ const pass=createPersonalPass({source:'collection',designId:'bloom',model:original.model,phoneTemplateId:original.id,phoneColor:color,effect:'original',intensity:0,zoom:100,x:50,y:50});
+ const next={...original,id:'supplier-888-'+ 'b'.repeat(20),inventoryItemId:888,dpi:null,previewOnly:true,
+  overlay:'/media/supplier-templates/'+'c'.repeat(64)+'-overlay.png',previewOverlay:'/media/supplier-templates/'+'c'.repeat(64)+'-overlay.png',mask:'/media/supplier-templates/'+'d'.repeat(64)+'-mask.png'};
+ const order=savedOrder({reference:'changed-device-template',snapshot:{...pass,phoneTemplateId:next.id},phone_template:next,status:'paid',mode:'free_test',amount:'0.00',currency:'USD',revision:2});
+ assert.deepEqual(order.pass.phoneColor,color);
+ const html=phone(makePersonalDesign(order.pass),order.pass.model);
+ assert.ok(html.includes(next.previewOverlay));assert.ok(html.includes(next.mask));assert.ok(!html.includes('/phone-colors/'));
+});
+
+test('actual color click selects only a current model option, updates preview and restores button focus',async()=>{
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
+ const start=source.indexOf("app.addEventListener('click',async event=>{"),end=source.indexOf('  if(el.dataset.quickFont)',start);
+ const one=previewColor(),two=previewColor(undefined,'other',2);let handler,saves=0,previews=0,focuses=0;
+ const picker={innerHTML:'',querySelector:()=>({focus(){focuses++;}})};
+ const context={app:{addEventListener:(name,fn)=>{handler=fn;}},sessionCheckBusy:false,photoBusy:false,aiBusy:false,passBusy:false,
+  state:{model:'synthetic',phoneColor:one},stockSelection:()=>({colors:[one,two]}),reviewPass:{},colorNotice:true,
+  save:()=>{saves++;},updatePreview:()=>{previews++;},document:{querySelector:()=>picker},colorPicker,structuredClone,locale:()=> 'en-US'};
+ vm.runInNewContext(source.slice(start,end)+'});',context);
+ const click=code=>handler({target:{closest:selector=>{assert.ok(selector.includes('[data-phone-color]'));return {dataset:{phoneColor:code}};}}});
+ await click('other');assert.equal(context.state.phoneColor.code,'other');assert.equal(context.reviewPass,null);assert.equal(context.colorNotice,false);
+ assert.match(picker.innerHTML,/data-phone-color="other" aria-pressed="true"/);assert.equal(saves,1);assert.equal(previews,1);assert.equal(focuses,1);
+ await click('foreign-model-color');assert.equal(saves,1);assert.equal(context.state.phoneColor.code,'other');
+});
+
+test('actual local restore clears unavailable color while retaining composition and the immutable saved record',async()=>{
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8'),template=phoneTemplates[0],color=previewColor(template);
+ const pass=createPersonalPass({source:'collection',designId:'bloom',model:template.model,phoneTemplateId:template.id,phoneColor:color,effect:'original',intensity:0,zoom:113,x:42,y:61});
+ const before=JSON.stringify(pass),context={pass,readPass,phoneModels:[pass.model],privateWrite:async()=>{},workspace:{check(){}},finishInlineText:()=>{},state:{},structuredClone,
+  stockSelection:()=>({templateId:template.id,colors:[]}),reconcilePhoneColor,colorNotice:false,save:()=>{},go:()=>{},notify:()=>{}};
+ await vm.runInNewContext(appFunction(source,'syncDraftColor')+'\n'+appFunction(source,'restoreLocalDesign')+'\nrestoreLocalDesign(pass)',context);
+ assert.equal(context.state.phoneColor,null);assert.equal(context.colorNotice,true);assert.equal(context.state.artworkLayouts.bloom.zoom,113);assert.equal(context.state.artworkLayouts.bloom.x,42);
+ assert.equal(JSON.stringify(pass),before);
 });

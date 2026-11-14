@@ -86,6 +86,15 @@ class AIMetadata(StrictSerializer):
     jobId = serializers.CharField(max_length=50, allow_blank=True)
     mode = serializers.ChoiceField(choices=['demo','live'])
 
+class ColorSelection(StrictSerializer):
+    code = serializers.SlugField(max_length=80)
+    version = serializers.IntegerField(min_value=1)
+
+    def to_internal_value(self, data):
+        if not isinstance(data, dict) or type(data.get('version')) is not int or not isinstance(data.get('code'), str):
+            raise serializers.ValidationError('Invalid color resource version.')
+        return super().to_internal_value(data)
+
 class Snapshot(Layout):
     version = serializers.IntegerField(min_value=2, max_value=2)
     code = serializers.RegexField(r'^POP-C-[A-F0-9]{16}$')
@@ -100,6 +109,7 @@ class Snapshot(Layout):
     photoPlacement = Placement(required=False)
     collectionLayout = Layout(required=False)
     ai = AIMetadata(required=False)
+    phoneColor = ColorSelection(required=False)
     def validate(self, data):
         # JSON must be finite even for values where a serializer range comparison
         # alone would permit NaN. Clients cannot submit HTML, SVG or remote URLs.
@@ -130,6 +140,21 @@ class Snapshot(Layout):
         template = template_for(data['model'])
         if template:
             data.setdefault('phoneTemplateId', template['id'])
+        if 'phoneColor' in data:
+            from .store_catalog import available_colors
+            color_template = data.get('_template') or template_for(data['model'], data.get('phoneTemplateId'))
+            model = None
+            if color_template:
+                model = stock.product.phone_model if supplied_template.startswith('supplier-') else PhoneModel.objects.filter(
+                    name=data['model'], code=color_template['code']).first()
+            selection = data['phoneColor']
+            color = next((c for c in available_colors(model, color_template)
+                          if c['code'] == selection['code'] and c['resource']['version'] == selection['version']), None) if model else None
+            if color is None:
+                raise serializers.ValidationError('This phone color changed or is unavailable. Please preview your design again.')
+            # Resolve all display values and immutable resource paths on the server.
+            # Historical paid orders are read as-is and never re-resolve this data.
+            data['phoneColor'] = color
         if data['designId'] not in LAYERS or not DesignTemplate.objects.filter(code=data['designId'], active=True).exists():
             raise serializers.ValidationError('This design is unavailable.')
         for layout in (data, data.get('collectionLayout', {})):

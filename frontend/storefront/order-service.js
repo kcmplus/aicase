@@ -1,4 +1,5 @@
 import {readPass} from './simple-core.js';
+import {colorSelection} from './phone-colors.js';
 import {esc} from './art.js';
 import {registerSupplierTemplates} from './phone-templates.js';
 import {retryUnavailableRead} from './request-retry.js';
@@ -10,6 +11,7 @@ export function orderAccessKey(storage=localStorage){
  return key;
 }
 export async function orderRequest(path='',{method='GET',body,fetcher=fetch,key=orderAccessKey()}={}){
+ if(body?.snapshot?.phoneColor)body={...body,snapshot:{...body.snapshot,phoneColor:colorSelection(body.snapshot.phoneColor)}};
  const multipart=typeof FormData!=='undefined'&&body instanceof FormData;
  const headers={...(!multipart?{'Content-Type':'application/json'}:{}),'X-Order-Key':key};
  if(!['GET','HEAD'].includes(method)){

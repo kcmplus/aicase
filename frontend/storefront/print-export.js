@@ -1,4 +1,5 @@
 import {phoneTemplate} from './phone-templates.js';
+import {frozenPhoneColor} from './phone-colors.js';
 import {photoEffect} from './beautify-core.js';
 import {fonts} from './editor-model.js';
 import {stickers} from './catalog.js';
@@ -132,11 +133,13 @@ export async function exportCase(design,model,kind='print'){
  // physical DPI or turn a preview template into a calibrated local-print file.
  if(kind==='supplier-print'&&!template.id.startsWith('supplier-'))throw Error('A supplier print template is required.');
  if(!['print','preview','supplier-print'].includes(kind))throw Error('Invalid export type.');
+ const frozen=kind==='preview'&&design.phoneColor?frozenPhoneColor(design.phoneColor):null;
+ const color=frozen&&frozen.resource.templateId===template.id&&frozen.resource.width===template.sourceWidth&&frozen.resource.height===template.sourceHeight?frozen:null;
  const {printWidth:w,printHeight:h}=template;
- const [{output,effectiveDpi},mask]=await Promise.all([drawArtwork(design,w,h),loadImage(template.mask)]);
+ const [{output,effectiveDpi},mask]=await Promise.all([drawArtwork(design,w,h),loadImage(color?.resource.mask||template.mask)]);
  const ctx=output.getContext('2d');ctx.globalCompositeOperation='destination-in';ctx.drawImage(mask,0,0,w,h);ctx.globalCompositeOperation='source-over';
  if(kind==='preview'){
-  ctx.drawImage(await loadImage(template.previewOverlay),0,0,w,h);
+  ctx.drawImage(await loadImage(color?.resource.overlay||template.previewOverlay),0,0,w,h);
   ctx.globalCompositeOperation='destination-over';ctx.fillStyle='white';ctx.fillRect(0,0,w,h);ctx.globalCompositeOperation='source-over';
  }
  const raw=await new Promise((resolve,reject)=>output.toBlob(b=>b?resolve(b):reject(Error('Image export failed. Try again.')),'image/png'));

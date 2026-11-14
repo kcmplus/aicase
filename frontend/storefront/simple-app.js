@@ -13,6 +13,7 @@ import {phoneBrand,phoneBrands,findPhoneModels} from './phone-catalog.js';
 import {stockedPhoneModels as phoneModels,stockCatalogStatus,stockSelection,loadStockCatalog,deviceScope} from './stock-catalog.js';
 import {registerSupplierTemplates,phoneTemplate} from './phone-templates.js';
 import {fonts} from './editor-model.js';
+import {reconcilePhoneColor,colorPicker} from './phone-colors.js';
 import {dragPlacement,scaleFromPointer,rotationFromPointer,rotateGroup} from './artwork-drag.js';
 import {freshOrders,orderForCode,currentOrder,commitPrintOrder} from './print-orders.js';
 import {freshMembership,refreshMembership,migrateRender} from './ai-membership.js';
@@ -37,6 +38,7 @@ import {myDesignsPage,designReview} from './v35-designs.js';
 import {showStorageStartupError} from './v35-startup.js';
 
 async function startStorefront(){
+let colorNotice=false;
 const app = document.querySelector('#app');
 app.textContent=t('Loading POPOMO…');
 const stockScope=deviceScope();
@@ -85,6 +87,7 @@ try {
   if (saved) {
     if (designs.some(d=>d.id===saved.designId)) state.designId=saved.designId;
     if (phoneModels.includes(saved.model)) state.model=saved.model;
+    if (saved.phoneColor)state.phoneColor=saved.phoneColor;
     if (stations.some(s=>s.id===saved.stationId)) state.stationId=saved.stationId;
     if(aiStyles.some(s=>s.id===saved.aiStyle))state.aiStyle=saved.aiStyle;
     state.aiExample=exampleFor(saved.aiExample).id;
@@ -110,6 +113,7 @@ try {
   }
 } catch { /* Missing or invalid local data starts a fresh session. */ }
 state.phoneTemplateId=stockSelection(state.model)?.templateId;
+if(state.phoneColor||stockSelection(state.model)?.colors?.length)syncDraftColor();
 state.aiExample=exampleFor(state.aiExample).id;
 if(!exampleFor(state.aiExample).results[state.aiStyle])state.aiStyle=Object.keys(exampleFor(state.aiExample).results)[0]||'';
 try{if(workspace.active)membership=await privateUpdate('ai-membership-v1',a=>migrateRender(a,aiJob),freshMembership());}
@@ -249,7 +253,9 @@ async function orderAction(order,action,stationId){
  return rememberOrder(data);
 }
 function personalizedPreview(selection,model,label,original=false){
- return phone(makePersonalDesign(layoutSelection(selection),original),model).replace(/aria-label="[^"]*"/,`aria-label="${esc(label+' on '+model)}"`).replace('alt="你上传的设计照片"',`alt="Your uploaded photo"`);
+ const changed=selection.phoneColor&&selection.phoneColor.resource.templateId!==phoneTemplate(model,selection.phoneTemplateId)?.id;
+ const note=changed?`<p class="field-note" role="status">${locale()==='zh-CN'?'当前设备模板不适用原机身颜色，已显示基础预览；原订单颜色快照保留。':'The original body color does not match this station template. Showing the base preview; the original order color is preserved.'}</p>`:'';
+ return note+phone(makePersonalDesign(layoutSelection(selection),original),model).replace(/aria-label="[^"]*"/,`aria-label="${esc(label+' on '+model)}"`).replace('alt="你上传的设计照片"',`alt="Your uploaded photo"`);
 }
 const passName=p=>p.version===2?personalPassName(p,designs):currentDesign(p.designId).name;
 const passPreview=p=>p.version===2?personalizedPreview(p,p.model,passName(p)):casePreview(p.designId,p.model);
@@ -354,9 +360,19 @@ function phonePicker(){
  modelBrand=phoneBrand(state.model||phoneModels[0]);modelQuery='';
  return `<details class="model-first" ${state.model?'':'open'}><summary><span class="model-summary-label">${state.model?'Your phone':'First, choose your phone'}</span><strong class="model-summary-value">${esc(state.model||'')}</strong><span class="model-summary-action">${state.model?'Change':'Choose'}</span><span class="model-summary-chevron" aria-hidden="true">⌄</span></summary><div class="model-first-body">${modelPickerBody()}</div></details>`;
 }
+function syncDraftColor(reset=false){
+ const result=reconcilePhoneColor(reset?null:state.phoneColor,stockSelection(state.model)?.colors||[]);
+ state.phoneColor=result.color;colorNotice=reset?false:colorNotice||result.changed;
+ return result.changed;
+}
+function assertCurrentColor(selection,available){
+ if(!selection.phoneColor&&!available.colors?.length)return;
+ const result=reconcilePhoneColor(selection.phoneColor,available.colors||[]);
+ if(JSON.stringify(result.color)!==JSON.stringify(selection.phoneColor||null))throw Error(locale()==='zh-CN'?'机身颜色已变化，请重新确认预览。':'The phone color changed. Please preview your design again.');
+}
 function selectPhoneModel(model){
  if(!phoneModels.includes(model))return;
- state.model=model;state.phoneTemplateId=stockSelection(model)?.templateId;modelBrand=phoneBrand(model);modelQuery='';save();updatePreview();
+ const switched=state.model!==model;state.model=model;state.phoneTemplateId=stockSelection(model)?.templateId;syncDraftColor(switched);modelBrand=phoneBrand(model);modelQuery='';save();updatePreview();const colors=document.querySelector('#phone-color-picker');if(colors)colors.innerHTML=colorPicker(stockSelection(state.model)?.colors||[],state.phoneColor,locale(),colorNotice);
  for(const button of document.querySelectorAll('[data-design]')){
   const thumbnail=button.querySelector('.design-thumbnail-case');
   if(thumbnail)thumbnail.innerHTML=casePreview(button.dataset.design,model);
@@ -440,7 +456,7 @@ app.addEventListener('drop',async event=>{
 });
 function choose() {
  const d=currentDesign(state.designId),own=state.source==='photo',hasPhoto=Boolean(state.photo);
- return `<section class="flow wrap editor-flow v35-editor">${stationContext()}<div class="v35-editor-heading"><div><p class="v35-kicker">A LITTLE MORE YOU.</p><h1>${locale()==='zh-CN'?'让灵感，成为你的设计。':'Make it yours.'}</h1></div><a class="text-button" href="#my-designs">${locale()==='zh-CN'?'本机保存的设计 →':'Saved on this browser →'}</a></div>${phonePicker()}
+ return `<section class="flow wrap editor-flow v35-editor">${stationContext()}<div class="v35-editor-heading"><div><p class="v35-kicker">A LITTLE MORE YOU.</p><h1>${locale()==='zh-CN'?'让灵感，成为你的设计。':'Make it yours.'}</h1></div><a class="text-button" href="#my-designs">${locale()==='zh-CN'?'本机保存的设计 →':'Saved on this browser →'}</a></div>${phonePicker()}<div id="phone-color-picker">${colorPicker(stockSelection(state.model)?.colors||[],state.phoneColor,locale(),colorNotice)}</div>
  <div class="choose-layout">
   <div class="source-switch editor-sources" role="group" aria-label="Design source"><button type="button" data-source="collection" aria-pressed="${!own}" ${photoBusy?'disabled':''}>The collection</button><button type="button" data-source="photo" aria-pressed="${own}" aria-busy="${photoBusy}" ${photoBusy?'disabled':''}>${photoBusy?'<i class="studio-spinner"></i> Reading your photo…':icon('upload',15)+' Your photo'}</button></div>
   <div class="large-preview" ${own?'data-photo-drop':''} aria-busy="${photoBusy}" style="--card:${own?'#eeece7':d.color}">
@@ -474,10 +490,14 @@ async function restoreLocalDesign(pass){
  const p=readPass(pass.code,pass);
  if(p.source==='photo')await privateWrite('draft-photo',p.photo);
  workspace.check();finishInlineText();
- Object.assign(state,{source:p.source,designId:p.designId,model:phoneModels.includes(p.model)?p.model:'',phoneTemplateId:p.phoneTemplateId,photo:p.source==='photo'?p.photo:'',effect:p.effect,intensity:p.intensity,zoom:p.zoom,x:p.x,y:p.y,ai:p.ai||null,aiJobId:null,photoOrigin:'upload',photoArtwork:p.source==='photo'?structuredClone(p.addedArtwork||[]):[],photoPlacement:structuredClone(p.photoPlacement||null),keepCollection:Boolean(p.collectionLayout),artworkLayouts:{},pass:null,job:null,editOrderId:null});
+ Object.assign(state,{source:p.source,designId:p.designId,model:phoneModels.includes(p.model)?p.model:'',phoneTemplateId:p.phoneTemplateId,phoneColor:p.phoneColor||null,photo:p.source==='photo'?p.photo:'',effect:p.effect,intensity:p.intensity,zoom:p.zoom,x:p.x,y:p.y,ai:p.ai||null,aiJobId:null,photoOrigin:'upload',photoArtwork:p.source==='photo'?structuredClone(p.addedArtwork||[]):[],photoPlacement:structuredClone(p.photoPlacement||null),keepCollection:Boolean(p.collectionLayout),artworkLayouts:{},pass:null,job:null,editOrderId:null});
  if(p.source==='collection')state.artworkLayouts[p.designId]={zoom:p.zoom,x:p.x,y:p.y,artworkEdits:structuredClone(p.artworkEdits||{}),addedArtwork:structuredClone(p.addedArtwork||[])};
  if(p.collectionLayout)state.artworkLayouts[p.designId]={...structuredClone(p.collectionLayout),addedArtwork:[]};
- aiJob=null;selectedArtwork=null;comparing=false;reviewPass=null;save();go('choose');
+ const currentTemplate=stockSelection(state.model)?.templateId;
+ const templateChanged=Boolean(currentTemplate&&currentTemplate!==state.phoneTemplateId);
+ if(currentTemplate)state.phoneTemplateId=currentTemplate;
+ syncDraftColor();aiJob=null;selectedArtwork=null;comparing=false;reviewPass=null;save();go('choose');
+ if(templateChanged)notify(locale()==='zh-CN'?'机型模板已变化，请重新确认预览。':'The phone template changed. Please preview your design again.');
  if(!state.model)notify('This phone model is out of stock or unavailable. Please choose again.');
 }
 function closeDesignReview(){reviewPass=null;reviewSaved=false;document.querySelector('.v35-design-review')?.close();render(true);document.querySelector('#design-form button')?.focus({preventScroll:true});}
@@ -772,6 +792,7 @@ app.addEventListener('submit',async event=>{
       const available=stockSelection(submitted.model);
       if(!available)throw Error('This phone model is out of stock or unavailable. Please choose again.');
       if(submitted.phoneTemplateId&&submitted.phoneTemplateId!==available.templateId){state.phoneTemplateId=available.templateId;throw Error('The phone template changed. Please review your design again.');}
+      assertCurrentColor(submitted,available);
       const pass=createPersonalPass({...layoutSelection(submitted),phoneTemplateId:available.templateId});
       reviewPass=pass;reviewSaved=false;comparing=false;
     }catch(error){notify(error.message||'The design could not be saved. Please try again.');}
@@ -780,7 +801,7 @@ app.addEventListener('submit',async event=>{
   if(event.target.id==='v35-work-search'){event.preventDefault();const fields=new FormData(event.target),params=new URLSearchParams({category:String(fields.get('category')||'all'),q:String(fields.get('q')||'').slice(0,100)});go('designs?'+params);}
 });
 app.addEventListener('click',async event=>{
-  const el=event.target.closest('[data-phone-brand],[data-phone-model],[data-action],[data-design],[data-start-design],[data-source],[data-effect],[data-ai-action],[data-ai-look-example],[data-ai-look-step],[data-look-action],[data-look-mode],[data-ai-group],[data-ai-view],[data-artwork-item],[data-add-graphic],[data-quick-font],[data-quick-color]');if(!el||el.disabled||photoBusy||passBusy||aiBusy||sessionCheckBusy)return;
+  const el=event.target.closest('[data-phone-brand],[data-phone-model],[data-phone-color],[data-action],[data-design],[data-start-design],[data-source],[data-effect],[data-ai-action],[data-ai-look-example],[data-ai-look-step],[data-look-action],[data-look-mode],[data-ai-group],[data-ai-view],[data-artwork-item],[data-add-graphic],[data-quick-font],[data-quick-color]');if(!el||el.disabled||photoBusy||passBusy||aiBusy||sessionCheckBusy)return;
   if(el.dataset.action==='home-photo'){openPhotoPicker();return;}
   if(el.dataset.action==='reload-private-workspace'){location.reload();return;}
   if(el.dataset.action==='close-design-review'){closeDesignReview();return;}
@@ -797,6 +818,7 @@ app.addEventListener('click',async event=>{
      if(!PRINT_AVAILABLE&&!state.editOrderId)throw Error('Printing is unavailable. Your local design can still be saved.');
      await refreshStockChoices();const available=stockSelection(reviewPass.model);
      if(!available||available.templateId!==reviewPass.phoneTemplateId)throw Error('The phone template changed. Please review your design again.');
+     assertCurrentColor(reviewPass,available);
      const pass=reviewPass;
      checkoutDraft={pass,fulfillmentType:orderBook.orders[state.editOrderId]?.fulfillmentType||checkoutDraft?.fulfillmentType||'pickup',phoneTemplate:phoneTemplate(pass.model,pass.phoneTemplateId),editId:state.editOrderId||null,requestKey:crypto.randomUUID(),revision:orderBook.orders[state.editOrderId]?.revision};
      await privateWrite('checkout-draft',checkoutDraft);reviewPass=null;go('checkout');
@@ -843,6 +865,7 @@ app.addEventListener('click',async event=>{
    document.querySelector(`[data-phone-brand="${modelBrand}"]`)?.focus({preventScroll:true});return;
   }
   if(el.dataset.phoneModel){selectPhoneModel(el.dataset.phoneModel);return;}
+  if(el.dataset.phoneColor){const color=stockSelection(state.model)?.colors?.find(c=>c.code===el.dataset.phoneColor);if(!color)return;state.phoneColor=structuredClone(color);colorNotice=false;reviewPass=null;save();updatePreview();const colors=document.querySelector('#phone-color-picker');colors.innerHTML=colorPicker(stockSelection(state.model).colors,state.phoneColor,locale());colors.querySelector(`[data-phone-color="${color.code}"]`)?.focus();return;}
   if(el.dataset.quickFont){applyTextStyle('font',el.dataset.quickFont);return;}
   if(el.dataset.quickColor){applyTextStyle('color',el.dataset.quickColor);return;}
   if(el.dataset.addGraphic){
@@ -919,9 +942,10 @@ if(selectedArtwork==='all'){const layout=artworkLayout();layout.zoom=100;layout.
     if(el.dataset.action==='reset-crop'){state.zoom=100;state.x=50;state.y=50;save();render(true);}
     if(['edit-pass','new-order-from-pass'].includes(el.dataset.action)){
       event.preventDefault();const current=orderForCode(orderBook,state.pass.code);if(current?.server){const latest=await refreshOrder(current.id);state.pass=latest.pass;}const p=state.pass;orderBook=await readDesign('print-orders-v1')||freshOrders();const order=orderForCode(orderBook,p.code);selectedArtwork=null;if(p.source==='collection')state.artworkLayouts[p.designId]={zoom:p.zoom,x:p.x,y:p.y,artworkEdits:structuredClone(p.artworkEdits||{}),addedArtwork:structuredClone(p.addedArtwork||[])};state.editOrderId=el.dataset.action==='edit-pass'&&order?.mode==='demo'&&order?.status==='paid'?order.id:null;
-      if(p.version===2){if(p.source==='photo')await privateWrite('draft-photo',p.photo);Object.assign(state,{source:p.source,designId:p.designId,model:p.model,photo:p.source==='photo'?p.photo:state.photo,effect:p.effect,intensity:p.intensity,zoom:p.zoom,x:p.x,y:p.y,ai:p.ai||null,photoOrigin:'upload',...(p.source==='photo'?{photoArtwork:structuredClone(p.addedArtwork||[]),photoPlacement:structuredClone(p.photoPlacement||null),keepCollection:Boolean(p.collectionLayout)}:{})});}
-      else Object.assign(state,{source:'collection',designId:p.designId,model:p.model,effect:'original'});
+      if(p.version===2){if(p.source==='photo')await privateWrite('draft-photo',p.photo);Object.assign(state,{source:p.source,designId:p.designId,model:p.model,phoneTemplateId:p.phoneTemplateId,phoneColor:p.phoneColor||null,photo:p.source==='photo'?p.photo:state.photo,effect:p.effect,intensity:p.intensity,zoom:p.zoom,x:p.x,y:p.y,ai:p.ai||null,photoOrigin:'upload',...(p.source==='photo'?{photoArtwork:structuredClone(p.addedArtwork||[]),photoPlacement:structuredClone(p.photoPlacement||null),keepCollection:Boolean(p.collectionLayout)}:{})});}
+      else Object.assign(state,{source:'collection',designId:p.designId,model:p.model,phoneColor:null,effect:'original'});
       if(!phoneModels.includes(state.model))state.model='';
+      state.phoneTemplateId=stockSelection(state.model)?.templateId;syncDraftColor();
       if(p.source==='photo'&&p.collectionLayout)state.artworkLayouts[p.designId]={...structuredClone(p.collectionLayout),addedArtwork:structuredClone(p.addedArtwork||[])};
       comparing=false;save();go('choose');
     }
@@ -939,11 +963,12 @@ if(selectedArtwork==='all'){const layout=artworkLayout();layout.zoom=100;layout.
 document.querySelector('.skip-link').addEventListener('click',event=>{event.preventDefault();document.querySelector('#main')?.focus();});
 let stockRefreshedAt=Date.now();
 async function refreshStockChoices(){
- const before=phoneModels.join('|'),beforeStatus=stockCatalogStatus;
+ const before=JSON.stringify(phoneModels.map(model=>stockSelection(model))),beforeStatus=stockCatalogStatus;
  await loadStockCatalog(undefined,stockScope);stockRefreshedAt=Date.now();
  if(stockCatalogStatus==='ready'&&state.model&&!phoneModels.includes(state.model)){state.model='';state.phoneTemplateId=undefined;save();}
+ if(stockCatalogStatus==='ready'&&(state.phoneColor||stockSelection(state.model)?.colors?.length)){syncDraftColor();save();}
  modelBrand=phoneBrands(phoneModels).includes(modelBrand)?modelBrand:phoneBrand(phoneModels[0]);
- return before!==phoneModels.join('|')||beforeStatus!==stockCatalogStatus;
+ return before!==JSON.stringify(phoneModels.map(model=>stockSelection(model)))||beforeStatus!==stockCatalogStatus;
 }
 setInterval(async()=>{if(document.hidden||passBusy||photoBusy||aiBusy||canvasExpanded||(stockCatalogStatus==='ready'&&Date.now()-stockRefreshedAt<60000))return;const changed=await refreshStockChoices();if(changed&&location.hash.startsWith('#choose'))render(true);},10000);
 async function navigate(){
@@ -1034,7 +1059,7 @@ async function mergeAIAccount(data){
 function lockPrivateWorkspace(){
  workspace.lock();
  // Keep committed data in its original namespace while removing private views.
- Object.assign(state,{photo:'',pass:null,job:null,ai:null,aiJobId:null,artworkLayouts:{},photoArtwork:[],photoPlacement:null,editOrderId:null});
+ Object.assign(state,{photo:'',phoneColor:null,pass:null,job:null,ai:null,aiJobId:null,artworkLayouts:{},photoArtwork:[],photoPlacement:null,editOrderId:null});
  reviewPass=null;reviewSaved=false;checkoutDraft=null;aiJob=null;localDesigns=[];orderRows=[];paymentOrder=null;orderBook=freshOrders();
  membership={...freshMembership(),server:true,authenticated:false,customer:null};
  Object.assign(customerUI,{email:'',codeSent:false,ledger:[],ledgerNext:null,ledgerOpen:false});

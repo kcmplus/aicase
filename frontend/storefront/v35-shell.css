@@ -35,3 +35,12 @@ body{font-family:'DM Sans','PingFang SC','Microsoft YaHei',sans-serif;background
 
 /* Keep the existing mobile editing workspace usable while its V35 group is pending. */
 @media(max-width:760px){:is(.is-editor,.is-ai-studio)>.v35-header{min-height:56px;margin:12px auto 0}:is(.is-editor,.is-ai-studio)>.v35-footer{display:none}}
+
+/* Optional managed body previews; native buttons retain keyboard focus. */
+.v35-phone-colors{border:0;padding:0;margin:24px 0;min-width:0}
+.v35-phone-colors legend{font-weight:600;margin-bottom:12px}
+.v35-phone-colors>div{display:flex;flex-wrap:wrap;gap:10px}
+.v35-phone-colors button{display:inline-flex;align-items:center;gap:8px;max-width:100%;overflow-wrap:anywhere;border:1px solid #dcd6ea;border-radius:999px;background:#fff;padding:9px 13px;font:inherit;color:inherit;cursor:pointer}
+.v35-phone-colors button[aria-pressed=true]{border-color:#7c3aed;box-shadow:0 0 0 1px #7c3aed}
+.v35-phone-colors button:focus-visible{outline:3px solid #7c3aed;outline-offset:3px}
+.v35-phone-colors button span{display:block;flex:none;width:22px;height:22px;border:1px solid #aaa;border-radius:50%}
