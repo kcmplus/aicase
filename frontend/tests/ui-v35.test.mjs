@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile,access} from 'node:fs/promises';
-import {shellHeader,shellFooter,homePresentation,shellInfo} from '../storefront/v35-shell.js';
+import {shellHeader,shellFooter,homePresentation,shellInfo,mountShell} from '../storefront/v35-shell.js';
 
 test('V35 home prioritizes the real album handler and preserves gallery and AI editor destinations',()=>{
  const html=homePresentation({gallery:'<section id="designs">CATALOG</section>'});
@@ -46,4 +46,24 @@ test('all V35 presentation assets are local and available; editor entry retains 
  const entry=await readFile(new URL('../storefront/index.html',import.meta.url),'utf8');
  assert.match(entry,/href="\.\/v35-shell.css"/);assert.match(entry,/src="\.\/simple-app.js"/);
  assert.doesNotMatch(entry,/popomo-ui|order-store.js|profile-store.js/);
+});
+
+test('shell menu updates its expanded state and restores focus when closed',()=>{
+ const listeners={}; let focused=0;
+ const opener={isConnected:true,attrs:{},setAttribute(key,value){this.attrs[key]=value;},focus(){focused++;}};
+ const closeButton={focus(){focused++;}};
+ const menu={open:false,addEventListener(type,fn){listeners[type]=fn;},showModal(){this.open=true;},close(){this.open=false;listeners.close();},querySelector(){return closeButton;}};
+ const classes=new Set();
+ const originalDocument=globalThis.document;
+ globalThis.document={body:{classList:{add:value=>classes.add(value),remove:value=>classes.delete(value)}}};
+ const root={querySelector(selector){return selector==='#v35-menu'?menu:opener;},addEventListener(type,fn){listeners[type]=fn;},removeEventListener(type){delete listeners[type];}};
+ const click=selector=>listeners.click({target:{closest(){return {matches(value){return value.split(',').includes(selector);},dataset:{}};}}});
+ try{
+  const cleanup=mountShell(root);
+  click('[data-shell-menu]');
+  assert.equal(menu.open,true);assert.equal(opener.attrs['aria-expanded'],'true');assert.ok(classes.has('v35-menu-open'));
+  click('[data-shell-close]');
+  assert.equal(menu.open,false);assert.equal(opener.attrs['aria-expanded'],'false');assert.equal(classes.has('v35-menu-open'),false);assert.equal(focused,2);
+  cleanup();assert.equal(listeners.click,undefined);
+ }finally{globalThis.document=originalDocument;}
 });
