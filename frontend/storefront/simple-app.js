@@ -1,3 +1,4 @@
+import {shellHeader,shellFooter,homePresentation,mountShell} from './v35-shell.js';
 import {stationScanPrompt,previewStationPanel,openStationScanner} from './station-scanner.js';
 import {stationEntry} from './station-entry.js';
 import {loadDeviceInfo,deviceInfoErrorMessage} from './device-info-service.js';
@@ -18,7 +19,7 @@ import {PRINT_PRICE,PRINT_PRICE_CENTS,PRINT_AVAILABLE,money} from './simple-pric
 import {loadCatalog,catalogStatus,AI_GENERATION_CONNECTED} from './runtime-catalog.js';
 import {aiExamples,exampleFor} from './ai-examples.js';
 import {designFor,stickers} from './catalog.js';
-import {phone, icon, brandLogo, esc} from './art.js';
+import {phone, icon, esc} from './art.js';
 import {designs, stations, readPass, stationAvailability, advancePrint, createPersonalPass} from './simple-core.js';
 
 import {effects, validateAddedArtwork, validatePlacement, isPhoto, makePersonalDesign, personalPassName} from './simple-personalize.js';
@@ -47,6 +48,7 @@ let storageWarning = false;
 let aiJob=null,aiBusy=false;
 const aiUi={mode:'pair',compare:50,lookMode:'effect',lookCompare:50,accepted:false,error:'',reconnecting:false};
 let cleanupAIStudio=()=>{};
+let cleanupShell=()=>{};
 const customerUI={email:'',codeSent:false,busy:false,error:'',success:'',ledger:[],ledgerNext:null,ledgerOpen:false,ledgerBusy:false,ledgerError:'',resendAt:0,next:'choose'};
 let resendTimer;
 let membership=await updateDesign('ai-membership-v1',a=>({...refreshMembership(a),server:true,authenticated:false,customer:null,trialRemaining:0,subscription:null}),freshMembership());
@@ -308,24 +310,16 @@ function notify(message) {
 }
 function go(route) {if(location.hash==='#'+route)render();else location.hash=route;}
 function header() {
-  return `<header class="header wrap"><a class="wordmark" href="#home" aria-label="POPOMO home">${brandLogo()}</a><nav aria-label="Main navigation"><a href="#designs">The designs</a><a href="#orders">My orders</a></nav><a class="account-link" href="#account" aria-label="${membership.authenticated?'My account':'Sign in'}">${icon('user',18)}<span>${membership.authenticated?'My account':'Sign in'}</span></a><a class="saved-link" href="#pass">${icon('scan',18)}<span>My design</span>${state.pass?'<i aria-label="Design saved"></i>':''}</a>${languageControl()}</header>${aiJob&&['queued','generating','ready'].includes(aiJob.status)&&state.ai?.jobId!==aiJob.id?`<div class="ai-resume wrap"><a href="#ai">✦ AI studio · ${aiJob.status==='ready'?'Your AI image is ready':aiJob.status==='queued'?'Waiting in queue':'Rendering'} <span>View render →</span></a></div>`:''}`;
+ const route=location.hash.slice(1).split('?')[0]||'home';
+ return shellHeader({lang:locale(),authenticated:membership.authenticated,language:languageControl(),route})+`${aiJob&&['queued','generating','ready'].includes(aiJob.status)&&state.ai?.jobId!==aiJob.id?`<div class="ai-resume wrap"><a href="#ai">✦ AI studio · ${aiJob.status==='ready'?'Your AI image is ready':aiJob.status==='queued'?'Waiting in queue':'Rendering'} <span>View render →</span></a></div>`:''}`;
 }
-function footer() {
-  if(location.hash.startsWith('#payment')&&paymentOrder)return `<footer class="footer wrap payment-footer"><a href="#home" class="footer-wordmark">POPOMO<span> A little more you.</span></a></footer>`;
-  return `<footer class="footer wrap"><a href="#home" class="footer-wordmark">POPOMO<span> A little more you.</span></a><p>Prototype · Scanning & printing are simulated.</p><a href="#kiosk">Station demo ${arrow()}</a></footer>`;
-}
+function footer() {return shellFooter(locale());}
 function steps(active) {
   return `<ol class="steps" aria-label="Your design journey">${['Pick your design','Confirm & save','Scan & print'].map((label,i)=>`<li ${i===active?'aria-current="step"':''} class="${i===active?'active':i<active?'complete':''}"><span>${i<active?'✓':i+1}</span>${label}</li>`).join('')}</ol>`;
 }
 function home() {
-  const samplePhoto='./assets/ai-styles/pets-original.png';
-  return `<section class="hero photo-home wrap">
-   <div class="hero-scene photo-home-scene"><span class="scene-top">FROM YOUR ALBUM, WITH LOVE.</span><div class="photo-home-art"><figure class="album-snapshot">${imageTag(samplePhoto,{alt:'A pet photo used as a customization example',loading:'eager',sizes:'(max-width: 700px) 55vw, 300px'})}<figcaption>Your favorite photo</figcaption></figure><span class="photo-scene-arrow" aria-hidden="true">${arrow()}</span><div class="hero-case photo-result">${phone({image:samplePhoto},phoneModels[0])}</div><span class="scene-star" aria-hidden="true">✳</span></div><span class="scene-bottom">YOUR PHOTO. YOUR CASE.</span><span class="scene-number">Photo example</span><button type="button" class="photo-upload-target" data-action="home-photo" aria-label="Choose from your album" aria-busy="${photoBusy}" ${photoBusy?'disabled':''}><span class="photo-tap-hint">${icon('upload',15)} ${photoBusy?'Reading your photo…':'Tap the image to choose a photo'}</span></button></div>
-   <div class="photo-home-action"><button type="button" class="photo-up-button" data-action="home-photo" aria-label="Choose from your album" aria-busy="${photoBusy}" ${photoBusy?'disabled':''}>${icon('upload',96)}</button><h1>${photoBusy?'Reading your photo…':'Choose from your album'}</h1><p>Your photo. Your own case.</p><a class="collection-home-link" href="#designs">Browse the gallery ${arrow()}</a></div>
-   <input id="photo-file" data-home-upload type="file" accept="image/jpeg,image/png,image/webp" hidden>
-  </section>
-  <section class="how-section home-how" id="how-it-works"><div class="wrap how-layout"><div><p class="eyebrow">FROM YOUR SCREEN TO YOUR HAND.</p><h2>Your photo.<br>Your case.<br>Your everyday.</h2></div><ol class="how-list"><li><span>01</span><div><h3>Choose a photo you love.</h3><p>Pick a photo from your album, then choose your phone model and adjust the crop. AI effects are optional.</p></div></li><li><span>02</span><div><h3>Keep your code.</h3><p>Preview your design, confirm your ${PRINT_PRICE} print order, then save the QR code.</p></div></li><li><span>03</span><div><h3>Make it real.</h3><p>Show your code to the station scanner. Confirm your prepaid design, then print and collect.</p></div></li></ol></div></section>
-  <section class="collection wrap home-gallery" id="designs"><div class="section-heading"><div><p class="eyebrow">A LITTLE INSPIRATION</p><h2>No photo in mind? Try the gallery.</h2></div><p>Ready-made designs, if you need a starting point.</p></div><div class="design-grid">${designs.map((d,i)=>`<a class="design-card" data-start-design="${d.id}" href="#choose?design=${d.id}" aria-label="Choose ${d.name}"><div class="design-image" style="--card:${d.color}"><span class="card-index">0${i+1}</span><div class="card-case">${casePreview(d.id)}</div><span class="card-arrow">${arrow()}</span></div><div class="card-caption"><div><h3>${d.name}</h3><p>${d.category}</p></div></div></a>`).join('')}</div></section>`;
+ const gallery=`<section class="collection wrap home-gallery" id="designs"><div class="section-heading"><div><p class="eyebrow">A LITTLE INSPIRATION</p><h2>No photo in mind? Try the gallery.</h2></div><p>Ready-made designs, if you need a starting point.</p></div><div class="design-grid">${designs.map((d,i)=>`<a class="design-card" data-start-design="${d.id}" href="#choose?design=${d.id}" aria-label="Choose ${d.name}"><div class="design-image" style="--card:${d.color}"><span class="card-index">0${i+1}</span><div class="card-case">${casePreview(d.id)}</div><span class="card-arrow">${arrow()}</span></div><div class="card-caption"><div><h3>${d.name}</h3><p>${d.category}</p></div></div></a>`).join('')}</div></section>`;
+ return homePresentation({lang:locale(),busy:photoBusy,gallery,station:stockScope?`<div class="v35-wrap">${stationContext()}</div>`:''});
 }
 function modelResults(){
  const models=findPhoneModels(phoneModels,modelBrand,modelQuery);
@@ -553,6 +547,7 @@ function checkoutPage(){
 function render(preserveScroll=false) {
   finishInlineText();
   cleanupAIStudio();
+  cleanupShell();
   const oldY=window.scrollY;
   const [route='home',query='']=location.hash.slice(1).split('?');
   canvasObserver?.disconnect();canvasObserver=null;canvasHome=null;
@@ -562,12 +557,14 @@ function render(preserveScroll=false) {
   const pages={account:()=>customerPage(membership,customerUI),choose,pass:passPage,kiosk:kioskPage,ai:()=>aiPage(aiJob,membership,aiBusy,aiUi),membership:()=>membershipPage(membership),checkout:checkoutPage,orders:ordersPage,payment:paymentPage};
   app.classList.toggle('is-ai-studio',route==='ai'&&aiJob?.mode==='live');
   app.classList.toggle('is-editor',route==='choose');
+  document.body.classList.toggle('v35-home-page',!Object.hasOwn(pages,route));
   app.innerHTML=header()+`<main id="main" tabindex="-1">${catalogStatus==='unavailable'?'<div class="catalog-warning" role="status">Prices and AI previews could not be loaded. Your saved designs are still available. <button class="text-button" data-action="reload-catalog">Try again</button></div>':''}${(Object.hasOwn(pages,route)?pages[route]:home)()}</main>`+footer();
   if(aiBusy)document.querySelectorAll('[data-ai-action],#ai-credit-form button,#ai-subscription-form button').forEach(el=>el.disabled=true);
   const title=({account:'My account',choose:'Choose your case',pass:'Your design pass',kiosk:'Station demo',ai:'Your AI render',membership:'AI membership',checkout:'Review print order',orders:'My orders',payment:'Payment status'})[route];
   document.title=title?`${t(title)} · POPOMO`:t('POPOMO — A little more you.');
   localize(app);document.querySelector('.skip-link').textContent=t('Skip to content');
   cleanupAIStudio=mountAIStudio(app,aiJob,aiUi);
+  cleanupShell=mountShell(app,{lang:locale(),onLanguage:value=>{const select=document.querySelector('#language');select.value=value;select.dispatchEvent(new Event('change',{bubbles:true}));document.querySelector('[data-shell-menu]')?.focus({preventScroll:true});}});
   document.querySelector('#language').disabled=aiBusy||photoBusy||passBusy;
   document.querySelectorAll('[data-editor-panel]').forEach(bindEditorPanel);
   document.querySelector('.canvas-editor')?.addEventListener('cancel',event=>{event.preventDefault();closeCanvasEditor();});
