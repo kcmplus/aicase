@@ -218,3 +218,46 @@ with patch.object(socket.socket, 'sendmsg', return_value=21) as transport:
             raise AssertionError('isolated UDP sendmsg reached the transport instead of being blocked')
     transport.assert_not_called()
 ''')
+
+    def test_sendmsg_variants_never_reach_transport(self):
+        self.run_child('''
+import socket
+from unittest.mock import patch
+with patch.object(socket.socket, 'sendmsg', return_value=1) as transport:
+    import config.direct_debug
+    for family, destination in (
+        (socket.AF_INET, ('192.0.2.1', 9)),
+        (socket.AF_INET6, ('2001:db8::1', 9, 0, 0)),
+    ):
+        with socket.socket(family, socket.SOCK_DGRAM) as sender:
+            # Omitted destination covers connected-style sendmsg; socket itself
+            # remains unconnected so this test cannot issue a real connection.
+            for args in (([b'x'],), ([b'x'], [], 0, destination)):
+                try:
+                    sender.sendmsg(*args)
+                except OSError as exc:
+                    assert 'disabled in isolated' in str(exc), str(exc)
+                else:
+                    raise AssertionError('sendmsg variant reached transport')
+    transport.assert_not_called()
+''')
+
+    def test_network_guard_initializes_without_platform_sendmsg(self):
+        self.run_child('''
+import socket
+from unittest.mock import patch
+from config.direct_debug_isolation import block_outbound_network
+class SocketWithoutSendmsg:
+    pass
+with patch.object(socket, 'socket', SocketWithoutSendmsg), \
+        patch.object(socket, 'create_connection', return_value=None) as transport:
+    block_outbound_network()
+    assert not hasattr(socket.socket, 'sendmsg')
+    try:
+        socket.create_connection(('192.0.2.1', 9))
+    except OSError as exc:
+        assert 'disabled in isolated' in str(exc), str(exc)
+    else:
+        raise AssertionError('guard failed on platform without sendmsg')
+    transport.assert_not_called()
+''')
