@@ -110,6 +110,16 @@ class StoreOrderTests(TestCase):
         for private in ('snapshot','owner_hash','request_key','customer_email','code'):
             self.assertNotIn(private,listed)
         self.assertNotIn('example@example.com',str(list(AuditLog.objects.values())))
+    def test_order_list_reports_refund_status_consistently_with_detail(self):
+        from .models import PrintRefund
+        order = self.create()
+        PrintRefund.objects.create(order=PrintOrder.objects.get(reference=order['reference']),
+                                   status='succeeded', amount='10.00', currency='USD', reason='test')
+        detail = self.client.get(self.endpoint(order)).json()
+        listed = self.client.get('/api/v1/store/orders/').json()['results'][0]
+        self.assertEqual(detail['refund']['status'], 'succeeded')
+        self.assertEqual(listed.get('refund', {}).get('status'), 'succeeded',
+                         'The order list must display the actual refund state')
     def test_repeat_checkout_returns_same_order_even_after_price_change(self):
         order=self.create()
         PricingPlan.objects.filter(kind='print').update(price='15.00')
