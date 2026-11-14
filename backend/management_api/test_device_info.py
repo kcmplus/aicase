@@ -30,7 +30,10 @@ class DeviceDiscoveryTests(TestCase):
         self.assertEqual((result['created'],result['updated']),(1,1))
         self.device.refresh_from_db()
         self.assertEqual((self.device.name,self.device.location_note,self.device.active),('Our display name','Keep me',True))
-        self.assertEqual(self.device.provider_profile,{'device_name':'Vendor name','device_num':'WM-401'})
+        self.assertEqual(self.device.provider_profile['device_name'],'Vendor name')
+        self.assertEqual(self.device.provider_profile['device_num'],'WM-401')
+        for private in ('device_password', 'contact_tel', 'total_money'):
+            self.assertNotIn(private,self.device.provider_profile)
         new=Device.objects.get(vendor_device_id='400')
         self.assertFalse(new.active)
         self.assertEqual(new.name,'WM-400')
@@ -73,7 +76,7 @@ class DeviceDiscoveryTests(TestCase):
         url=f'/api/v1/admin/device-connections/{self.connection.pk}/sync-devices/'
         self.assertEqual(client.post(url,{},format='json').status_code,403)
         user.is_superuser=True;user.save();client.force_authenticate(user)
-        with patch('management_api.device_discovery.DeviceProvider') as provider:
+        with patch('management_api.connection_sync.sync_device', return_value=MagicMock(status='success', message='done')), patch('management_api.device_discovery.DeviceProvider') as provider:
             provider.return_value.devices.return_value={'page':1,'totalNum':2,'totalPages':1,'list':self.rows}
             self.assertEqual(client.post(url,{},format='json').status_code,200)
         from .models import AuditLog

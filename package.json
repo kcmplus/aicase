@@ -9,6 +9,7 @@
     "admin": "npm --prefix frontend/admin run dev",
     "build:admin": "npm --prefix frontend/admin run build",
     "backend": "backend/.venv/bin/python scripts/run-backend-dev.py",
+    "backend:direct": "backend/.venv/bin/python scripts/run-direct-debug.py",
     "test:backend": "backend/.venv/bin/python backend/manage.py test management_api",
     "inventory:watch": "backend/.venv/bin/python -u backend/manage.py sync_device_inventory --all --watch"
   }

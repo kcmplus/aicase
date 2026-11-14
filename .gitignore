@@ -26,3 +26,8 @@ frontend/admin/dist/
 dist-release/
 backend/.local-admin.txt
 backend/.test-server-admin.txt
+backend/.direct-debug.sqlite3*
+backend/.local-direct-debug-token
+
+# Local Codex harness state, prompts, and execution logs.
+/.codex-harness/

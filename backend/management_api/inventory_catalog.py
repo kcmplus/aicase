@@ -37,6 +37,14 @@ def model_identity(product):
         if not re.fullmatch(r'[AS]\d{1,3}(?:S|\+|\s*(?:Ultra|FE))?(?:[-\s]+[45]G)?', model, re.I):
             raise ValueError('三星型号格式待确认，请手动映射。')
         prefix, brand_name, family = 'Samsung', 'Samsung', 'samsung'
+    elif brand == 'google':
+        model = re.sub(r'^google\s*', '', model, flags=re.I)
+        if not re.fullmatch(r'Pixel\s+\d{1,2}a?(?:\s+(?:Pro\s+XL|Pro|XL|Pro\s+Fold))?', model, re.I):
+            raise ValueError('Google Pixel 型号格式待确认，请手动映射。')
+        model = re.sub(r'^pixel', 'Pixel', model, flags=re.I)
+        model = re.sub(r'xl', 'XL', model, flags=re.I)
+        model = re.sub(r'fold', 'Fold', model, flags=re.I)
+        prefix, brand_name, family = 'Google', 'Google', 'samsung'
     elif brand == 'xiaomi':
         # The model field omits Redmi/Xiaomi; take only that explicit series prefix.
         series = re.match(r'^(Redmi|Xiaomi|POCO)\b', clean(product.name), re.I)
@@ -85,7 +93,7 @@ def sync_models(device):
                 brand = matches[0] if matches else None
                 if brand is None:
                     brand, _ = Brand.objects.get_or_create(code=f'vendor-{key(brand_name)}', defaults={
-                        'name': brand_name, 'active': False,
+                        'name': brand_name, 'active': False, 'auto_publish_pending': True,
                     })
                     if key(brand.name) not in aliases:
                         raise ValueError('品牌编码已占用，请手动映射。')
@@ -99,7 +107,7 @@ def sync_models(device):
                     digest = hashlib.sha256(f'{brand.pk}:{key(name)}'.encode()).hexdigest()[:24]
                     model, created = PhoneModel.objects.get_or_create(code=f'vendor-model-{digest}', defaults={
                         'brand': brand, 'name': name, 'preview_family': family,
-                        'active': False, 'print_ready': False,
+                        'active': False, 'print_ready': False, 'auto_publish_pending': True,
                         'notes': '由供应商型号规格同步；待模板审核与打印校准。预览类型仅为示意壳，不是设备打印模板。',
                     })
                     if model.brand_id != brand.pk or key(model.name) != key(name):

@@ -22,7 +22,7 @@ class CatalogItem(Timestamped):
         return self.name
 
 class Brand(CatalogItem):
-    pass
+    auto_publish_pending = models.BooleanField(default=False, editable=False)
 
 
 class DeviceProviderConnection(Timestamped):
@@ -34,6 +34,11 @@ class DeviceProviderConnection(Timestamped):
     api_key_ciphertext = models.TextField(editable=False)
     key_last_four = models.CharField(max_length=4, editable=False)
     revision = models.PositiveIntegerField(default=1)
+    profile_sync_at = models.DateTimeField(null=True, editable=False)
+    profile_sync_status = models.CharField(max_length=20, default='never', editable=False)
+    profile_sync_message = models.CharField(max_length=300, blank=True, editable=False)
+    profile_sync_token = models.UUIDField(null=True, editable=False)
+    profile_sync_started_at = models.DateTimeField(null=True, editable=False)
 
     class Meta:
         default_permissions = ()
@@ -47,6 +52,10 @@ class Device(Timestamped):
     vendor_device_id = models.CharField(max_length=40)
     name = models.CharField(max_length=120)
     location_note = models.CharField(max_length=200, blank=True)
+    name_source = models.CharField(max_length=10, choices=[('manual', '人工指定'), ('supplier', '跟随供应商')], default='manual')
+    location_source = models.CharField(max_length=10, choices=[('manual', '人工指定'), ('supplier', '跟随供应商')], default='manual')
+    installation_note = models.CharField(max_length=200, blank=True)
+    supplier_coordinate_type = models.CharField(max_length=10, blank=True, default='', choices=[('', '未确认'), ('WGS84', 'WGS84'), ('GCJ02', 'GCJ02'), ('BD09', 'BD09')])
     active = models.BooleanField(default=True)
     revision = models.PositiveIntegerField(default=1)
     last_success_at = models.DateTimeField(null=True, editable=False)
@@ -68,6 +77,7 @@ class Device(Timestamped):
 
 
 class SupplierProduct(Timestamped):
+    auto_publish_pending = models.BooleanField(default=False, editable=False)
     connection = models.ForeignKey(DeviceProviderConnection, on_delete=models.PROTECT)
     goods_id = models.CharField(max_length=40)
     product_id = models.CharField(max_length=40)
@@ -141,6 +151,7 @@ class InventorySyncRun(models.Model):
         default_permissions = ('view',)
 
 class PhoneModel(CatalogItem):
+    auto_publish_pending = models.BooleanField(default=False, editable=False)
     brand = models.ForeignKey(Brand, on_delete=models.PROTECT, related_name="models")
     preview_family = models.CharField(max_length=20, choices=[("iphone", "iPhone 示意壳"), ("samsung", "Samsung 示意壳")])
     legacy_index = models.PositiveSmallIntegerField(unique=True, null=True, blank=True, editable=False)
@@ -271,6 +282,8 @@ class PrintRefund(Timestamped):
 class SupplierOrder(Timestamped):
     """Durable cloud submission; never a second hardware print queue."""
     order = models.OneToOneField(PrintOrder, on_delete=models.PROTECT, related_name='supplier_order')
+    transport = models.CharField(max_length=20, default='supplier', editable=False,
+        choices=[('supplier', '供应商'), ('direct_debug', '直连模拟')])
     device = models.ForeignKey(Device, on_delete=models.PROTECT)
     inventory_item = models.ForeignKey(DeviceProduct, on_delete=models.PROTECT)
     business_number = models.CharField(max_length=32, unique=True)

@@ -3,6 +3,7 @@ import hashlib
 from datetime import timedelta
 from django.core.files.storage import default_storage
 from django.db.models import F
+from django.conf import settings
 from django.utils import timezone
 from rest_framework import serializers
 from .models import Device, DeviceProduct
@@ -20,6 +21,9 @@ def catalog_stocks():
 def available_stocks():
     # Sync writes a complete snapshot transactionally. A running/failed refresh
     # must not hide the last valid snapshot while it is still fresh.
+    if settings.DIRECT_DEBUG_ENABLED:
+        # The separate debug database replays its catalog; it is not live inventory.
+        return catalog_stocks().filter(device_id=settings.DIRECT_DEBUG_DEVICE_ID)
     return catalog_stocks().filter(observed_at__gte=timezone.now()-timedelta(minutes=15))
 
 

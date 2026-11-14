@@ -1,5 +1,5 @@
 [Unit]
-Description=Refresh device stock and automatically link phone models
+Description=Refresh merchant device profiles, stock and phone model mappings
 After=network-online.target postgresql.service
 Wants=network-online.target
 ConditionPathExists=/opt/aicase-dev/current/backend/management_api/management/commands/sync_device_inventory.py

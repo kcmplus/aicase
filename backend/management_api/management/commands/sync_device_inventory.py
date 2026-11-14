@@ -1,13 +1,14 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.db import close_old_connections, DatabaseError
 import time
-from management_api.models import Device
-from management_api.inventory_sync import sync_device
+from django.conf import settings
+from management_api.models import DeviceProviderConnection
+from management_api.connection_sync import sync_connection
 from management_api.device_provider import ProviderError
 
 
 class Command(BaseCommand):
-    help = '只读同步已登记设备库存；不下单、不打印、不扣库存。'
+    help = '同步商家设备资料、库存、机型与模板；不下单、不打印、不扣库存。'
 
     def add_arguments(self, parser):
         group = parser.add_mutually_exclusive_group(required=True)
@@ -37,25 +38,25 @@ class Command(BaseCommand):
             self.stdout.write('库存自动同步已停止。')
 
     def sync_once(self, options):
-        devices = Device.objects.filter(active=True, connection__active=True)
-        if options['device'] is not None:
-            devices = devices.filter(pk=options['device'])
-        ids = list(devices.values_list('id', flat=True))
-        if not ids:
-            if options['watch'] or (options['allow_empty'] and options['all']):
-                return
-            raise CommandError('没有匹配的启用设备。')
         failed = False
-        for pk in ids:
+        # Skip all supplier I/O in the isolated local simulator.
+        if settings.DIRECT_DEBUG_ENABLED:
+            self.stdout.write('直连模拟模式不查询供应商设备资料或库存。')
+            return
+        connections = DeviceProviderConnection.objects.filter(active=True)
+        if options['device'] is not None:
+            connections = connections.filter(device__pk=options['device'], device__active=True)
+        device_count = 0
+        for connection in connections:
             try:
-                run = sync_device(pk)
-                failed |= run.status != 'success'
-                self.stdout.write(f'设备 {pk}: {run.message}')
+                result = sync_connection(connection, device_id=options['device'])
+                device_count += len(result['devices'])
+                failed |= result['status'] != 'success'
+                self.stdout.write(f'连接 {connection.pk}: {result["message"]}')
             except ProviderError as exc:
                 failed = True
-                self.stderr.write(f'设备 {pk}: {exc}')
-            except Device.DoesNotExist:
-                failed = True
-                self.stderr.write(f'设备 {pk} 已移除，跳过同步。')
+                self.stderr.write(f'连接 {connection.pk}: {exc}')
         if failed:
-            raise CommandError('部分设备同步未成功，原库存快照已保留。')
+            raise CommandError('部分设备资料、库存或机型同步未成功，请查看详情；人工配置已保留。')
+        if not device_count and not options['watch'] and not (options['allow_empty'] and options['all']):
+            raise CommandError('没有匹配的启用设备。')

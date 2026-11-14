@@ -156,8 +156,11 @@ def sync_device(device_id, actor_name='管理命令'):
                 existing = SupplierProduct.objects.select_for_update().filter(connection=connection, goods_id=gid).first()
                 if existing and (existing.product_id != row['product_id'] or existing.specs != row['specs']):
                     raise ProviderError('供应商商品编号对应的规格发生变化，请核实商品映射；本批次未发布。')
-                product, _ = SupplierProduct.objects.update_or_create(connection=connection, goods_id=gid, defaults={
+                product, product_created = SupplierProduct.objects.update_or_create(connection=connection, goods_id=gid, defaults={
                     'product_id': row['product_id'], 'name': row['name'], 'brand_name': row['brand'], 'specs': row['specs']})
+                if product_created:
+                    product.auto_publish_pending = True
+                    product.save(update_fields=['auto_publish_pending'])
                 dp, created = DeviceProduct.objects.get_or_create(device=current, product=product, defaults={'observed_at': observed})
                 total = sum(r['stock'] for r in items)
                 if created or total != dp.stock:
@@ -198,4 +201,10 @@ def sync_device(device_id, actor_name='管理命令'):
         InventorySyncRun.objects.filter(pk=run.pk, status='running').update(status='failed', message=message, finished_at=timezone.now())
         Device.objects.filter(pk=device_id, sync_token=batch).update(sync_status='failed', sync_message=message, sync_token=None)
     run.refresh_from_db()
+    if run.status == 'success':
+        from .inventory_publish import publish_device_catalog
+        summary = publish_device_catalog(device_id, actor_name)
+        run.message = (run.message + summary)[:300]
+        run.save(update_fields=['message'])
+        Device.objects.filter(pk=device_id, last_success_at=observed).update(sync_message=run.message)
     return run

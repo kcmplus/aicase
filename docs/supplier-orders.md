@@ -155,3 +155,7 @@ python manage.py dispatch_supplier_orders
 用户明确要求直接测试设备 401 上原订单的零元放行。我方订单 `979d06d5-7c60-4256-a176-95f800ae63fa` 已由用户手动重新推送成功：供应商 id=31558、trade_no=WM2611061032438852、goods_id=266，使用新的短 PNG 地址。写入前核对身份、库存／模板、免付状态及无退款，并持久化领取记录。
 
 单次 `POST /shop/order/updatePayStatus`，`pay_money="0.00"`，约 0.55 秒返回 HTTP 200、code=200、message=success、data=null。紧接回查：pay_money=0.00、pay_status 从 0 变为 1，print_status=0、shipment_status=0、status=2；未重复请求。空 data 是供应商实际成功应答形态，程序接受确认应答后仍必须查单。该结果仅证明零元支付登记成功，不证明 Rust 队列已经执行、物理打印或出货。
+
+## 2026-11-10 设备资料与导航增量说明
+
+手机设备身份展示现支持供应商名称／地址同步和人工覆盖，确认 WGS84 后可选择 Google、Apple、高德、百度地图。已绑定订单的地图目标取其绑定设备，不使用后来扫描的其他设备；导航不触发设备绑定、支付、推单或打印。原设备内嵌 H5 仅读本机数据的边界不变。本轮仅本地实现与模拟验证，未部署、未进行真实写单或硬件操作。详见 [设备资料同步](inventory-management.md)。

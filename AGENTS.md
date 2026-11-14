@@ -72,6 +72,8 @@
 
 ## 本地运行与验证
 
+2026-11-09 新增独立的本地后端直连模拟版本，见 `docs/direct-terminal-debug.md`：用户明确要求跳过供应商联调。仅 `config.direct_debug` 启用，使用独立数据库副本和 `transport=direct_debug` 的新零元订单；默认部署及供应商链路不变。模拟结果不能作为真实打印、出货或付款证明。
+
 在仓库根目录执行：
 
 ```sh
