@@ -307,3 +307,11 @@ backend/.venv/bin/python -m unittest discover -s scripts -p test_v35_runtime.py 
 `scripts/test-ui-v35-e2e.mjs` 仍未交付，固定浏览器 gate 缺口、旧单安全替换、完整视觉和业务验收均保留。未部署、未真机验证；检查点由 harness 管理。
 
 本轮既有隔离配置回归 **11/11 通过，无跳过**（`/tmp/v35-runtime-config-regression.log`）；仅覆盖配置、迁移及进程网络保护，不抵消启动器端口自测阻塞。`git diff --check` 通过。
+
+## 编辑器大预览高度修复（2026-11-15）
+
+大预览以可用宽高等比例容纳完整手机壳，计算扣除容器内边距、底部模板说明和额外提示；普通预览限制为不超过 70svh，放大预览使用弹窗剩余空间。窗口或说明区域尺寸变化时重新适配，退出放大模式后恢复普通适配。只修改显示尺寸，不修改照片位置、缩放、裁切状态或打印导出。
+
+浏览器布局回归 `frontend/tests/preview-fit-browser.mjs` 使用真实 CSS、机型渲染器和适配函数，在 1440×900、390×844、320×568、844×390 下分别检查普通/放大模式，8 项通过，截图位于忽略提交的 `test-results/preview-fit/`。以旧适配函数作负向验证，桌面放大预览即超出容器内容区（未扣除完整内边距与说明）。这是合成设计的布局验收，不代表真实下单或完整业务端到端验收。运行需先启动 storefront，并提供 Playwright；可通过 `PLAYWRIGHT_MODULE`、`CHROMIUM_PATH`、`PREVIEW_URL` 指定本机依赖及地址。
+
+既有用户端测试 216/216、V35 与启动回归 67/67 通过；未部署、未执行真实打印。

@@ -20,3 +20,7 @@ body[data-v35-route=ai] .studio-flow{max-width:1280px}body[data-v35-route=ai] :i
 @media(max-width:360px){.v35-editor,.v35-account-layout{width:calc(100% - 24px)}.v35-saved-grid{grid-template-columns:1fr}.v35-editor .large-preview{height:390px}.v35-account-layout .account-balances{grid-template-columns:1fr}.v35-account-layout .account-balance{margin:6px 0}.v35-account-layout .account-card{padding:20px 16px}.v35-review-case{min-height:260px}.v35-account-layout .account-card h1{font-size:28px}}
 @media(prefers-reduced-motion:reduce){.v35-account-art{animation:none}}
 body[data-v35-route=ai] .studio-receipt{background:linear-gradient(135deg,#fff,#f5eafa);border-color:#dfc9ef;box-shadow:0 12px 32px #601ba70a}body[data-v35-route=ai] .studio-primary{background:#a234fd;color:white;border-color:white}body[data-v35-route=ai] .studio-primary:hover:not(:disabled){background:#8b20e8}body[data-v35-route=ai] .studio-secondary{background:#100519;color:white;border-color:white}body[data-v35-route=ai] .studio-secondary:hover:not(:disabled){background:#29133b}body[data-v35-route=ai] :is(.studio-credit,.studio-callout,.studio-recovery){background:#efe3fa;color:#7021b0;border-color:#dfc9ef}body[data-v35-route=ai] :is(.studio-consent input,.studio-compare-control input){accent-color:#a234fd}body[data-v35-route=ai] .studio-journey .is-current{color:#7021b0}
+
+/* Fit the whole phone to the preview stage, including on short mobile screens. */
+.v35-editor .large-preview{min-height:0;max-height:70svh}
+.v35-editor .canvas-editor .large-preview{max-height:none}
