@@ -1,3 +1,4 @@
+import {openHomePhoneDialog} from './home-phone-dialog.js';
 import {worksPage,workDetailPage,tutorialPage,aboutPage,locationsPage,membershipInfoPage} from './v35-pages.js';
 import {shellHeader,shellFooter,homePresentation,mountShell} from './v35-shell.js';
 import {caseStylePicker,caseMaterialLabel} from './case-styles.js';
@@ -69,6 +70,7 @@ let aiJob=null,aiBusy=false;
 const aiUi={mode:'pair',compare:50,lookMode:'effect',lookCompare:50,accepted:false,error:'',reconnecting:false};
 let cleanupAIStudio=()=>{};
 let cleanupShell=()=>{};
+let cleanupHomePhone=()=>{};
 const customerUI={email:'',codeSent:false,busy:false,error:'',success:'',ledger:[],ledgerNext:null,ledgerOpen:false,ledgerBusy:false,ledgerError:'',resendAt:0,next:'choose'};
 let resendTimer;
 let membership={...freshMembership(),server:true,authenticated:false,customer:null,...(initialData[4]||{})};
@@ -442,6 +444,12 @@ function selectPhoneModel(model){
  const styles=document.querySelector('#case-style-panel');if(styles)styles.innerHTML=caseStylePicker(stockSelection(state.model),state.caseMaterial,{lang:locale(),scoped:Boolean(stockScope)});
  localize(panel);panel.open=false;panel.querySelector('summary').focus({preventScroll:true});
 }
+function openHomePhone(entry){
+ cleanupHomePhone();
+ cleanupHomePhone=openHomePhoneDialog({root:app,initial:state,lang:locale(),scoped:Boolean(stockScope),
+  catalog:()=>({models:phoneModels,status:stockCatalogStatus,selection:stockSelection}),refresh:refreshStockChoices,
+  onConfirm:choice=>{Object.assign(state,choice);selectSupplierTemplate(state.model,state.phoneTemplateId);colorNotice=false;reviewPass=null;save();if(entry==='photo')openPhotoPicker();else go('choose?source=photo&studio=1');}});
+}
 function openPhotoPicker(){
  // Run inside the click gesture, before any await, so mobile browsers allow it.
  const input=document.querySelector('#photo-file');
@@ -673,6 +681,7 @@ function render(preserveScroll=false) {
   finishInlineText();
   cleanupAIStudio();
   cleanupShell();
+  cleanupHomePhone();
   const oldY=window.scrollY;
   const [route='home',query='']=location.hash.slice(1).split('?');
   if(route!=='choose'){reviewPass=null;reviewSaved=false;}
@@ -882,7 +891,7 @@ app.addEventListener('submit',async event=>{
 });
 app.addEventListener('click',async event=>{
   const el=event.target.closest('[data-case-material],[data-phone-brand],[data-phone-model],[data-phone-color],[data-action],[data-design],[data-start-design],[data-source],[data-effect],[data-ai-action],[data-ai-look-example],[data-ai-look-step],[data-look-action],[data-look-mode],[data-ai-group],[data-ai-view],[data-artwork-item],[data-add-graphic],[data-quick-font],[data-quick-color]');if(!el||el.disabled||photoBusy||passBusy||aiBusy||sessionCheckBusy)return;
-  if(el.dataset.action==='home-photo'){openPhotoPicker();return;}
+  if(['home-photo','home-ai'].includes(el.dataset.action)){event.preventDefault();openHomePhone(el.dataset.action==='home-photo'?'photo':'ai');return;}
   if(el.dataset.action==='reload-private-workspace'){location.reload();return;}
   if(el.dataset.action==='close-design-review'){closeDesignReview();return;}
   if(['save-local-design','continue-design-checkout','restore-design','delete-design','refresh-designs','restore-legacy-draft'].includes(el.dataset.action)){
