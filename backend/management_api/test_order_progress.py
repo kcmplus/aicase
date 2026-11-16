@@ -115,3 +115,17 @@ class OrderProgressTests(TestCase):
         self.order.mode='free_test';self.order.amount=0;self.order.paid_at=None;self.order.save()
         self.assertNotEqual(self.progress()['code'],'dispensed')
         self.assertNotEqual(self.progress()['payment'],'free')
+
+    def test_history_printed_filter_requires_verified_physical_progress(self):
+        endpoint = '/api/v1/store/orders/?status=printed'
+        self.row.cloud_status = {'phase':'printed', 'phase_verified':False, 'payment_recorded':True}
+        self.row.save()
+        self.assertEqual(self.client.get(endpoint).json()['counts']['printed'],0)
+        for phase in ('printed', 'delivering', 'dispensed'):
+            self.row.cloud_status = {'phase':phase, 'phase_verified':True, 'payment_recorded':True}
+            self.row.save()
+            result = self.client.get(endpoint).json()
+            self.assertEqual(result['counts'], {'all':1, 'pending':0, 'paid':0, 'printed':1})
+            self.assertEqual(result['results'][0]['progress']['code'],phase)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status,'paid')

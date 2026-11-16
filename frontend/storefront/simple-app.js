@@ -1,3 +1,4 @@
+import {orderListPage,mountOrderPreviews} from './v35-order-list.js';
 import {createEditorHistory} from './editor-history.js';
 import {openPhoneModelDialog} from './phone-model-dialog.js';
 import {openHomePhoneDialog} from './home-phone-dialog.js';
@@ -92,6 +93,7 @@ catch{return stopForStorage();}
 for(const order of Object.values(orderBook.orders||{}))if(order.phoneTemplate)try{registerSupplierTemplates([order.phoneTemplate]);}catch{}
 if(checkoutDraft?.phoneTemplate)try{registerSupplierTemplates([checkoutDraft.phoneTemplate]);}catch{}
 let orderLoading=false;
+let orderFilter='all',orderSearch='',orderCounts=null,cleanupOrderPreviews=()=>{};
 let orderRows=[],orderPage=1,orderHasMore=false,orderError='',entryOrders=null,entryOrderError='';
 const orderSuccessTracker=createOrderSuccessTracker({key:workspace.active?workspace.key('order-success'):'popomo-order-success-locked'});
 let orderSuccessDialog=null;
@@ -671,7 +673,7 @@ async function savedOrderRoute(id){
  if(isProviderOrder(order))paymentOrder=order;
  save();return isProviderOrder(order)?'payment?order='+order.id:'pass';
 }
-function ordersPage(){return `<section class="flow wrap v35-orders" aria-busy="${orderLoading}">${stationContext()}<div class="ai-heading"><p class="eyebrow">YOUR DESIGNS, ALL TOGETHER.</p><h1>My orders.</h1><p>Your orders are saved on the server and accessible from this browser.</p></div><button class="text-button" data-action="refresh-orders" ${orderLoading?'disabled':''}>Refresh orders ↻</button>${orderLoading?'<p class="v35-order-notice" role="status">Loading your orders…</p>':orderError?`<p class="error" role="alert">${esc(orderError)}</p>`:orderRows.length?`<div class="order-list">${orderRows.map(o=>`<article class="order-row"><div><span class="eyebrow">${esc(o.progress?progressPaymentText(o.progress,locale()):orderStatus(o.status,o.refund))} · ${paymentLabel(o.mode)}</span><h2>${esc(o.model_name)}</h2>${o.case_material?`<p>${esc(caseMaterialLabel(o.case_material,locale()))}</p>`:''}<p>${deliveryLabel(o.fulfillment_type,locale())}</p>${progressPanel(o.progress,{lang:locale(),compact:true})}${o.refund?`<p>${esc(orderStatus(o.status,o.refund))}</p>`:''}<p>${esc(o.reference)}</p><small>${new Date(o.created_at).toLocaleString(locale())}</small></div><div><strong>${esc(o.currency)} ${Number(o.amount).toFixed(2)}</strong><button class="button secondary" data-action="view-order" data-id="${esc(o.reference)}">${o.status==='pending'?(locale()==='zh-CN'?'继续付款 →':'Continue payment →'):(locale()==='zh-CN'?'查看打印进度 →':'View print progress →')}</button></div></article>`).join('')}</div><div class="pass-actions">${orderPage>1?`<button class="text-button" data-action="orders-page" data-page="${orderPage-1}">← Previous</button>`:''}${orderHasMore?`<button class="text-button" data-action="orders-page" data-page="${orderPage+1}">Next →</button>`:''}</div>`:'<div class="empty"><h2>Your first design is waiting.</h2><p>Confirm a print order to see it here.</p><a class="button primary" href="#choose">Create a design →</a></div>'}<p class="demo-note">Keep this browser’s site data to retain access to your orders. Test payments and demo payments do not charge money.</p></section>`;}
+function ordersPage(){return orderListPage({rows:orderRows,loading:orderLoading,error:orderError,page:orderPage,hasMore:orderHasMore,filter:orderFilter,search:orderSearch,counts:orderCounts,lang:locale(),station:stationContext(),statusLabel:orderStatus,designName:o=>o.design_source==='collection'?localized(designs.find(d=>d.id===o.design_id)):null});}
 function orderStatus(status,refund){if(refund)return ({requested:'Checking refund status.',pending:'Refund processing.',succeeded:'Payment refunded.',failed:'Refund could not be completed.'})[refund.status]||'Checking refund status.';return ({pending:'Awaiting payment',paid:'Paid',printing:'Printing',ready:'Ready to collect',completed:'Collected',collected:'Collected',cancelled:'Cancelled'})[status]||status;}
 function isProviderOrder(order){return (/^(stripe|airwallex)_(test|live)$/.test(order?.mode||'')||order?.mode==='free_test');}
 function providerName(provider){return provider==='free'?(locale()==='zh-CN'?'0 元免付联调':'No-charge test'):provider==='airwallex'?'Airwallex':'Stripe';}
@@ -742,7 +744,7 @@ startVisiblePolling({interval:15000,enabled:()=>location.hash.split('?')[0]==='#
  refresh:async alive=>{const hash=location.hash,page=orderPage,nav=navigationId;try{
   const data=await orderRequest('?page='+page);
   if(!alive()||location.hash!==hash||orderPage!==page||navigationId!==nav)return;
-  orderRows=data.results;orderHasMore=data.has_more;orderError='';render(true);
+  orderRows=data.results;orderHasMore=data.has_more;orderCounts=data.counts||null;orderError='';render(true);
  }catch{if(alive()&&location.hash===hash&&navigationId===nav){orderError=locale()==='zh-CN'?'订单进度暂时无法刷新，已保留上次结果。':'Order progress could not be refreshed. Showing the last known results.';render(true);}}}
 });
 function quoteBreakdown(pass,price,editing){
@@ -789,6 +791,7 @@ function render(preserveScroll=false) {
   stationPicker?.close();
   finishInlineText();
   cleanupAIStudio();
+  cleanupOrderPreviews();
   cleanupShell();
   cleanupHomePhone();
   cleanupPhoneModels();
@@ -817,6 +820,7 @@ function render(preserveScroll=false) {
   document.querySelector('.phone-settings')?.addEventListener('toggle',event=>{if(!event.target.isConnected)return;phoneSettingsOpen=event.target.open;event.target.querySelector('.model-summary-action').textContent=locale()==='zh-CN'?(phoneSettingsOpen?'收起':'更改'):(phoneSettingsOpen?'Done':'Change');});
   document.querySelector('.canvas-editor')?.addEventListener('cancel',event=>{event.preventDefault();closeCanvasEditor();});
   document.querySelector('.look-browser')?.addEventListener('cancel',event=>{event.preventDefault();closeAIStudio();});
+  if(route==='orders'&&workspace.active)cleanupOrderPreviews=mountOrderPreviews(app,{load:async id=>{const data=await orderRequest(id+'/');if(data.reference!==id)throw Error('Order identity mismatch.');return savedOrder(data);},preview:passPreview,active:()=>workspace.active,lang:locale()});
   observeCanvasPreview();
   if(canvasExpanded)openCanvasEditor();
   else if(effectPanelOpen)openAIStudio();
@@ -958,6 +962,7 @@ app.addEventListener('input',event=>{
 });
 app.addEventListener('submit',async event=>{
   if(sessionCheckBusy){event.preventDefault();return;}
+  if(event.target.id==='orders-search-form'){event.preventDefault();orderSearch=String(new FormData(event.target).get('q')||'').trim();orderPage=1;entryOrders=null;await navigate();return;}
   if(event.target.id==='courier-address-form'){
     event.preventDefault();if(!checkoutDraft||checkoutDraft.editId||checkoutDraft.fulfillmentType!=='courier')return;
     const form=event.target,status=form.querySelector('.address-status'),button=form.querySelector('button');
@@ -1197,6 +1202,7 @@ if(selectedArtwork==='all'){const layout=artworkLayout();layout.zoom=100;layout.
     }
     if(el.dataset.action==='view-order'){go(await savedOrderRoute(el.dataset.id));}
     if(el.dataset.action==='cancel-order'){const order=orderForCode(orderBook,state.pass.code);if(order?.server){await orderAction(order,'cancel');notify('Test order cancelled. No money was charged.');render(true);}}
+    if(el.dataset.action==='filter-orders'){orderFilter=el.dataset.filter;orderPage=1;entryOrders=null;await navigate();}
     if(el.dataset.action==='orders-page'){orderPage=Number(el.dataset.page);await navigate();}
     if(el.dataset.action==='refresh-orders'||el.dataset.action==='refresh-payment')await navigate();
     if(el.dataset.action==='pay-provider'){if(passBusy)return;passBusy=true;paymentError='';render(true);try{await openPaymentCheckout(el.dataset.id);}catch(e){paymentError=e.message;}finally{passBusy=false;render(true);}}
@@ -1252,7 +1258,7 @@ async function navigate(){
    if(detailRoute){history.replaceState(null,'','#'+detailRoute);return navigate();}
    if(order?.server)try{const latest=await refreshOrder(order.id);verifiedNoticeOrder=latest;state.pass=latest.pass;if(state.job?.orderId===latest.id)state.job={...state.job,status:latest.status,pass:latest.pass};}catch(e){notify(e.message);}
  }
- if(route==='orders'){orderLoading=true;orderError='';render(true);try{if(entryOrderError)throw Error(entryOrderError);const data=entryOrders||await orderRequest('?page='+orderPage);if(currentNavigation!==navigationId)return;orderRows=data.results;orderHasMore=data.has_more;orderError='';}catch(e){if(currentNavigation!==navigationId)return;orderError=e.message;}finally{if(currentNavigation===navigationId)orderLoading=false;entryOrders=null;entryOrderError='';}}
+ if(route==='orders'){orderLoading=true;orderError='';render(true);try{if(entryOrderError)throw Error(entryOrderError);const data=entryOrders||await orderRequest('?page='+orderPage+'&status='+orderFilter+'&q='+encodeURIComponent(orderSearch));if(currentNavigation!==navigationId)return;orderRows=data.results;orderHasMore=data.has_more;orderCounts=data.counts||null;orderError='';}catch(e){if(currentNavigation!==navigationId)return;orderError=e.message;}finally{if(currentNavigation===navigationId)orderLoading=false;entryOrders=null;entryOrderError='';}}
  if(route==='choose'&&designs.some(d=>d.id===params.get('design'))){state.designId=params.get('design');state.source='collection';}
  if(route==='choose'&&params.get('source')==='photo'){
   if(params.get('fresh')==='1'){

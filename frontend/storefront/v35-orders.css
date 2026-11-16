@@ -34,21 +34,11 @@ body:is([data-v35-route="checkout"],[data-v35-route="orders"],[data-v35-route="p
 :is(.v35-checkout,.v35-orders) .button.secondary {background:#100519;color:white;border-color:#100519}
 :is(.v35-checkout,.v35-orders) :is(button,a,input,select,summary):focus-visible {outline:2px solid #a234fd;outline-offset:3px}
 :is(.v35-checkout,.v35-orders) button:disabled {opacity:.55;cursor:wait}
-.v35-orders .order-list {display:grid;gap:16px;margin-top:24px}
-.v35-orders .order-row {display:flex;justify-content:space-between;gap:24px;padding:24px;background:white;border:1px solid var(--line);border-radius:13px}
-.v35-orders .order-row>div {min-width:0}
-.v35-orders .order-row>div:last-child {display:flex;flex-direction:column;justify-content:center;align-items:flex-end;gap:16px}
-.v35-orders .order-row h2 {font-size:20px;margin:12px 0}
-.v35-orders .order-row .eyebrow {display:inline-block;background:#f0e3fc;color:#7021b0;border-radius:6px;padding:6px 10px;line-height:1.5}
-.v35-orders .order-row p,.v35-orders .order-row small {color:var(--muted)}
-.v35-orders .pass-actions {display:flex;justify-content:space-between;gap:16px;margin:24px 0}
 @media(max-width:760px) {
  .v35-checkout,.v35-orders {padding:24px 18px 48px}
  .v35-checkout .ai-order-layout {grid-template-columns:minmax(0,1fr);gap:20px}
  .v35-checkout .ai-order-card {padding:20px}
  .v35-checkout .checkout-case {height:280px}
- .v35-orders .order-row {flex-direction:column;padding:18px;gap:16px}
- .v35-orders .order-row>div:last-child {align-items:stretch}
  .v35-checkout .steps {max-width:100%;flex-wrap:wrap;gap:8px}
 }
 
@@ -152,3 +142,61 @@ body.order-success-open{overflow:hidden}
 .v35-order-success :focus-visible{outline:2px solid #7923bc;outline-offset:4px}
 @media(max-width:480px){.v35-order-success{padding:26px 20px}.v35-order-success h2{font-size:26px}.order-success-check{width:66px;height:66px;font-size:44px;margin-bottom:22px}.order-success-amount{font-size:38px}.order-success-actions .button{font-size:14px}}
 @media(max-width:350px){.order-success-actions{grid-template-columns:1fr}.v35-order-success{padding:22px 16px}.v35-order-success h2{font-size:24px}.v35-order-success p{font-size:14px}.order-success-amount{margin:20px 0}}
+/* Prototype order history: status tabs, compact cards and bounded previews. */
+.v35-orders .orders-heading{margin:24px 0 28px}
+.v35-orders .orders-heading .eyebrow{font-size:13px;letter-spacing:1.5px;color:#100519;margin:0 0 18px}
+.v35-orders .orders-heading h1{font-size:32px;font-weight:600;letter-spacing:-.7px;margin:0 0 18px;line-height:1.2}
+.v35-orders .orders-heading>p:last-child{font-size:15px;line-height:1.7;color:#100519}
+.v35-orders .orders-toolbar{display:flex;align-items:center;justify-content:space-between;gap:20px;margin:30px 0 8px}
+.v35-orders .orders-tabs{display:flex;gap:5px;min-width:0}
+.v35-orders .orders-tabs button{display:flex;align-items:center;gap:7px;min-height:44px;padding:0 16px;border:0;border-radius:30px;background:transparent;font-size:14px;white-space:nowrap;color:#100519}
+.v35-orders .orders-tabs button[aria-pressed=true]{background:#a234fd;color:#fff}
+.v35-orders .orders-tabs small{font-size:12px;opacity:.75}
+.v35-orders .orders-search{display:flex;align-items:center;min-width:0;max-width:300px;border:1px solid #dfcceb;border-radius:9px;background:#fff}
+.v35-orders .orders-search input{margin:0;padding:12px 10px 12px 15px;border:0;background:none;min-width:0;width:100%;font-size:16px;color:#100519}
+.v35-orders .orders-search button{min-width:44px;min-height:44px;border:0;background:transparent;color:#100519;font-size:24px}
+.v35-orders .orders-refresh{display:flex;justify-content:flex-end;margin-bottom:10px}
+.v35-orders .orders-refresh button{font-size:13px;color:#786785;min-height:36px}
+.v35-orders .order-list{display:grid;gap:20px}
+.v35-orders .order-row{display:block;padding:0;border:1px solid #dfcceb;border-radius:14px;background:white;overflow:hidden}
+.v35-orders .order-card-header{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:15px 20px;border-bottom:1px solid #e8d9f2;background:#fcf9ff;font-size:13px}
+.v35-orders .order-card-header>span:first-child{min-width:0}
+.v35-orders .order-card-header strong{font-weight:500;overflow-wrap:anywhere}
+.v35-orders .order-status-badge{flex-shrink:0;max-width:45%;border-radius:24px;background:#efe2fb;padding:6px 10px;color:#7826b5;line-height:1.5}
+.v35-orders .order-card-content{display:grid;grid-template-columns:90px minmax(0,1fr) auto;gap:20px;padding:22px;align-items:center}
+.v35-orders .order-cover{display:flex;align-items:center;justify-content:center;width:90px;height:126px;padding:9px;border:0;border-radius:9px;background:#f0e5fa;overflow:hidden}
+.v35-orders .order-cover>.phone-case{width:auto;height:100%;max-width:100%;flex:none;margin:0;transform:none;box-shadow:0 4px 8px #190a2520}
+.v35-orders .order-cover .field-note{display:none}
+.v35-orders .order-cover-placeholder{font-size:70px;color:#bd9bd7}
+.v35-orders .order-preview-unavailable{font-size:12px;color:#786785}
+.v35-orders .order-card-info{min-width:0}
+.v35-orders .order-card-info h2{font-size:18px;font-weight:600;line-height:1.4;margin:0 0 9px}
+.v35-orders .order-card-info p{font-size:14px;line-height:1.6;margin:0 0 9px}
+.v35-orders .order-delivery-tag{display:inline-block;border:1px solid #d9c5e8;border-radius:6px;background:#f3e9fc;font-size:13px;padding:4px 9px;line-height:1.4;margin-bottom:9px}
+.v35-orders .order-card-info time,.v35-orders .order-test-note{display:block;font-size:12px;color:#786785;line-height:1.7}
+.v35-orders .order-card-actions{display:flex;flex-direction:column;align-items:flex-end;gap:12px}
+.v35-orders .order-card-actions>strong{font-size:22px;font-weight:600}
+.v35-orders .order-card-actions .text-button{font-size:14px;color:#7826b5;text-decoration:underline;text-underline-offset:4px;min-height:36px}
+.v35-orders .order-card-actions .primary{padding:10px 18px}
+.v35-orders .order-card-progress{border-top:1px solid #eee3f5;padding:0 20px}
+.v35-orders .order-card-progress summary{font-size:13px;color:#786785;padding:12px 0;cursor:pointer}
+.v35-orders .order-card-progress .order-progress{margin:0 0 15px}
+.v35-orders .pass-actions{display:flex;justify-content:space-between;gap:16px;margin:24px 0}
+.v35-orders .orders-empty{text-align:center;padding:55px 16px}
+.v35-orders .orders-empty h2{font-size:18px;font-weight:600;margin:0 0 14px}
+.v35-orders .orders-empty p{font-size:14px;line-height:1.8;margin-bottom:28px}
+.v35-orders .orders-empty a{display:inline-flex}
+@media(max-width:760px){
+ .v35-orders .orders-heading{margin:15px 0 25px}.v35-orders .orders-heading h1{font-size:28px}
+ .v35-orders .orders-toolbar{flex-direction:column;align-items:stretch;gap:16px;margin-top:24px}
+ .v35-orders .orders-tabs{justify-content:space-between;gap:2px}.v35-orders .orders-tabs button{padding:0 11px;font-size:13px;gap:5px}
+ .v35-orders .orders-search{max-width:none}
+ .v35-orders .order-card-header{padding:13px 14px;font-size:12px;align-items:flex-start;gap:10px}
+ .v35-orders .order-card-header strong{display:block;margin-top:5px}.v35-orders .order-status-badge{font-size:12px}
+ .v35-orders .order-card-content{grid-template-columns:68px minmax(0,1fr);padding:15px;gap:14px}
+ .v35-orders .order-cover{width:68px;height:100px;padding:7px}.v35-orders .order-card-info h2{font-size:16px}
+ .v35-orders .order-card-info p{font-size:13px}
+ .v35-orders .order-card-actions{grid-column:1/-1;flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:flex-end;border-top:1px solid #eee3f5;padding-top:14px;gap:12px}
+ .v35-orders .order-card-actions>strong{margin-right:auto;font-size:20px}
+ .v35-orders .order-card-progress{padding:0 15px}
+}

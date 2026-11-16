@@ -6,7 +6,8 @@ import re
 import warnings
 from io import BytesIO
 from pathlib import Path
-from django.db.models import Q
+from django.db.models import Q, Count, F, CharField, Value
+from django.db.models.functions import Cast, Replace
 from .phone_templates import template_for, PHONE_TEMPLATES
 from decimal import Decimal
 from django.db import transaction
@@ -310,13 +311,35 @@ class StoreOrders(APIView):
             page = max(1, min(10000, int(request.query_params.get('page', '1'))))
         except ValueError:
             raise serializers.ValidationError('Invalid page.')
+        filters = {
+            'pending': Q(status='pending', paid_at__isnull=True, refund__isnull=True),
+            'printed': Q(_progress_code__in=['printed', 'delivering', 'dispensed']),
+        }
+        filters['paid'] = (Q(paid_at__isnull=False, status__in=['paid', 'printing', 'ready', 'completed'])
+                           & ~Q(_progress_code__in=['printed', 'delivering', 'dispensed', 'cancelled'])
+                           & ~Q(refund__status__in=['requested', 'pending', 'succeeded']))
+        status = request.query_params.get('status', 'all')
+        if status not in ('all', *filters):
+            raise serializers.ValidationError('Invalid order filter.')
+        search = request.query_params.get('q', '').strip()
+        if len(search) > 120:
+            raise serializers.ValidationError('Search is too long.')
+        counts = qs.aggregate(all=Count('pk'), **{key: Count('pk', filter=value) for key, value in filters.items()})
+        if status != 'all':
+            qs = qs.filter(filters[status])
+        if search:
+            qs = qs.annotate(_reference_text=Replace(Cast('reference', CharField()), Value('-'), Value(''))).filter(
+                Q(_reference_text__icontains=search.replace('-', '')) | Q(model_name__icontains=search))
+        qs = qs.annotate(_design_id=F('snapshot__designId'), _design_source=F('snapshot__source'))
         rows = list(qs[(page-1)*20:page*20+1])
         # List responses exclude private photos and design codes.
         data = [{key: getattr(o, key) for key in ('reference','model_name','case_material','status','amount','currency','mode','fulfillment_type','created_at')} for o in rows[:20]]
         for item, order in zip(data, rows[:20]):
             item['progress'] = order_progress(order)
             item['refund'] = refund_data(order)
-        return Response({'results':data, 'has_more':len(rows)>20, 'page':page})
+            item['design_id'] = order._design_id
+            item['design_source'] = order._design_source
+        return Response({'results':data, 'has_more':len(rows)>20, 'page':page, 'counts':counts})
     @transaction.atomic
     def post(self, request):
         owner_hash = owner(request)

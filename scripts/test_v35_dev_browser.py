@@ -65,5 +65,19 @@ def main():
                 subprocess.run(['node', script], cwd=ROOT, env=env, check=True, timeout=180)
 
 
+    # Order history gets its own rate-limit bucket and a synthetic unpaid row.
+    with IsolatedRuntime() as runtime:
+        history_fixture = FIXTURES.replace("print(json.dumps(",
+            "PrintOrder.objects.create(owner_hash=order.owner_hash, mode='stripe_live', status='pending', model_name=model.name, case_material='standard', snapshot=snapshot, amount='10.00')\nprint(json.dumps(")
+        result = subprocess.run([str(ROOT/'backend/.venv/bin/python'), 'backend/manage.py', 'shell', '-c', history_fixture],
+            cwd=ROOT, env=runtime.env, capture_output=True, text=True, check=True)
+        fixtures = json.loads(result.stdout.splitlines()[-1])
+        env = {'PATH': os.environ['PATH'], 'PREVIEW_URL': runtime.h5_origin, 'TEST_ORDER': fixtures['order']}
+        for key in ('PLAYWRIGHT_MODULE', 'CHROMIUM_PATH'):
+            if key in os.environ:
+                env[key] = os.environ[key]
+        subprocess.run(['node', 'frontend/tests/orders-list-browser.mjs'], cwd=ROOT, env=env, check=True, timeout=180)
+
+
 if __name__ == '__main__':
     main()

@@ -435,7 +435,7 @@ try{
   await page.goto(origin+'/#orders');
   await page.locator('.v35-orders .order-row').waitFor();
   assert.match(await page.locator('.order-row').innerText(),/Standard/);
-  await page.locator('[data-action="view-order"]').click();
+  await page.locator('.order-card-actions [data-action="view-order"]').click();
   await page.locator('[data-active-order="'+order+'"] .order-progress').waitFor();
   await page.screenshot({path:`test-results/v35-integration/${width}-order.png`});
   await page.goto(origin+'/?device_id=101&shop_id=999#choose?design=bloom');

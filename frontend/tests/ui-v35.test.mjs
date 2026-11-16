@@ -1,3 +1,4 @@
+import {orderListPage} from '../storefront/v35-order-list.js';
 import {createOrderSuccessTracker} from '../storefront/order-success.js';
 import {progressPanel,progressPaymentText} from '../storefront/order-progress.js';
 import {caseMaterialLabel} from '../storefront/case-styles.js';
@@ -176,7 +177,7 @@ test('orders page renders a server order and its status',async()=>{
  const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
  const declaration=source.match(/^function ordersPage\(\)\{.*$/m)?.[0];
  assert.ok(declaration,'ordersPage must exist');
- const context={progressPanel,progressPaymentText,caseMaterialLabel,stationContext:()=>'',orderLoading:false,orderError:'',orderRows:[{status:'paid',mode:'free_test',model_name:'Synthetic model',fulfillment_type:'pickup',reference:'SYNTHETIC-1',created_at:'2026-01-01T00:00:00Z',currency:'USD',amount:0}],esc:String,paymentLabel:()=>'',deliveryLabel:()=>'',locale:()=> 'en-US',orderPage:1,orderHasMore:false};
+ const context={orderListPage,orderFilter:'all',orderSearch:'',orderCounts:null,designs:[],localized:v=>v?.name,progressPanel,progressPaymentText,caseMaterialLabel,stationContext:()=>'',orderLoading:false,orderError:'',orderRows:[{status:'paid',mode:'free_test',model_name:'Synthetic model',fulfillment_type:'pickup',reference:'SYNTHETIC-1',created_at:'2026-01-01T00:00:00Z',currency:'USD',amount:0}],esc:String,paymentLabel:()=>'',deliveryLabel:()=>'',locale:()=> 'en-US',orderPage:1,orderHasMore:false};
  const statusDeclaration=source.match(/^function orderStatus\([^\n]+$/m)?.[0]||'';
  const html=vm.runInNewContext(`${statusDeclaration}\n${declaration}\nordersPage()`,context);
  assert.match(html,/SYNTHETIC-1/);
@@ -191,7 +192,7 @@ test('orders list renders each server refund state without changing historical a
  for(const [refund,label] of [[null,'Paid'],[{status:'requested'},'Checking refund status.'],[{status:'pending'},'Refund processing.'],[{status:'succeeded'},'Payment refunded.'],[{status:'failed'},'Refund could not be completed.']]){
   const order=Object.freeze({status:'paid',refund,mode:'stripe_test',model_name:'Synthetic model',fulfillment_type:'pickup',reference:'SYNTHETIC-REFUND',created_at:'2026-01-01T00:00:00Z',currency:'USD',amount:'10.00'});
   const before=JSON.stringify(order);
-  const html=vm.runInNewContext(`${status}\n${page}\nordersPage()`,{progressPanel,progressPaymentText,caseMaterialLabel,stationContext:()=>'',orderLoading:false,orderError:'',orderRows:[order],esc:String,paymentLabel:()=>'',deliveryLabel:()=>'',locale:()=> 'en-US',orderPage:1,orderHasMore:false});
+  const html=vm.runInNewContext(`${status}\n${page}\nordersPage()`,{orderListPage,orderFilter:'all',orderSearch:'',orderCounts:null,designs:[],localized:v=>v?.name,progressPanel,progressPaymentText,caseMaterialLabel,stationContext:()=>'',orderLoading:false,orderError:'',orderRows:[order],esc:String,paymentLabel:()=>'',deliveryLabel:()=>'',locale:()=> 'en-US',orderPage:1,orderHasMore:false});
   assert.ok(html.includes(label),`refund ${refund?.status||'none'}`);
   assert.ok(html.includes('USD 10.00'));
   assert.equal(JSON.stringify(order),before);
@@ -712,13 +713,13 @@ test('orders loading and failure remain distinct from empty, and server text is 
  const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
  const page=source.match(/^function ordersPage\(\)\{.*$/m)[0];
  const status=source.match(/^function orderStatus\([^\n]+$/m)[0];
- const base={progressPanel,progressPaymentText,caseMaterialLabel,stationContext:()=>'',orderLoading:false,orderError:'',orderRows:[],esc,paymentLabel:()=>'',deliveryLabel:()=>'',locale:()=> 'en-US',orderPage:2,orderHasMore:true};
+ const base={orderListPage,orderFilter:'all',orderSearch:'',orderCounts:null,designs:[],localized:v=>v?.name,progressPanel,progressPaymentText,caseMaterialLabel,stationContext:()=>'',orderLoading:false,orderError:'',orderRows:[],esc,paymentLabel:()=>'',deliveryLabel:()=>'',locale:()=> 'en-US',orderPage:2,orderHasMore:true};
  const render=overrides=>vm.runInNewContext(`${status}\n${page}\nordersPage()`,{...base,...overrides});
  const busy=render({orderLoading:true});assert.match(busy,/aria-busy="true"/);assert.match(busy,/role="status">Loading your orders/);assert.doesNotMatch(busy,/Your first design/);assert.match(busy,/data-action="refresh-orders" disabled/);
  const error=render({orderError:'<script>bad</script>'});assert.match(error,/role="alert"/);assert.match(error,/&lt;script&gt;/);assert.doesNotMatch(error,/Your first design|<script>/);
- assert.match(render({}),/Your first design/);
+ assert.match(render({}),/No matching orders/);
  const row=Object.freeze({reference:'<img>',model_name:'<script>',status:'paid',mode:'stripe_test',currency:'USD',amount:'30.00',created_at:'2026-11-14T00:00:00Z'});
- const list=render({orderRows:[row]});assert.match(list,/USD 30.00/);assert.match(list,/data-id="&lt;img&gt;"/);assert.match(list,/View print progress →/);assert.match(list,/data-page="1"/);assert.match(list,/data-page="3"/);assert.doesNotMatch(list,/<script>|pay-provider/);
+ const list=render({orderRows:[row]});assert.match(list,/USD 30.00/);assert.match(list,/data-id="&lt;img&gt;"/);assert.match(list,/Order details ↗/);assert.match(list,/data-page="1"/);assert.match(list,/data-page="3"/);assert.doesNotMatch(list,/<script>|pay-provider/);
 });
 
 // Run the complete production navigation function with controlled identity/API
@@ -734,6 +735,7 @@ async function qaOrdersNavigation(){
   syncAIAccount:()=>new Promise(resolve=>identity.push(resolve)),
   workspace:{active:true},customerUI:{},clearTimeout:()=>{},
   stopPaymentPolling:()=>{},syncStationFinder:()=>{},paymentPollCount:0,paymentLoading:false,
+  orderFilter:'all',orderSearch:'',orderCounts:null,
   orderLoading:false,orderError:'',orderRows:[],orderHasMore:false,
   orderPage:1,entryOrders:null,entryOrderError:'',
   orderRequest:async()=>({results:[{reference:'QA-SYNTHETIC'}],has_more:false}),

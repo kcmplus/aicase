@@ -132,8 +132,8 @@ class StoreOrderTests(TestCase):
         orders_before = list(PrintOrder.objects.order_by('pk').values())
         refunds_before = list(PrintRefund.objects.order_by('pk').values())
         # A list read must neither reconcile external refunds nor write state;
-        # all refund states are loaded with the owned orders in one query.
-        with self.assertNumQueries(1):
+        # one query counts statuses, one loads the owned page and refund states.
+        with self.assertNumQueries(2):
             response = self.client.get('/api/v1/store/orders/')
         self.assertEqual(response.status_code, 200)
         self.assertIn('no-store', response['Cache-Control'])
@@ -345,3 +345,22 @@ class StoreOrderTests(TestCase):
         self.payload['snapshot']['photoPlacement']['fit']='remote-image'
         self.assertEqual(self.client.post('/api/v1/store/orders/',self.payload,format='json').status_code,400)
         self.assertEqual(PrintOrder.objects.count(),3)
+
+    def test_history_filters_search_and_counts_are_owned_and_precede_pagination(self):
+        import hashlib
+        owner_hash = hashlib.sha256(('a'*64).encode()).hexdigest()
+        pending = [PrintOrder(owner_hash=owner_hash, amount='0.00', model_name='Search phone', mode='stripe_live', status='pending') for _ in range(22)]
+        PrintOrder.objects.bulk_create(pending)
+        paid = PrintOrder.objects.create(owner_hash=owner_hash, amount='0.00', model_name='Paid phone', mode='free_test', status='paid', paid_at=timezone.now())
+        PrintOrder.objects.create(owner_hash=owner_hash, amount='0.00', model_name='Cancelled phone', status='cancelled')
+        private = PrintOrder.objects.create(owner_hash='another-browser', amount='0.00', model_name='Private phone', mode='stripe_live', status='paid', paid_at=timezone.now())
+        result = self.client.get('/api/v1/store/orders/?status=pending&page=2').json()
+        self.assertEqual(result['counts'], {'all':24, 'pending':22, 'paid':1, 'printed':0})
+        self.assertEqual(len(result['results']),2)
+        self.assertFalse(result['has_more'])
+        self.assertEqual(self.client.get('/api/v1/store/orders/?status=paid').json()['results'][0]['reference'],str(paid.reference))
+        self.assertEqual(self.client.get('/api/v1/store/orders/', {'q':str(paid.reference)[9:18]}).json()['results'][0]['reference'],str(paid.reference))
+        self.assertEqual(self.client.get('/api/v1/store/orders/', {'q':'paid PHONE'}).json()['results'][0]['reference'],str(paid.reference))
+        self.assertEqual(self.client.get('/api/v1/store/orders/', {'q':str(private.reference)}).json()['results'],[])
+        self.assertEqual(self.client.get('/api/v1/store/orders/?status=invalid').status_code,400)
+        self.assertEqual(self.client.get('/api/v1/store/orders/', {'q':'x'*121}).status_code,400)
