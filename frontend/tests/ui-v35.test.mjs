@@ -972,7 +972,7 @@ test('prototype checkout dock preserves consent, loading, fulfillment and availa
  const base={checkoutDraft:{quantity:1,fulfillmentType:'pickup',pass:{source:'photo',model:'Synthetic phone',caseMaterial:'standard'}},orderBook:{orders:{}},locale:()=> 'en-US',
   PRINT_PRICE:'$12.34',PRINT_AVAILABLE:true,paymentConfig:{available:true,provider:'stripe',mode:'live'},paymentError:'',paymentLoading:false,passBusy:false,
   providerName:()=> 'Stripe',money:()=> '12.34',esc,caseMaterialLabel,phoneColorName,passPreview:()=>'<div class="phone-case"></div>',passName:()=> 'My design',arrow:()=> '→',
-  pickupStationPanel:()=>'',pickupCheckoutReady:()=>true,singlePrintNotice:()=>'',deliveryOptions:()=>'',deliveryLabel:()=> 'Courier delivery',scannedStation:null,
+  courierAddressForm:()=>'<form id="courier-address-form"></form>',pickupStationPanel:()=>'',pickupCheckoutReady:()=>true,singlePrintNotice:()=>'',deliveryOptions:()=>'',deliveryLabel:()=> 'Courier delivery',scannedStation:null,
   quoteBreakdown:()=>'',checkoutEmailField:()=>'',membership:{},devicePrinting:{simulated:false}};
  const html=extra=>vm.runInNewContext(declarations+'\ncheckoutPage()',{...base,...extra});
  const normal=html({});assert.match(normal,/id="print-checkout-form"/);assert.match(normal,/name="accepted" type="checkbox" required/);assert.match(normal,/type="submit"/);assert.match(normal,/\$12.34/);

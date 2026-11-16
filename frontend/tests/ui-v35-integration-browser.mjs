@@ -354,12 +354,25 @@ try{
   assert.equal(await page.locator('#print-checkout-form').count(),0);
   assert(await page.locator('.checkout-pay-dock button').isDisabled(),'Shipping remains unavailable for payment');
   assert.equal(await page.locator('.checkout-due').innerText(),'—');
-  await page.locator('input[name="fulfillment_type"][value="air"]').check();
+  assert.equal(await page.locator('input[name="fulfillment_type"][value="air"]').count(),0);
+  const address=page.locator('#courier-address-form');
+  assert.equal(await address.evaluate(form=>form.checkValidity()),false);
+  for(const [name,value] of Object.entries({recipient:'Synthetic Recipient',phone:'+1 555 0100',region:'United States / NY / New York',street:'123 Test Street',postal:'10001'}))await address.locator(`[name="${name}"]`).fill(value);
+  await address.locator('button').click();
+  await page.getByText('Address saved on this browser. No order has been placed.',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.__locationRequests),0,'Saving courier address never requests location');
+  await page.reload();
+  await page.locator('#courier-address-form').waitFor();
+  assert.equal(await page.locator('#courier-address-form [name="recipient"]').inputValue(),'Synthetic Recipient');
   assert(await page.locator('.checkout-pay-dock button').isDisabled());
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Address form fits narrow screens');
+  await page.locator('#courier-address-form').scrollIntoViewIfNeeded();
+  await page.screenshot({path:`test-results/v35-integration/${width}-courier.png`,fullPage:true});
   await page.locator('input[name="fulfillment_type"][value="pickup"]').check();
   await page.locator('.pickup-station-row').waitFor();
   assert((await page.evaluate(()=>window.__locationRequests))>=1,'Choosing nearby printing retains the explicit location request');
   assert(await page.locator('#print-checkout-form button').isEnabled());
+  assert.equal(await page.locator('#courier-address-form').count(),0,'Pickup does not require recipient information');
   assert.equal(writes.length,0,'Choosing fulfillment and locating stations never pays, reserves or pushes an order');
 
   await page.goto(origin+'/#orders');

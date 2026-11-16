@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {prepareDeviceOrder,fulfillmentView,scanScope,scopeIds,fulfillmentConfig,stationIdentity,isPickup,deliveryLabel,deliveryOptions,deliveryStatusPanel} from '../storefront/fulfillment-service.js';
+import {prepareDeviceOrder,fulfillmentView,scanScope,scopeIds,fulfillmentConfig,stationIdentity,isPickup,deliveryLabel,deliveryOptions,deliveryStatusPanel,courierAddressForm} from '../storefront/fulfillment-service.js';
 import {orderRequest} from '../storefront/order-service.js';
 
 const template={id:'supplier-1-'+'a'.repeat(20),model:'iPhone 16 Pro',inventoryItemId:1,
@@ -89,8 +89,8 @@ test('courier, air and unclassified orders never bind a device or upload files, 
 });
 test('delivery choices explain availability and do not silently change a saved selection',()=>{
  const html=deliveryOptions('air','zh-CN');
- assert.match(html,/快递配送/);assert.match(html,/空运配送/);assert.match(html,/暂未开放/);
- assert.match(html,/value="air" checked/);assert.doesNotMatch(html,/value="pickup" checked/);
+ assert.match(html,/快递配送/);assert.doesNotMatch(html,/空运配送/);assert.match(html,/暂未开放/);
+ assert.doesNotMatch(html,/value="air"/);assert.doesNotMatch(html,/value="pickup" checked/);
  assert.equal(deliveryLabel('air','zh-CN'),'空运配送');
  assert.equal(deliveryLabel(undefined),'Delivery method not confirmed');
 });
@@ -246,13 +246,23 @@ test('pickup station information sits directly after its choice and before couri
  for(const method of ['courier','air'])assert.ok(!deliveryOptions(method,'zh-CN',{pickupDetails:'Matching stations'}).includes('Matching stations'));
 });
 
-test('prototype delivery cards retain pickup, courier and air values without promising shipping availability',()=>{
- for(const selected of ['pickup','courier','air']){
+test('prototype delivery cards offer only pickup and courier without promising shipping availability',()=>{
+ for(const selected of ['pickup','courier']){
   const html=deliveryOptions(selected,'en-US',{presentation:'checkout',pickupDetails:'Existing stock-aware station finder'});
   assert.match(html,new RegExp(`value="${selected}" checked`));
-  assert.match(html,/Nearby printing/);assert.match(html,/Ship to home/);assert.match(html,/Air delivery/);
+  assert.match(html,/Nearby printing/);assert.match(html,/Ship to home/);assert.doesNotMatch(html,/Air delivery|value="air"/);
   assert.match(html,/Coming soon\. No payment is taken\./);
   assert.equal(html.includes('Existing stock-aware station finder'),selected==='pickup');
   assert.doesNotMatch(html,/US\$4|3–4 days|reservation|pay-provider/);
  }
+});
+
+test('courier address matches prototype required fields and escapes private draft values',()=>{
+ const html=courierAddressForm({deliveryAddress:{recipient:'<img src=x onerror=alert(1)>',phone:'12345678',street:'12 \"Main\" St'},deliveryAddressSaved:true});
+ for(const name of ['recipient','phone','region','street'])assert.match(html,new RegExp('name="'+name+'"[^>]*required'));
+ assert.doesNotMatch(html,/name="postal"[^>]*required/);
+ assert.match(html,/type="tel"/);assert.match(html,/autocomplete="shipping name"/);
+ assert.doesNotMatch(html,/<img/);assert.match(html,/&lt;img/);
+ assert.match(html,/Address saved on this browser/);assert.match(html,/No order has been placed/);
+ assert.match(courierAddressForm({},'zh-CN'),/收件人（必填）/);
 });

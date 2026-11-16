@@ -77,11 +77,6 @@ body:is([data-v35-route="checkout"],[data-v35-route="orders"],[data-v35-route="p
 .v35-checkout .checkout-delivery-options input{position:absolute;right:10px;top:10px;width:16px;height:16px;margin:0;accent-color:#a234fd}
 .v35-checkout .checkout-delivery-options .delivery-option-icon{display:block;font-size:24px;font-weight:400;line-height:1;margin-bottom:16px;color:#100519}
 .v35-checkout .checkout-delivery-options strong{display:block;font-size:16px;font-weight:600}.v35-checkout .checkout-delivery-options small{font-size:12px;font-weight:400;line-height:1.5;margin-top:8px;color:#786785}
-.v35-checkout .checkout-delivery-options>label[data-delivery=air]{grid-column:1/-1;padding:10px 12px}
-.v35-checkout .checkout-delivery-options>label[data-delivery=air]:has(input:checked){padding:9px 11px}
-.v35-checkout .checkout-delivery-options>label[data-delivery=air] .delivery-option-icon{display:none}
-.v35-checkout .checkout-delivery-options>label[data-delivery=air] strong{font-size:13px;padding-right:22px}
-.v35-checkout .checkout-delivery-options>label[data-delivery=air] small{font-size:11px;margin-top:3px}
 .v35-checkout .checkout-delivery-options>.pickup-option-details{grid-column:1/-1;min-width:0}
 .v35-checkout .checkout-delivery-options>.pickup-option-details>.pickup-stations{margin:8px 0 0}
 .v35-checkout-design .print-quote h2{font-size:20px}.v35-checkout-design .ai-consent{font-size:12px;margin-top:16px;line-height:1.6}
@@ -105,3 +100,12 @@ body:is([data-v35-route="checkout"],[data-v35-route="orders"],[data-v35-route="p
  .checkout-pay-dock{padding-inline:12px;gap:6px;grid-template-columns:minmax(72px,1fr) auto minmax(92px,1fr)}.checkout-due{font-size:19px}.v35-checkout .checkout-pay-dock .button{font-size:11px}
 }
 .v35-checkout .ai-order-layout>#pickup-station-panel:empty{display:none}
+.v35-checkout .checkout-address{margin-top:22px;padding-top:22px;border-top:1px solid #dfcceb;display:grid;gap:16px;min-width:0}
+.v35-checkout .checkout-address h3{margin:0;font-size:20px}
+.v35-checkout .checkout-address p{margin:0;font-size:13px;line-height:1.6;color:#786785}
+.v35-checkout .checkout-address label{display:grid;gap:8px;min-width:0;font-size:14px}
+.v35-checkout .checkout-address input{width:100%;min-width:0;box-sizing:border-box;border:1px solid #dfcceb;border-radius:10px;background:#fff;padding:12px;color:#100519;font-size:16px}
+.v35-checkout .checkout-address input:focus{outline:2px solid #a234fd;outline-offset:2px}
+.v35-checkout .address-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.v35-checkout .checkout-address .button{justify-self:start;white-space:normal}
+@media(max-width:420px){.v35-checkout .address-pair{grid-template-columns:1fr}}
