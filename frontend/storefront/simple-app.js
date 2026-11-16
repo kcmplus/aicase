@@ -680,7 +680,7 @@ function render(preserveScroll=false) {
   if(route!=='choose')canvasExpanded=false;
   if(route!=='choose')effectPanelOpen=false;
   document.body.classList.toggle('canvas-editor-open',canvasExpanded);
-  const pages={account:()=>customerPage(membership,customerUI),'my-designs':()=>myDesignsPage({rows:localDesigns,lang:locale(),preview:passPreview,error:localDesignError,busy:localDesignBusy,guest:workspace.owner==='guest'}),choose,pass:passPage,kiosk:()=>publicStationPage(true),designs:()=>worksPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),work:()=>workDetailPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),'how-it-works':()=>tutorialPage({lang:locale()}),about:()=>aboutPage({lang:locale()}),locations:publicStationPage,printers:publicStationPage,ai:()=>aiPage(aiJob,membership,aiBusy,aiUi),membership:()=>membershipInfoPage({account:membership,lang:locale()}),checkout:checkoutPage,orders:ordersPage,payment:paymentPage};
+  const pages={account:()=>customerPage(membership,customerUI),'my-designs':()=>myDesignsPage({rows:localDesigns,lang:locale(),preview:passPreview,error:localDesignError,busy:localDesignBusy,guest:workspace.owner==='guest'}),choose,pass:passPage,kiosk:()=>publicStationPage(true),designs:()=>worksPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),work:()=>workDetailPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),'how-it-works':()=>tutorialPage({lang:locale()}),about:()=>aboutPage({lang:locale()}),locations:publicStationPage,printers:publicStationPage,ai:()=>aiPage(aiJob,membership,aiBusy,{...aiUi,phoneModels,stockCatalogStatus}),membership:()=>membershipInfoPage({account:membership,lang:locale()}),checkout:checkoutPage,orders:ordersPage,payment:paymentPage};
   app.classList.toggle('is-ai-studio',route==='ai'&&aiJob?.mode==='live');
   app.classList.toggle('is-editor',route==='choose');
   document.body.classList.toggle('v35-home-page',!Object.hasOwn(pages,route));
@@ -795,6 +795,7 @@ app.addEventListener('toggle',event=>{const el=event.target;if(!el.isConnected||
 app.addEventListener('click',event=>{if(event.target.closest('.pickup-stations a')&&(stationFinder.state.error||Date.now()-stationFinder.state.loadedAt>60000)){event.preventDefault();void stationFinder.refresh();}},true);
 app.addEventListener('click',event=>{if(event.target.matches('input[name=fulfillment_type][value=pickup]')&&checkoutDraft&&!checkoutDraft.editId&&(checkoutDraft.fulfillmentType||'pickup')==='pickup')void requestStationLocation();});
 app.addEventListener('change',async event=>{
+  if(event.target.id==='ai-phone-model'){await changeAIPhoneModel(event.target.value);return;}
   if(event.target.matches('#ai-credit-form [name=accepted]'))aiUi.accepted=event.target.checked;
   if(event.target.name==='fulfillment_type'&&checkoutDraft&&!checkoutDraft.editId){
     if(passBusy)return;
@@ -1167,6 +1168,20 @@ async function rememberLiveJob(job){
  membership=await privateUpdate('ai-membership-v1',a=>({...a,jobs:{...a.jobs,[job.id]:job}}),freshMembership());
  aiJob=job;state.aiJobId=job.id;save();
 }
+async function changeAIPhoneModel(model){
+ if(aiBusy||photoBusy||passBusy||sessionCheckBusy||aiJob?.mode!=='live'||aiJob.status!=='awaiting_confirmation'||aiJob.remoteId||aiJob.submissionAttempted||model===aiJob.model)return;
+ const jobId=aiJob.id;aiBusy=true;aiUi.error='';render(true);
+ try{
+  await syncAIAccount();workspace.check();await refreshStockChoices();
+  if(!aiJob||aiJob.id!==jobId||aiJob.status!=='awaiting_confirmation'||aiJob.remoteId||aiJob.submissionAttempted)throw Error('This render has changed. Please review it again.');
+  if(stockCatalogStatus!=='ready'||!phoneModels.includes(model))throw Error('This phone model is unavailable. Please choose again.');
+  // Preserve the request key, photo and style. Changing a draft must not submit a render.
+  await rememberLiveJob({...aiJob,model});
+  Object.assign(state,{model,caseMaterial:'',phoneTemplateId:undefined,phoneColor:null});
+  selectSupplierTemplate(model,undefined);colorNotice=false;reviewPass=null;aiUi.accepted=false;save();
+ }catch(error){aiUi.error=error.message;notify(error.message);}
+ finally{aiBusy=false;render(true);document.querySelector('#ai-phone-model')?.focus({preventScroll:true});}
+}
 async function confirmAI(generation,accepted){
  if(aiBusy)return;
  if(!membership.authenticated){customerUI.next='ai';go('account');return;}
@@ -1175,6 +1190,13 @@ async function confirmAI(generation,accepted){
   await syncAIAccount();workspace.check();
   if(generation){
    if(aiJob?.mode!=='live')throw Error('Choose your photo and start a new AI render.');
+   if(!accepted)throw Error('Confirm using one AI generation first.');
+   if(!aiJob.submissionAttempted){
+    await refreshStockChoices();
+    if(stockCatalogStatus!=='ready'||!phoneModels.includes(aiJob.model))throw Error('This phone model is unavailable. Please choose again.');
+   }
+   // Freeze model changes before sending: a timeout may already have reserved a credit.
+   await rememberLiveJob({...aiJob,submissionAttempted:true});
    await rememberLiveJob(await submitLiveRender(aiJob,accepted));
    await syncAIAccount();
   }else await mergeAIAccount(await changeAIAccount('subscribe',accepted));

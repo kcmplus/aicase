@@ -15,6 +15,7 @@ try{
   await context.route('**/*',route=>{
    const req=route.request(),url=new URL(req.url());
    if(url.origin!==origin||!['GET','HEAD'].includes(req.method())){writes.push(req.method()+' '+url.pathname);return route.abort();}
+   if(url.pathname==='/__ai_fixture')return route.fulfill({contentType:'text/html',body:'<!doctype html><html><body>Isolated local draft fixture</body></html>'});
    return route.continue();
   });
   await context.addInitScript(()=>localStorage.setItem('popomo-order-access-v1','a'.repeat(64)));
@@ -67,8 +68,38 @@ try{
   await page.locator('[data-case-material="standard"]').click();
   await page.locator('[data-phone-color="synthetic-blue"]').waitFor();
   await page.screenshot({path:`test-results/v35-integration/${width}-editor.png`});
+  // Seed on a page without the app, so a concurrent navigation cannot overwrite the fixture.
+  // A guest may prepare a local AI draft; selecting a model must never submit it.
+  await page.goto(origin+'/__ai_fixture');
+  const aiFixture=await page.evaluate(async model=>{
+   const {createLiveRender}=await import('/ai-service.js');
+   const {readDesign,writeDesign}=await import('/simple-storage.js');
+   const {createDesignWorkspace}=await import('/design-workspace.js');
+   const identity=await (await fetch('/api/v1/store/ai-account/')).json();
+   const workspace=createDesignWorkspace(identity,{read:readDesign,write:writeDesign});
+   const canvas=document.createElement('canvas');canvas.width=24;canvas.height=32;
+   canvas.getContext('2d').fillRect(0,0,24,32);
+   const job=createLiveRender({photo:canvas.toDataURL(),styleId:'anime',exampleId:'portrait',model});
+   const membership=await workspace.read('ai-membership-v1');
+   await workspace.write('ai-membership-v1',{...membership,jobs:{...membership.jobs,[job.id]:job}});
+   const editor=JSON.parse(localStorage.getItem(workspace.key('editor'))||'{}');
+   localStorage.setItem(workspace.key('editor'),JSON.stringify({...editor,model,aiJobId:job.id}));
+   const catalog=await (await fetch('/api/v1/store/phone-models/')).json();
+   return {id:job.id,photo:job.photo,model:catalog.models.find(item=>item.name!==model).name};
+  },model);
+  await page.goto(origin+'/#ai');
+  await page.locator('#ai-phone-model').waitFor();
+  await page.locator('#ai-phone-model').selectOption(aiFixture.model);
+  await page.waitForFunction(model=>!document.querySelector('#ai-phone-model')?.disabled&&JSON.parse(localStorage.getItem('v35:guest:editor')||'{}').model===model,aiFixture.model);
+  await page.reload();
+  await page.locator('#ai-phone-model').waitFor();
+  assert.equal(await page.locator('#ai-phone-model').inputValue(),aiFixture.model);
+  const savedAI=await page.evaluate(async()=>{const {readDesign}=await import('/simple-storage.js');const editor=JSON.parse(localStorage.getItem('v35:guest:editor'));return (await readDesign('v35:guest:ai-membership-v1')).jobs[editor.aiJobId];});
+  assert.equal(savedAI.id,aiFixture.id);assert.equal(savedAI.photo,aiFixture.photo);assert.equal(savedAI.styleId,'anime');assert.equal(savedAI.model,aiFixture.model);
+  const selectBox=await page.locator('#ai-phone-model').boundingBox();assert(selectBox.width>150&&selectBox.x>=0&&selectBox.x+selectBox.width<=width,'Model picker fits the viewport');
+  await page.screenshot({path:`test-results/v35-integration/${width}-ai-model.png`,fullPage:true});
   assert.deepEqual(errors,[],'No browser exceptions');assert.deepEqual(writes,[],'No external requests or financial/hardware writes');
-  console.log('PASS merged editor/catalog/colors/local save/checkout stations/order detail/scanned stock',width,height);
+  console.log('PASS merged editor/catalog/colors/local save/checkout stations/order detail/scanned stock/AI model change',width,height);
   await context.close();
  }
 }finally{await browser.close();}

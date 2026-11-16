@@ -823,3 +823,47 @@ test('merged catalog keeps body colors scoped to a case style and preserves both
  assert.equal(restored.caseMaterial,'standard');assert.equal(restored.phoneColor.code,'chosen');
  assert.equal(colorPicker(magnet.colors,null),'');
 });
+
+async function aiPhoneChangeHarness(){
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
+ const writes=[],sent=[];
+ const context={aiBusy:false,photoBusy:false,passBusy:false,sessionCheckBusy:false,aiUi:{accepted:true,error:'old error'},
+  aiJob:{id:'AI-same-request',model:'iPhone 17',photo:'private synthetic photo',styleId:'anime',mode:'live',status:'awaiting_confirmation'},
+  state:{model:'iPhone 17',caseMaterial:'standard',phoneColor:{code:'old'},phoneTemplateId:'old-template'},
+  phoneModels:['iPhone 17','iPhone 13 Pro'],stockCatalogStatus:'ready',colorNotice:true,reviewPass:{old:true},
+  membership:{authenticated:true},workspace:{check(){}},syncAIAccount:async()=>{},refreshStockChoices:async()=>{},
+  render:()=>{},notify:()=>{},save:()=>{},selectSupplierTemplate:()=>{},document:{querySelector:()=>null},location:{hash:'#ai'},
+  rememberLiveJob:async value=>{writes.push(structuredClone(value));context.aiJob=value;},
+  submitLiveRender:async value=>{sent.push(structuredClone(value));return {...value,status:'queued',remoteId:'server-id'};}};
+ vm.createContext(context);vm.runInContext(appFunction(source,'changeAIPhoneModel')+'\n'+appFunction(source,'confirmAI'),context);
+ return {context,writes,sent};
+}
+test('changing the AI model preserves photo/style/request identity and submits the selected model',async()=>{
+ const {context,writes,sent}=await aiPhoneChangeHarness();
+ await context.changeAIPhoneModel('iPhone 13 Pro');
+ assert.equal(context.aiJob.model,'iPhone 13 Pro');assert.equal(context.aiJob.id,'AI-same-request');
+ assert.equal(context.aiJob.photo,'private synthetic photo');assert.equal(context.aiJob.styleId,'anime');
+ assert.equal(context.state.model,'iPhone 13 Pro');assert.equal(context.state.caseMaterial,'');assert.equal(context.state.phoneColor,null);
+ assert.equal(context.aiUi.accepted,false);assert.equal(context.aiUi.error,'');assert.equal(sent.length,0);
+ await context.confirmAI(true,true);
+ assert.equal(sent.length,1);assert.equal(sent[0].model,'iPhone 13 Pro');assert.equal(sent[0].submissionAttempted,true);
+ assert(writes.find(item=>item.submissionAttempted&&item.status==='awaiting_confirmation'),'Attempt flag persists before sending');
+});
+test('unavailable models and frozen AI jobs cannot change their original selection',async()=>{
+ for(const overrides of [{stockCatalogStatus:'unavailable'},{phoneModels:[]},{aiBusy:true}]){
+  const {context,writes}=await aiPhoneChangeHarness();Object.assign(context,overrides);
+  await context.changeAIPhoneModel('iPhone 13 Pro');assert.equal(context.aiJob.model,'iPhone 17');assert.equal(writes.length,0);
+ }
+ for(const change of [{submissionAttempted:true},{remoteId:'already-created'},{status:'queued'},{status:'ready'}]){
+  const {context,writes}=await aiPhoneChangeHarness();Object.assign(context.aiJob,change);
+  await context.changeAIPhoneModel('iPhone 13 Pro');assert.equal(context.aiJob.model,'iPhone 17');assert.equal(writes.length,0);
+ }
+});
+test('an ambiguous AI submission freezes model changes and retries with the original request key',async()=>{
+ const {context}=await aiPhoneChangeHarness(),requests=[];
+ context.submitLiveRender=async value=>{requests.push(structuredClone(value));throw Error('Synthetic timeout');};
+ await context.confirmAI(true,true);assert.equal(context.aiJob.submissionAttempted,true);
+ await context.changeAIPhoneModel('iPhone 13 Pro');assert.equal(context.aiJob.model,'iPhone 17');
+ await context.confirmAI(true,true);
+ assert.equal(requests.length,2);assert.equal(requests[0].id,requests[1].id);assert.equal(requests[0].model,requests[1].model);
+});
