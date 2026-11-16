@@ -31,7 +31,7 @@ for number, material in enumerate(['普通款','磁吸款'],1):
     product=SupplierProduct.objects.create(connection=connection,goods_id=str(number),product_id=str(number),phone_model=model,active=True,specs=[{'spec_name':'版本','spec_value':material}])
     stock=DeviceProduct.objects.create(device=device,product=product,stock=3 if number==1 else 0,observed_at=timezone.now(),template_url='https://invalid.example/template.png',template_imported_url='https://invalid.example/template.png',template_image=overlay,template_mask=mask,template_width=320,template_height=640)
     if number==1: standard=stock
-color=PhoneColor.objects.create(phone_model=model,code='synthetic-blue',name='Synthetic blue',rgb={'r':32,'g':100,'b':200},active=True)
+color=PhoneColor.objects.create(phone_model=model,code='synthetic-blue',name='合成蓝 / Synthetic blue',rgb={'r':32,'g':100,'b':200},active=True)
 prefix='phone-colors/'+uuid.uuid4().hex
 resource=PhoneColorResource.objects.create(color=color,version=1,template_id=stock_template(standard)['id'],width=320,height=640,overlay=default_storage.save(prefix+'/overlay.png',ContentFile(raw)),mask=default_storage.save(prefix+'/mask.png',ContentFile(mask_raw)),overlay_sha256=hashlib.sha256(raw).hexdigest(),mask_sha256=hashlib.sha256(mask_raw).hexdigest(),verified_at=timezone.now())
 color.current_resource=resource; color.save()

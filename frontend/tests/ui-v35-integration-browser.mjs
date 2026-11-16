@@ -5,7 +5,7 @@ import {mkdir} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE?pathToFileURL(process.env.PLAYWRIGHT_MODULE).href:'playwright');
 async function pickModel(page,model,opener){
- if(opener)await page.locator(opener).click();
+ if(opener){if(opener==='[data-action="choose-phone"]'&&!await page.locator(opener).isVisible())await page.locator('.phone-settings-summary').click();await page.locator(opener).click();}
  await page.locator('.v35-model-dialog[open]').waitFor();
  await page.locator('.v35-model-brands').getByRole('button',{name:phoneBrand(model),exact:true}).click();
  await page.locator('.v35-model-list').getByRole('button',{name:model,exact:true}).click();
@@ -83,6 +83,8 @@ try{
   assert(await page.locator('[data-home-confirm]').isEnabled(),'Choosing a model defaults to standard when available');
   assert.equal(await page.locator('[data-home-material="standard"]').getAttribute('aria-pressed'),'true');
   await page.locator('[data-home-color="synthetic-blue"][aria-pressed="true"]').waitFor();
+  assert.equal(await page.locator('[data-home-color="synthetic-blue"]').getAttribute('aria-label'),'Synthetic blue');
+  assert.doesNotMatch(await page.locator('.v35-home-colors').innerText(),/合成蓝/);
   await page.screenshot({path:`test-results/v35-integration/${width}-home-picker.png`});
   const modal=await page.locator('.v35-home-phone').boundingBox();
   assert(modal.x>=0&&modal.y>=0&&modal.x+modal.width<=width&&modal.y+modal.height<=height,'Modal stays in viewport');
@@ -95,8 +97,8 @@ try{
   await page.locator('[data-home-confirm]').click();
   await (await chooser).setFiles({name:'synthetic.png',mimeType:'image/png',buffer:Buffer.from(photoBytes,'base64')});
   await page.locator('.v35-editor').waitFor();
-  await page.locator('[data-case-material="standard"][aria-pressed="true"]').waitFor();
-  await page.locator('[data-phone-color="synthetic-blue"][aria-pressed="true"]').waitFor();
+  await page.locator('[data-case-material="standard"][aria-pressed="true"]').waitFor({state:'attached'});
+  await page.locator('[data-phone-color="synthetic-blue"][aria-pressed="true"]').waitFor({state:'attached'});
   await page.goto(origin+'/#home');
   await page.locator('.v35-entries [data-action="home-ai"]').click();
   assert((await page.locator('#home-phone-model').innerText()).includes(model));
@@ -138,6 +140,7 @@ try{
   await page.keyboard.press('Escape');
   await page.goto(origin+'/#choose?design=bloom');
   await page.waitForLoadState('networkidle');
+  if(!await page.locator('[data-action="choose-phone"]').isVisible())await page.locator('.phone-settings-summary').click();
   await page.locator('[data-action="choose-phone"]').click();
   await page.locator('.v35-model-dialog[open]').waitFor();
   await page.screenshot({path:`test-results/v35-integration/${width}-editor-model-list.png`});
@@ -148,7 +151,11 @@ try{
   await page.locator('[data-case-material="magnetic"]').click();
   assert.equal(await page.locator('[data-phone-color]').count(),1,'RGB selection does not require a style preview resource');
   await page.locator('[data-phone-color="synthetic-blue"]').click();
+  assert.equal(await page.locator('.phone-settings').getAttribute('open'),null,'Color selection collapses phone settings');
+  assert.match(await page.locator('.phone-settings-summary').innerText(),/Magnetic.*Synthetic blue/);
+  assert.doesNotMatch(await page.locator('.phone-settings-summary').innerText(),/合成蓝/);
   await page.screenshot({path:`test-results/v35-integration/${width}-rgb-only-color.png`});
+  await page.locator('.phone-settings-summary').click();
   await page.locator('[data-case-material="standard"]').click();
   await page.locator('#design-form button').click();
   await page.locator('[data-action="save-local-design"]').waitFor();
@@ -184,8 +191,8 @@ try{
   await page.locator('[data-action="save-local-design"]').click();
   await page.locator('[data-action="close-design-review"]').first().click();
   await page.reload();
-  await page.locator('[data-case-material="standard"][aria-pressed="true"]').waitFor();
-  await page.locator('[data-phone-color="synthetic-blue"][aria-pressed="true"]').waitFor();
+  await page.locator('[data-case-material="standard"][aria-pressed="true"]').waitFor({state:'attached'});
+  await page.locator('[data-phone-color="synthetic-blue"][aria-pressed="true"]').waitFor({state:'attached'});
   await page.locator('#design-form button').click();
   await page.locator('[data-action="continue-design-checkout"]').click();
   await page.locator('.v35-checkout .pickup-station-row').waitFor();

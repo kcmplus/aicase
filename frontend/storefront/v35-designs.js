@@ -1,3 +1,4 @@
+import {phoneColorName} from './phone-colors.js';
 import {caseMaterialLabel} from './case-styles.js';
 import {esc} from './art.js';
 const say=(lang,en,zh)=>lang==='zh-CN'?zh:en;
@@ -12,6 +13,6 @@ export function designSteps(active=1,lang='en-US'){
 export function designReview({pass,preview,lang='en-US',busy=false,saved=false}={}){
  if(!pass)return '';
  const tr=(en,zh)=>say(lang,en,zh);
- const rows=[[tr('Phone model','手机机型'),pass.model],...(pass.caseMaterial?[[tr('Case style','手机壳款式'),caseMaterialLabel(pass.caseMaterial,lang)]]:[]),...(pass.phoneColor?[[tr('Phone body color','机身颜色'),pass.phoneColor.name]]:[]),[tr('Design method','设计方式'),tr('Custom design','自定义设计')],[tr('Quantity','数量'),tr('1 case','1 个手机壳')]];
+ const rows=[[tr('Phone model','手机机型'),pass.model],...(pass.caseMaterial?[[tr('Case style','手机壳款式'),caseMaterialLabel(pass.caseMaterial,lang)]]:[]),...(pass.phoneColor?[[tr('Phone body color','机身颜色'),phoneColorName(pass.phoneColor,lang)]]:[]),[tr('Design method','设计方式'),tr('Custom design','自定义设计')],[tr('Quantity','数量'),tr('1 case','1 个手机壳')]];
  return `<section class="v35-design-review" aria-labelledby="v35-review-title">${designSteps(2,lang)}<header class="v35-review-heading"><p class="v35-kicker">ONE LAST LITTLE LOOK</p><h1 id="v35-review-title">${tr('Happy with every little detail?','每个细节，都喜欢吗？')}</h1><p>${tr('Check your phone model, artwork and camera cutout.','确认手机型号和图案位置，尤其留意镜头开孔。')}</p></header><div class="v35-review-layout"><div class="v35-review-case">${preview(pass)}</div><section class="v35-review-summary"><h2>${tr('Your one-of-a-kind design','你的专属设计')}</h2><dl>${rows.map(([label,value])=>`<div><dt>${label}</dt><dd>${esc(value)}</dd></div>`).join('')}</dl>${saved?`<p class="v35-notice" role="status">${tr('Draft saved on this browser.','草稿已保存到此浏览器。')} <a href="#my-designs">${tr('My designs →','我的设计 →')}</a></p>`:''}</section></div><div class="v35-review-actions"><button type="button" class="button v35-review-edit" data-action="close-design-review" ${busy?'disabled':''}>← ${tr('Keep editing','继续编辑')}</button><button type="button" class="button secondary" data-action="save-local-design" ${busy?'disabled':''}>${tr('Save draft','保存草稿')}</button><button type="button" class="button primary" data-action="continue-design-checkout" ${busy?'disabled':''}>${tr('Print now','去打印')} →</button></div></section>`;
 }

@@ -106,3 +106,14 @@ body[data-v35-route=ai] .studio-render-dialog .studio-generation-meter{box-shado
  .studio-render-dialog .button{font-size:14px;padding:10px;min-height:48px}
 }
 @media(max-width:360px){.studio-render-body{padding-inline:16px}.studio-render-header{padding-inline:16px}.studio-render-body>h1{font-size:20px}.studio-render-dialog .button{font-size:12px}}
+
+/* Keep chosen phone, material and color compact while editing artwork. */
+.phone-settings{margin-bottom:18px;border:1px solid #dfc9ef;border-radius:14px;overflow:hidden}
+.phone-settings>summary{list-style:none;background:#ffffffb8!important}.phone-settings>summary::-webkit-details-marker{display:none}
+.phone-settings-value{display:flex;flex:1;min-width:0;flex-direction:column;gap:3px}
+.phone-settings-value small{font-size:12px;font-weight:400;line-height:1.5;color:#786185;overflow-wrap:anywhere}
+.phone-settings .model-summary-label{flex-shrink:0}.phone-settings .model-summary-action{flex-shrink:0;margin-left:auto}
+.phone-settings-body{padding:0 16px 16px;border-top:1px solid #dfc9ef}.phone-settings-body>.text-button{min-height:44px;margin:4px 0 8px}
+.phone-settings[open] .model-summary-chevron{transform:rotate(180deg)}
+@media(max-width:360px){.phone-settings .model-summary-label{display:none}.phone-settings-body{padding-inline:12px}}
+.phone-settings .model-summary-value{font-size:16px;line-height:1.4;color:#100519}

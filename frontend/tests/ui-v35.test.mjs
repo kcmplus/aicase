@@ -18,7 +18,7 @@ import {myDesignsPage,designReview} from '../storefront/v35-designs.js';
 import {createPersonalPass,readPass} from '../storefront/simple-core.js';
 import {phoneTemplates,phoneTemplate} from '../storefront/phone-templates.js';
 import {makePersonalDesign,isPhoto,validateAddedArtwork,validatePlacement} from '../storefront/simple-personalize.js';
-import {validatePhoneColor,validPhoneColors,frozenPhoneColor,reconcilePhoneColor,colorPicker,colorSelection} from '../storefront/phone-colors.js';
+import {validatePhoneColor,validPhoneColors,frozenPhoneColor,reconcilePhoneColor,colorPicker,colorSelection,phoneColorName} from '../storefront/phone-colors.js';
 import {phone} from '../storefront/art.js';
 import {exportCase} from '../storefront/print-export.js';
 import {orderRequest,savedOrder} from '../storefront/order-service.js';
@@ -414,6 +414,19 @@ test('RGB-only model colors survive drafts, render safely and send a validated R
  assert.match(colorPicker([color],color),/background:rgb\(20,40,80\)/);
  for(const rgb of [{r:true,g:0,b:0},{r:300,g:0,b:0},{r:1,g:2}])assert.throws(()=>validatePhoneColor({...color,rgb}));
 });
+test('color names follow the selected language without changing saved bilingual data',()=>{
+ const color={...previewColor(),name:'石墨色 / Graphite'},before=structuredClone(color);
+ assert.equal(phoneColorName(color,'en-US'),'Graphite');assert.equal(phoneColorName(color,'zh-CN'),'石墨色');
+ assert.equal(phoneColorName({...color,name:'Black / White'},'en-US'),'Black / White');
+ assert.equal(phoneColorName({...color,name:''},'en-US'),color.code);
+ assert.doesNotMatch(colorPicker([color],color,'en-US'),/石墨色/);
+ assert.doesNotMatch(colorPicker([color],color,'zh-CN'),/Graphite/);
+ for(const [lang,label,other] of [['en-US','Graphite','石墨色'],['zh-CN','石墨色','Graphite']]){
+  const html=designReview({pass:{model:'Test phone',phoneColor:color},preview:()=>'',lang});
+  assert(html.includes(label));assert(!html.includes(other));
+ }
+ assert.deepEqual(color,before);
+});
 test('no colors skip the picker; defaults, single/multiple colors and stale selections stay model-specific',()=>{
  const one=previewColor(),two={...previewColor(undefined,'other'),isDefault:true};
  for(const colors of [undefined,[],null])assert.equal(colorPicker(colors||[],null),'');
@@ -506,18 +519,18 @@ test('a frozen color survives an explicit device template change without paintin
  assert.ok(html.includes(next.previewOverlay));assert.ok(html.includes(next.mask));assert.ok(!html.includes('/phone-colors/'));
 });
 
-test('actual color click selects only a current model option, updates preview and restores button focus',async()=>{
+test('actual color click selects a current option and collapses settings with summary focus',async()=>{
  const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
  const start=source.indexOf("app.addEventListener('click',async event=>{"),end=source.indexOf('  if(el.dataset.quickFont)',start);
  const one=previewColor(),two=previewColor(undefined,'other',2);let handler,saves=0,previews=0,focuses=0;
- const picker={innerHTML:'',querySelector:()=>({focus(){focuses++;}})};
+ const picker={focus(){focuses++;}};
  const context={app:{addEventListener:(name,fn)=>{handler=fn;}},sessionCheckBusy:false,photoBusy:false,aiBusy:false,passBusy:false,
   state:{model:'synthetic',phoneColor:one},stockSelection:()=>({colors:[one,two]}),reviewPass:{},colorNotice:true,
-  save:()=>{saves++;},updatePreview:()=>{previews++;},document:{querySelector:()=>picker},colorPicker,structuredClone,locale:()=> 'en-US'};
+  save:()=>{saves++;},render:()=>{previews++;},phoneSettingsOpen:true,document:{querySelector:selector=>{assert.equal(selector,'.phone-settings-summary');return picker;}},structuredClone};
  vm.runInNewContext(source.slice(start,end)+'});',context);
  const click=code=>handler({target:{closest:selector=>{assert.ok(selector.includes('[data-phone-color]'));return {dataset:{phoneColor:code}};}}});
  await click('other');assert.equal(context.state.phoneColor.code,'other');assert.equal(context.reviewPass,null);assert.equal(context.colorNotice,false);
- assert.match(picker.innerHTML,/data-phone-color="other" aria-pressed="true"/);assert.equal(saves,1);assert.equal(previews,1);assert.equal(focuses,1);
+ assert.equal(context.phoneSettingsOpen,false);assert.equal(saves,1);assert.equal(previews,1);assert.equal(focuses,1);
  await click('foreign-model-color');assert.equal(saves,1);assert.equal(context.state.phoneColor.code,'other');
 });
 

@@ -19,7 +19,7 @@ import {orderRequest,savedOrder,checkoutBody,singlePrintDraft,singlePrintNotice,
 import {stockedPhoneModels as phoneModels,stockCatalogStatus,stockSelection,loadStockCatalog,deviceScope} from './stock-catalog.js';
 import {registerSupplierTemplates,phoneTemplate,selectSupplierTemplate} from './phone-templates.js';
 import {fonts} from './editor-model.js';
-import {frozenPhoneColor,reconcilePhoneColor,colorPicker} from './phone-colors.js';
+import {frozenPhoneColor,reconcilePhoneColor,colorPicker,phoneColorName} from './phone-colors.js';
 import {dragPlacement,scaleFromPointer,rotationFromPointer,rotateGroup} from './artwork-drag.js';
 import {freshOrders,orderForCode,currentOrder,commitPrintOrder} from './print-orders.js';
 import {freshMembership,refreshMembership,migrateRender} from './ai-membership.js';
@@ -164,6 +164,7 @@ if(aiJob)aiJob=membership.jobs[aiJob.id];
 if(aiJob?.status==='awaiting_confirmation')customerUI.next='ai';
 try{if(location.hash.slice(1).split('?')[0]!=='checkout')await syncAIAccount();if(aiJob?.mode==='live')await rememberLiveJob(await refreshLiveRender(aiJob));}catch{/* A saved job can be resumed when the service returns. */}
 let comparing=false,photoBusy=false,passBusy=false;
+let phoneSettingsOpen=false;
 let effectPanelOpen=false,cropPanelOpen=false,selectedArtwork=null,libraryExpanded=false;
 const editorPanels={collection:false,graphics:false};
 let canvasExpanded=false,canvasObserver=null,canvasHome=null;
@@ -405,8 +406,12 @@ function home() {
  return homePresentation({lang:locale(),busy:photoBusy,gallery,station:stockScope?`<div class="v35-wrap">${stationContext()}</div>`:''});
 }
 function phonePicker(){
- return `<div class="model-first"><button type="button" class="model-summary-button" data-action="choose-phone" aria-haspopup="dialog"><span class="model-summary-label">${state.model?'Your phone':'First, choose your phone'}</span><strong class="model-summary-value">${esc(state.model||'')}</strong><span class="model-summary-action">${state.model?'Change':'Choose'}</span><span class="model-summary-chevron" aria-hidden="true">⌄</span></button></div><p id="model-preview-note" class="field-note" ${!state.model||state.phoneTemplateId?'hidden':''}>Illustrative preview. The exact case template will be confirmed before printing.</p>`;
+ const choice=stockSelection(state.model,state.caseMaterial),lang=locale(),zh=lang==='zh-CN';
+ const expanded=phoneSettingsOpen||!choice||colorNotice;
+ const summary=[caseMaterialLabel(state.caseMaterial,lang),phoneColorName(state.phoneColor,lang)].filter(Boolean).join(' · ');
+ return `<details class="model-first phone-settings" ${expanded?'open':''}><summary class="model-summary-button phone-settings-summary"><span class="model-summary-label">${state.model?'Your phone':'First, choose your phone'}</span><span class="phone-settings-value"><strong class="model-summary-value">${esc(state.model||'')}</strong><small>${esc(summary)}</small></span><span class="model-summary-action">${expanded?(zh?'收起':'Done'):(zh?'更改':'Change')}</span><span class="model-summary-chevron" aria-hidden="true">⌄</span></summary><div class="phone-settings-body"><button type="button" class="text-button" data-action="choose-phone" aria-haspopup="dialog">${zh?'更改手机机型':'Change phone model'} →</button><p id="model-preview-note" class="field-note" ${!state.model||state.phoneTemplateId?'hidden':''}>Illustrative preview. The exact case template will be confirmed before printing.</p><div id="case-style-panel">${caseStylePicker(stockSelection(state.model),state.caseMaterial,{lang,scoped:Boolean(stockScope)})}</div><div id="phone-color-picker">${colorPicker(choice?.colors||[],state.phoneColor,lang,colorNotice)}</div></div></details>`;
 }
+
 function openModelPicker(forAI=false){
  cleanupPhoneModels();
  cleanupPhoneModels=openPhoneModelDialog({root:app,selected:forAI?aiJob?.model:state.model,lang:locale(),catalog:()=>({models:phoneModels,status:stockCatalogStatus,selection:stockSelection}),refresh:refreshStockChoices,
@@ -427,15 +432,15 @@ function assertCurrentColor(selection,available){
 }
 function selectPhoneModel(model){
  if(!phoneModels.includes(model))return;
- if(model!==state.model||!state.caseMaterial){state.model=model;state.caseMaterial='standard';state.phoneTemplateId=stockSelection(model,'standard')?.templateId;selectSupplierTemplate(model,state.phoneTemplateId);syncDraftColor(true);reviewPass=null;save();}
+ if(model!==state.model||!state.caseMaterial){state.model=model;state.caseMaterial='standard';state.phoneTemplateId=stockSelection(model,'standard')?.templateId;selectSupplierTemplate(model,state.phoneTemplateId);syncDraftColor(true);phoneSettingsOpen=Boolean(stockSelection(model,'standard')?.colors?.length);reviewPass=null;save();}
  if(location.hash==='#choose?step=model')history.replaceState(null,'','#choose');
- render(true);document.querySelector('[data-action="choose-phone"]')?.focus({preventScroll:true});
+ render(true);document.querySelector(phoneSettingsOpen?'[data-action="choose-phone"]':'.phone-settings-summary')?.focus({preventScroll:true});
 }
 function openHomePhone(entry){
  cleanupHomePhone();
  cleanupHomePhone=openHomePhoneDialog({root:app,initial:state,lang:locale(),scoped:Boolean(stockScope),
   catalog:()=>({models:phoneModels,status:stockCatalogStatus,selection:stockSelection}),refresh:refreshStockChoices,
-  onConfirm:choice=>{Object.assign(state,choice);selectSupplierTemplate(state.model,state.phoneTemplateId);colorNotice=false;reviewPass=null;save();if(entry==='photo')openPhotoPicker();else go('choose?source=photo&studio=1');}});
+  onConfirm:choice=>{phoneSettingsOpen=false;Object.assign(state,choice);selectSupplierTemplate(state.model,state.phoneTemplateId);colorNotice=false;reviewPass=null;save();if(entry==='photo')openPhotoPicker();else go('choose?source=photo&studio=1');}});
 }
 function openPhotoPicker(){
  // Run inside the click gesture, before any await, so mobile browsers allow it.
@@ -509,7 +514,7 @@ app.addEventListener('drop',async event=>{
 });
 function choose() {
  const d=currentDesign(state.designId),own=state.source==='photo',hasPhoto=Boolean(state.photo);
- return `${designSteps(state.model?1:0,locale())}<section class="flow wrap editor-flow v35-editor">${stationContext()}<div class="v35-editor-heading"><div><p class="v35-kicker">A LITTLE MORE YOU.</p><h1>${locale()==='zh-CN'?'让灵感，成为你的设计。':'Make it yours.'}</h1></div><a class="text-button" href="#my-designs">${locale()==='zh-CN'?'本机保存的设计 →':'Saved on this browser →'}</a></div>${phonePicker()}<div id="case-style-panel">${caseStylePicker(stockSelection(state.model),state.caseMaterial,{lang:locale(),scoped:Boolean(stockScope)})}</div><div id="phone-color-picker">${colorPicker(stockSelection(state.model,state.caseMaterial)?.colors||[],state.phoneColor,locale(),colorNotice)}</div>
+ return `${designSteps(state.model?1:0,locale())}<section class="flow wrap editor-flow v35-editor">${stationContext()}<div class="v35-editor-heading"><div><p class="v35-kicker">A LITTLE MORE YOU.</p><h1>${locale()==='zh-CN'?'让灵感，成为你的设计。':'Make it yours.'}</h1></div><a class="text-button" href="#my-designs">${locale()==='zh-CN'?'本机保存的设计 →':'Saved on this browser →'}</a></div>${phonePicker()}
  <div class="choose-layout">
   <div class="source-switch editor-sources" role="group" aria-label="Design source"><button type="button" data-source="collection" aria-pressed="${!own}" ${photoBusy?'disabled':''}>The collection</button><button type="button" data-source="photo" aria-pressed="${own}" aria-busy="${photoBusy}" ${photoBusy?'disabled':''}>${photoBusy?'<i class="studio-spinner"></i> Reading your photo…':icon('upload',15)+' Your photo'}</button></div>
   <div class="large-preview" ${own?'data-photo-drop':''} aria-busy="${photoBusy}" style="--card:${own?'#eeece7':d.color}">
@@ -704,6 +709,7 @@ function render(preserveScroll=false) {
   cleanupShell=mountShell(app,{lang:locale(),onLanguage:value=>{const select=document.querySelector('#language');select.value=value;select.dispatchEvent(new Event('change',{bubbles:true}));document.querySelector('[data-shell-menu]')?.focus({preventScroll:true});}});
   document.querySelector('#language').disabled=aiBusy||photoBusy||passBusy;
   document.querySelectorAll('[data-editor-panel]').forEach(bindEditorPanel);
+  document.querySelector('.phone-settings')?.addEventListener('toggle',event=>{if(!event.target.isConnected)return;phoneSettingsOpen=event.target.open;event.target.querySelector('.model-summary-action').textContent=locale()==='zh-CN'?(phoneSettingsOpen?'收起':'更改'):(phoneSettingsOpen?'Done':'Change');});
   document.querySelector('.canvas-editor')?.addEventListener('cancel',event=>{event.preventDefault();closeCanvasEditor();});
   document.querySelector('.look-browser')?.addEventListener('cancel',event=>{event.preventDefault();closeAIStudio();});
   observeCanvasPreview();
@@ -944,8 +950,8 @@ app.addEventListener('click',async event=>{
    else target.rotation=rotationFromPointer({rotation:target.rotation||0,startAngle:0,angle:Math.PI/12});
    save();updatePreview();return;
   }
-  if(el.dataset.caseMaterial){const choice=stockSelection(state.model,el.dataset.caseMaterial);if(!choice)return;state.caseMaterial=choice.caseMaterial;state.phoneTemplateId=choice.templateId;syncDraftColor();selectSupplierTemplate(state.model,choice.templateId);save();render(true);return;}
-  if(el.dataset.phoneColor){const color=stockSelection(state.model,state.caseMaterial)?.colors?.find(c=>c.code===el.dataset.phoneColor);if(!color)return;state.phoneColor=structuredClone(color);colorNotice=false;reviewPass=null;save();updatePreview();const colors=document.querySelector('#phone-color-picker');colors.innerHTML=colorPicker(stockSelection(state.model,state.caseMaterial).colors,state.phoneColor,locale());colors.querySelector(`[data-phone-color="${color.code}"]`)?.focus();return;}
+  if(el.dataset.caseMaterial){const choice=stockSelection(state.model,el.dataset.caseMaterial);if(!choice)return;state.caseMaterial=choice.caseMaterial;state.phoneTemplateId=choice.templateId;syncDraftColor();colorNotice=false;reviewPass=null;selectSupplierTemplate(state.model,choice.templateId);phoneSettingsOpen=Boolean(choice.colors?.length);save();render(true);if(!phoneSettingsOpen)document.querySelector('.phone-settings-summary')?.focus({preventScroll:true});return;}
+  if(el.dataset.phoneColor){const color=stockSelection(state.model,state.caseMaterial)?.colors?.find(c=>c.code===el.dataset.phoneColor);if(!color)return;state.phoneColor=structuredClone(color);colorNotice=false;reviewPass=null;save();phoneSettingsOpen=false;render(true);document.querySelector('.phone-settings-summary')?.focus({preventScroll:true});return;}
   if(el.dataset.quickFont){applyTextStyle('font',el.dataset.quickFont);return;}
   if(el.dataset.quickColor){applyTextStyle('color',el.dataset.quickColor);return;}
   if(el.dataset.addGraphic){
