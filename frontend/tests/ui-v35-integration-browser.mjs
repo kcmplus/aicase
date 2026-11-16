@@ -134,6 +134,7 @@ try{
   await studio.locator('[data-ai-action="upload"]').click();
   await (await replacement).setFiles({name:'replacement.png',mimeType:'image/png',buffer:Buffer.from(photoBytes,'base64')});
   await page.locator('.look-browser[open] .look-upload img').waitFor();
+  await page.locator('.large-preview[aria-busy="false"]').waitFor({state:'attached'});
   await page.keyboard.press('Escape');
   await page.goto(origin+'/#choose?design=bloom');
   await page.locator('[data-action="choose-phone"]').click();
@@ -249,6 +250,57 @@ try{
   assert.equal(savedAI.id,aiFixture.id);assert.equal(savedAI.photo,aiFixture.photo);assert.equal(savedAI.styleId,'anime');assert.equal(savedAI.model,aiFixture.model);
   const selectBox=await page.locator('#ai-phone-model').boundingBox();assert(selectBox.width>150&&selectBox.x>=0&&selectBox.x+selectBox.width<=width,'Model picker fits the viewport');
   await page.screenshot({path:`test-results/v35-integration/${width}-ai-model.png`,fullPage:true});
+  // Local synthetic job states exercise the real UI without submitting a render.
+  const showRender=async status=>{
+   await page.goto(origin+'/__ai_fixture');
+   await page.evaluate(async({savedAI,status})=>{
+    const {readDesign,writeDesign}=await import('/simple-storage.js');
+    const key='v35:guest:ai-membership-v1',account=await readDesign(key);
+    const canvas=document.createElement('canvas');canvas.width=240;canvas.height=320;
+    const ctx=canvas.getContext('2d'),gradient=ctx.createLinearGradient(0,0,240,320);
+    gradient.addColorStop(0,'#a234fd');gradient.addColorStop(1,'#65c6c5');ctx.fillStyle=gradient;ctx.fillRect(0,0,240,320);
+    ctx.fillStyle='white';ctx.font='20px sans-serif';ctx.fillText('Synthetic AI result',25,160);
+    const job={...savedAI,status,payment:'credit_reserved',paidAt:Date.now(),startedAt:Date.now(),resultPhoto:status==='ready'?canvas.toDataURL():null};
+    await writeDesign(key,{...account,jobs:{...account.jobs,[job.id]:job}});
+    const editor=JSON.parse(localStorage.getItem('v35:guest:editor'));
+    localStorage.setItem('v35:guest:editor',JSON.stringify({...editor,aiJobId:job.id}));
+   },{savedAI,status});
+   await page.goto(origin+'/#ai');await page.locator('.studio-render-dialog[open]').waitFor();
+  };
+  await showRender('generating');
+  let resultSheet=page.locator('.studio-render-dialog');
+  assert.match(await resultSheet.innerText(),/Creating your new look/);
+  assert.equal(await resultSheet.locator('.studio-render-image img').getAttribute('src'),savedAI.photo);
+  assert(Number(await resultSheet.locator('[data-ai-progress]').getAttribute('aria-valuenow'))<100);
+  assert.equal(await resultSheet.locator('[data-ai-action="apply"], [data-ai-action="cancel"]').count(),0);
+  await page.screenshot({path:`test-results/v35-integration/${width}-ai-generating.png`});
+  await page.keyboard.press('Escape');await page.waitForURL('**/#choose');
+  const stillRunning=await page.evaluate(async id=>{const {readDesign}=await import('/simple-storage.js');return (await readDesign('v35:guest:ai-membership-v1')).jobs[id].status;},savedAI.id);
+  assert.equal(stillRunning,'generating','Closing the sheet never cancels the job');
+  await showRender('ready');
+  resultSheet=page.locator('.studio-render-dialog');
+  assert.match(await resultSheet.innerText(),/Your AI creation/);
+  assert.notEqual(await resultSheet.locator('.studio-render-image img').getAttribute('src'),savedAI.photo);
+  const resultGeometry=await resultSheet.evaluate(el=>({dialog:el.getBoundingClientRect().toJSON(),image:el.querySelector('.studio-render-image').getBoundingClientRect().toJSON(),fit:getComputedStyle(el.querySelector('.studio-render-image img')).objectFit,overflow:el.scrollWidth>el.clientWidth}));
+  assert.equal(resultGeometry.fit,'contain');assert.equal(resultGeometry.overflow,false);
+  assert(resultGeometry.dialog.left>=0&&resultGeometry.dialog.right<=width&&resultGeometry.dialog.bottom<=height);
+  assert(resultGeometry.image.height>200&&resultGeometry.image.width>200);
+  assert.equal(await resultSheet.locator('[data-ai-progress]').count(),0);
+  await page.screenshot({path:`test-results/v35-integration/${width}-ai-result.png`});
+  await resultSheet.locator('.studio-render-image').click();
+  await page.locator('.studio-photo-dialog[open]').waitFor();
+  assert.equal(await page.locator('[data-ai-photo-pane="after"]').isVisible(),true);
+  await page.keyboard.press('Escape');assert.equal(await page.locator('.studio-photo-dialog[open]').count(),0);
+  assert.equal(await page.locator('.studio-render-dialog[open]').count(),1);
+  await resultSheet.locator('.studio-render-close').click();await page.waitForURL('**/#choose');
+  await page.goto(origin+'/#ai');await page.locator('.studio-render-dialog[open]').waitFor();
+  // Only enable the client flag. No remote generation endpoints are permitted.
+  await page.evaluate(async()=>{const {applyCatalog}=await import('/runtime-catalog.js');applyCatalog({...await (await fetch('/api/v1/catalog/')).json(),ai_generation_connected:true});});
+  await page.locator('.studio-render-dialog [data-ai-action="retry"]').click();
+  await page.waitForURL('**/#account');
+  const repeated=await page.evaluate(async()=>{const {readDesign}=await import('/simple-storage.js');const editor=JSON.parse(localStorage.getItem('v35:guest:editor'));return (await readDesign('v35:guest:ai-membership-v1')).jobs[editor.aiJobId];});
+  assert.notEqual(repeated.id,savedAI.id);assert.equal(repeated.status,'awaiting_confirmation');
+  assert.equal(repeated.photo,savedAI.photo);assert.equal(repeated.styleId,savedAI.styleId);
   assert.deepEqual(errors,[],'No browser exceptions');assert.deepEqual(writes,[],'No external requests or financial/hardware writes');
   console.log('PASS merged editor/catalog/colors/local save/checkout stations/order detail/scanned stock/AI model change',width,height);
   await context.close();

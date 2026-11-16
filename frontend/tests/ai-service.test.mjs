@@ -48,7 +48,7 @@ test('result screen shows the actual input and actual generated image',()=>{
  const j=job();const r=response(j);const ready={...mergeLiveRender(j,{...r,status:'ready',result:`/api/v1/store/ai-renders/${r.id}/image/`}),resultPhoto:'data:image/jpeg;base64,BAUG'};
  const html=aiPage(ready,freshMembership());
  assert.ok(html.includes(photo));assert.ok(html.includes(ready.resultPhoto));assert.ok(!html.includes(j.sample.result));
- assert.match(html,/YOUR AI RESULT/);assert.match(html,/Use this look on my case/);assert.doesNotMatch(html,/Live photo generation is not connected|Use this sample instead|Simulate render failure/);
+ assert.match(html,/Your AI creation/);assert.match(html,/Use AI image/);assert.match(html,/Generate again/);assert.doesNotMatch(html,/Live photo generation is not connected|Use this sample instead|Simulate render failure/);
  const failed=aiPage({...j,status:'failed',errorCode:'credit_balance_exhausted',errorMessage:'private provider diagnostics'},freshMembership(),false,{error:'<script>bad</script>'});assert.match(failed,/&lt;script&gt;/);assert.doesNotMatch(failed,/private provider diagnostics/);
 });
 test('legacy demo records have a path to generate from their original upload',()=>{
@@ -79,7 +79,7 @@ test('active previews never substitute a sample or offer cancellation after gene
   assert.doesNotMatch(html,/STYLE REFERENCE|data-ai-action="apply"|About \d+s|aria-valuenow="100"/);
   assert.match(html,/Estimated progress/);assert.match(html,/role="progressbar"/);
   assert.match(html,/Progress is estimated; completion is confirmed when your image arrives/);
-  assert.match(html,/A little magic in progress/);assert.match(html,/Usually takes around 10–20 seconds/);
+  assert.match(html,/Creating your new look/);assert.match(html,/Usually takes around 10–20 seconds/);
  }
 });
 test('estimated progress is monotonic, survives reopening, and never completes a running job',()=>{
@@ -107,7 +107,7 @@ test('100 percent requires a usable result and unsuccessful jobs do not show a m
   assert.doesNotMatch(aiPage(j,freshMembership()),/role="progressbar"/);
  }
  assert.equal(generationProgressState({...job(),mode:'demo',status:'generating'}),null);
- assert.match(aiPage({...ready,resultPhoto:photo},freshMembership()),/aria-valuenow="100"/);
+ assert.doesNotMatch(aiPage({...ready,resultPhoto:photo},freshMembership()),/role="progressbar"/);
 });
 test('missing or future timestamps never produce invalid progress or a countdown',()=>{
  for(const startedAt of [undefined,null,Infinity,NaN,999999999]){
@@ -117,14 +117,19 @@ test('missing or future timestamps never produce invalid progress or a countdown
   assert.doesNotMatch(progress.message,/\d+ seconds? left/);
  }
 });
-test('ready previews retain slider endpoints and use each supplied phone mask',()=>{
- for(const [model,template] of [['iPhone 17','iphone-17-a-v1'],['iPhone 16e','iphone-16e-v1']]){
-  const j={...job(),model,status:'ready',resultPhoto:photo,payment:'credit_reserved'};
-  const html=aiPage(j,freshMembership(),false,{mode:'compare',compare:0});
-  assert.match(html,/--reveal:0%/);assert.match(html,/data-ai-view="compare" aria-pressed="true"/);
-  assert.ok(html.includes(`data-phone-template="${template}"`));
-  assert.match(html,/Original photo visibility/);assert.match(html,/data-ai-pane="case" hidden/);
- }
+test('prototype result sheet uses the actual image and keeps repeat generation separate from apply',()=>{
+ const j={...job(),status:'ready',resultPhoto:photo,payment:'credit_reserved'};
+ const html=aiPage(j,freshMembership());
+ assert.match(html,/<dialog class="studio-render-dialog"/);
+ assert.match(html,/data-ai-photo="after"/);
+ assert.match(html,/data-ai-action="retry"/);assert.match(html,/data-ai-action="apply"/);
+ assert.doesNotMatch(html,/data-ai-view|studio-case-pane|STYLE REFERENCE/);
+ const busy=aiPage(j,freshMembership(),true,{busyAction:'apply',error:'<bad>'});
+ assert.match(busy,/data-ai-action="retry" disabled/);assert.match(busy,/data-ai-action="apply" disabled/);
+ assert.match(busy,/&lt;bad&gt;/);assert.match(busy,/Applying your look/);
+ const loading=aiPage({...j,resultPhoto:null},freshMembership());
+ assert.match(loading,/data-ai-photo="original"/);assert.match(loading,/Reload my image/);
+ assert.doesNotMatch(loading,/data-ai-action="apply"|data-ai-action="retry"/);
 });
 
 test('account GET recovers from HTML 503 and stops after three retries',async()=>{

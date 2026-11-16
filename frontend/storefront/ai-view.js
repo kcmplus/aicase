@@ -77,6 +77,20 @@ function generationProgress(job){
   <p id="ai-progress-note" class="studio-meter-note">${done?'Preview it before you print.':`<span>${generationEstimate}</span> <span>Progress is estimated; completion is confirmed when your image arrives.</span>`}</p>
  </section>`;
 }
+function renderResultDialog(job,saved,busy,ui){
+ const ready=job.status==='ready',hasResult=ready&&Boolean(job.resultPhoto),expired=ready&&job.imageExpired&&!hasResult;
+ const title=expired?'Your saved image has expired.':hasResult?'Your AI creation':ready?'Loading your image…':'Creating your new look';
+ const disabled=busy?'disabled':'';
+ return `<section class="studio-flow studio-render-flow" data-render-status="${esc(job.status)}"><dialog class="studio-render-dialog" aria-labelledby="studio-render-title">
+  <header class="studio-render-header"><h2 id="studio-render-title" tabindex="-1" autofocus>AI Studio</h2><a href="#choose" class="studio-render-close" aria-label="${esc(t('Close AI Studio'))}">${icon('close',22)}</a></header>
+  <div class="studio-render-body"><h1>${title}</h1><p class="studio-render-style">${esc(localized(saved))} / ${esc(localized(saved,'styleName'))}</p>
+   ${expired?'<div class="studio-render-expired" role="status"><h2>Image retention period ended</h2><p>The saved image has expired. You can create a new look from your original photo.</p></div>':`<button type="button" class="studio-render-image" data-ai-photo="${hasResult?'after':'original'}" aria-label="${esc(t('Enlarge photo'))}">${imageTag(hasResult?job.resultPhoto:job.photo,{alt:hasResult?'Your AI image':'Your original photo',sizes:'(max-width: 760px) 100vw, 650px',loading:'eager'})}</button>`}
+   ${!hasResult&&!expired?generationProgress(job):''}
+   ${hasResult?`<div class="studio-render-actions"><button type="button" class="button studio-render-again" data-ai-action="retry" ${disabled}>Generate again</button><button type="button" class="button studio-render-apply" data-ai-action="apply" ${disabled}>${busy&&ui.busyAction==='apply'?'Applying your look…':'Use AI image'} ${icon('arrow',18)}</button></div>`:expired?`<button type="button" class="button studio-render-apply" data-ai-action="retry" ${disabled}>Create a new look</button>`:job.status==='queued'?`<button type="button" class="text-button studio-render-cancel" data-ai-action="cancel" ${disabled}>Cancel & return generation</button>`:ready?`<button type="button" class="text-button" data-ai-action="refresh" ${disabled}>Reload my image</button>`:''}
+   ${ui.error?`<p class="studio-inline-error" role="alert">${esc(ui.error)}</p>`:''}
+  </div></dialog>${photoDialog(job,saved)}</section>`;
+}
+
 export function aiPhonePicker(job,busy,models=[],status='ready'){
  const zh=locale()==='zh-CN';
  if(job.status!=='awaiting_confirmation'||job.remoteId||job.submissionAttempted)return '';
@@ -91,6 +105,7 @@ export function aiPage(job,account,busy=false,ui={}){
  const pending=job.status==='awaiting_confirmation',active=['queued','generating'].includes(job.status),ready=job.status==='ready',failed=job.status==='failed',cancelled=job.status==='cancelled';
  const [failureTitle,failureDescription]=failureCopy(job),buttonDisabled=busy?'disabled':'';
  const expired=ready&&job.imageExpired&&!job.resultPhoto;
+ if(active||ready)return renderResultDialog(job,saved,busy,ui);
  const title=expired?'Your saved image has expired.':pending?'A new look. Still you.':active?'Something yours is taking shape.':ready?'Oh, that’s so you.':cancelled?'Your original. Your call.':failureTitle;
  const subtitle=expired?'Your original photo is still here. Create a new look whenever you’re ready.':pending?'Your favorite photo, reimagined for your everyday case.':active?'Good things take a moment. We’ll keep your place.':ready?'A little imagination. A case that’s all your own.':cancelled?'Your photo is still here. Pick up whenever you like.':failureDescription;
  const credit=job.payment==='credit_expired'?'Credit period ended':job.payment==='credit_restored'?'Generation returned':active?'1 generation reserved':ready?'1 generation used':cancelled?'No generation used':c.trial?'Free trial included':'1 generation';

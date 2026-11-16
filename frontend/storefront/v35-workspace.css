@@ -60,3 +60,49 @@ body[data-v35-route=review] .v35-footer{display:none}
  .v35-review-actions{gap:8px;padding:16px 16px calc(16px + env(safe-area-inset-bottom))}.v35-review-actions .button{font-size:14px;min-height:44px;padding:10px 8px}
 }
 @media(max-width:360px){.v35-design-steps li{font-size:12px}.v35-design-steps li>a,.v35-design-steps li>span{gap:5px}.v35-review-actions{padding-inline:10px;gap:6px}.v35-review-actions .button{font-size:12px;padding-inline:6px}}
+
+/* Prototype AI progress/result sheet; its image is never the style reference. */
+body:has(.studio-render-dialog[open]){overflow:hidden}
+.studio-render-flow{min-height:0;padding:0}
+.studio-render-dialog,.studio-render-dialog *{box-sizing:border-box}
+.studio-render-dialog{width:min(760px,calc(100% - 40px));height:min(950px,92dvh);max-width:none;max-height:none;margin:auto;padding:0;overflow:hidden;border:1px solid #dfc9ef;border-radius:24px;background:#faf6ff;color:#100519;box-shadow:0 20px 70px #36115444}
+.studio-render-dialog[open]{display:flex;flex-direction:column}
+.studio-render-dialog::backdrop{background:#19062466}
+.studio-render-header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex:none;padding:16px 20px;border-bottom:1px solid white;background:linear-gradient(120deg,#fff,#f7efff)}
+.studio-render-header h2{margin:0;font-size:20px;line-height:1.4;font-weight:600}
+.studio-render-header h2:focus{outline:none}
+.studio-render-close{display:grid;place-items:center;width:40px;height:40px;color:#100519;text-decoration:none}
+.studio-render-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:20px;background:linear-gradient(135deg,#faf6ff99,#eedafb99),url('./assets/v35/backgrounds/bg-ss1-h1-.webp') center/cover}
+.studio-render-body>h1{font-family:inherit;font-size:25px;font-weight:600;line-height:1.3;letter-spacing:0;margin:0 0 16px;color:#100519}
+.studio-render-style{font-size:17px;line-height:1.5;margin:0 0 24px;color:#100519}
+.studio-render-image{display:block;width:100%;height:min(52dvh,540px);margin:0;padding:0;overflow:hidden;border:1px solid white;border-radius:14px;background:#edddf980;cursor:zoom-in}
+.studio-render-image img{display:block;width:100%;height:100%;object-fit:contain;object-position:center}
+.studio-render-actions{display:grid;grid-template-columns:1fr 1.25fr;gap:10px;border-top:1px solid white;margin-top:22px;padding-top:12px}
+.studio-render-dialog .button{min-width:0;min-height:50px;gap:7px;padding:12px;font-size:16px;font-weight:400;border:2px solid white;border-radius:8px;color:white;line-height:1.4;cursor:pointer}
+.studio-render-again{background:#100519}.studio-render-apply{background:#a234fd;box-shadow:0 3px 0 #36115412}
+.studio-render-dialog button:disabled{opacity:.5;cursor:wait}
+.studio-render-dialog :is(button,a):focus-visible{outline:3px solid #a234fd;outline-offset:2px}
+body[data-v35-route=ai] .studio-render-dialog .studio-generation-meter{box-shadow:none;padding:0;margin:24px 0 0;border:0;border-radius:0;background:none;color:#100519}
+.studio-render-dialog .studio-meter-heading{margin:0 0 12px;gap:10px}
+.studio-render-dialog .studio-meter-heading h2{font-size:16px;font-weight:400;margin:0;color:#100519}
+.studio-render-dialog .studio-meter-number{font-size:18px;font-weight:600;letter-spacing:0;color:#a234fd}
+.studio-render-dialog .studio-meter-track{height:8px;background:#e8d4f3}
+.studio-render-dialog .studio-meter-track>span{background:#a234fd}
+.studio-render-dialog .studio-meter-steps,.studio-render-dialog .studio-meter-label{display:none}
+.studio-render-dialog .studio-meter-message{font-size:12px;line-height:1.5;min-height:0;margin:12px 0 5px;color:#786185}
+.studio-render-dialog .studio-meter-note{font-size:11px;line-height:1.5;color:#786185}
+.studio-render-cancel{margin-top:12px;color:#7021b0}
+.studio-render-expired{padding:24px;border:1px solid white;border-radius:14px;line-height:1.6;margin-bottom:24px}
+.studio-render-flow .studio-photo-dialog{color:#100519;border-color:#dfc9ef;background:#faf6ff}
+.studio-render-flow .studio-dialog-tabs{background:#edddf9}.studio-render-flow .studio-dialog-tabs button{color:#100519}
+.studio-render-flow .studio-dialog-tabs button[aria-pressed=true]{background:#a234fd;color:white}
+.studio-render-flow .studio-photo-dialog figure{background:#edddf9}
+@media(max-width:760px){
+ .studio-render-dialog{width:100%;height:94dvh;inset:0;margin:auto 0 0;border-radius:22px 22px 0 0;border-width:1px 0 0}
+ .studio-render-header{padding:12px 20px}.studio-render-header h2{font-size:18px}
+ .studio-render-body{padding:18px 20px calc(20px + env(safe-area-inset-bottom))}
+ .studio-render-body>h1{font-size:21px;margin-bottom:14px}.studio-render-style{font-size:15px;margin-bottom:22px}
+ .studio-render-image{height:auto;aspect-ratio:.86}.studio-render-image img{height:100%;position:absolute;inset:0}.studio-render-image{position:relative}
+ .studio-render-dialog .button{font-size:14px;padding:10px;min-height:48px}
+}
+@media(max-width:360px){.studio-render-body{padding-inline:16px}.studio-render-header{padding-inline:16px}.studio-render-body>h1{font-size:20px}.studio-render-dialog .button{font-size:12px}}

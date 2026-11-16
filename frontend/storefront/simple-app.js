@@ -729,6 +729,10 @@ document.addEventListener('pointerdown',event=>{
  if(!event.target.closest('.artwork-canvas [data-layer-id],.artwork-canvas [data-photo-layer],.artwork-gizmo,.text-quick-tools,.artwork-selection-actions,.canvas-toolbar,.canvas-editor-header'))deselectArtwork();
 });
 document.addEventListener('keydown',event=>{
+ if(event.key==='Escape'&&document.querySelector('.studio-render-dialog[open]')){
+  if(document.querySelector('.studio-photo-dialog[open]'))return;
+  event.preventDefault();go('choose');return;
+ }
  if(event.key==='Escape'&&effectPanelOpen){event.preventDefault();if(document.querySelector('.look-browser.is-zoomed'))zoomAIStudio();else closeAIStudio();return;}
  if(['Delete','Backspace'].includes(event.key)&&!event.isComposing&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&!event.target.closest('input,textarea,select,[contenteditable],[role="textbox"]')){
   if(deleteSelectedArtwork())event.preventDefault();
