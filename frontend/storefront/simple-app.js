@@ -1,3 +1,4 @@
+import {createEditorHistory} from './editor-history.js';
 import {openPhoneModelDialog} from './phone-model-dialog.js';
 import {openHomePhoneDialog} from './home-phone-dialog.js';
 import {worksPage,workDetailPage,tutorialPage,aboutPage,locationsPage,membershipInfoPage} from './v35-pages.js';
@@ -164,6 +165,8 @@ if(aiJob)aiJob=membership.jobs[aiJob.id];
 if(aiJob?.status==='awaiting_confirmation')customerUI.next='ai';
 try{if(location.hash.slice(1).split('?')[0]!=='checkout')await syncAIAccount();if(aiJob?.mode==='live')await rememberLiveJob(await refreshLiveRender(aiJob));}catch{/* A saved job can be resumed when the service returns. */}
 let comparing=false,photoBusy=false,passBusy=false;
+const editorHistory=createEditorHistory();
+let editorTool='base',editorToolsOpen=true;
 let phoneSettingsOpen=false;
 let effectPanelOpen=false,cropPanelOpen=false,selectedArtwork=null,libraryExpanded=false;
 const editorPanels={collection:false,graphics:false};
@@ -273,9 +276,9 @@ function deleteSelectedArtwork(){
 function resetPresetLayer(id){const edits=artworkLayout().artworkEdits,edit=edits[id],base=designFor(state.designId).layers.find(l=>l.id===id);if(edit?.deleted)return;if(edit?.text!==undefined&&base)edits[id]={x:base.x,y:base.y,scale:100,rotation:base.rotation,text:edit.text,font:edit.font,color:edit.color};else delete edits[id];}
 function revealArtwork(){openCanvasEditor();}
 function setArtwork(key,value){artworkTarget()[key]=value;save();updatePreview();}
-function creativeLibrary(){
+function creativeLibrary(tabbed=false){
  const disabled=state.source==='photo'&&!state.photo&&!state.keepCollection,items=[...stickers.slice(12),...stickers.slice(0,12)];
- return `<details class="editor-panel" data-editor-panel="graphics" ${editorPanels.graphics?'open':''}><summary><span class="editor-tool-icon" aria-hidden="true">${icon('image',18)}</span><span>Graphics & text</span><span class="editor-chevron" aria-hidden="true">⌄</span></summary><div class="editor-panel-body"><section class="graphic-library"><div class="library-title"><h2>Graphic library</h2><span>24 graphics</span></div><p>Little details. A little more you.</p><div class="graphic-grid">${items.slice(0,libraryExpanded?24:12).map(a=>`<button type="button" data-add-graphic="${a.id}" aria-label="Add ${esc(locale()==='zh-CN'?a.zh:a.en)}" title="${esc(locale()==='zh-CN'?a.zh:a.en)}" ${disabled?'disabled':''}>${imageTag(a.src,{alt:"",sizes:"64px"})}<span>${esc(locale()==='zh-CN'?a.zh:a.en)}</span></button>`).join('')}</div><button class="text-button library-more" data-action="toggle-library">${libraryExpanded?'Show less':'View all 24 graphics'} ${libraryExpanded?'−':'+'}</button><p class="library-credit">Original POPOMO artwork + OpenMoji · CC BY-SA 4.0</p></section>
+ return `<details class="editor-panel ${tabbed?'v35-tabbed-library':''}" ${tabbed?'':'data-editor-panel="graphics"'} ${tabbed||editorPanels.graphics?'open':''}><summary><span class="editor-tool-icon" aria-hidden="true">${icon('image',18)}</span><span>Graphics & text</span><span class="editor-chevron" aria-hidden="true">⌄</span></summary><div class="editor-panel-body"><section class="graphic-library"><div class="library-title"><h2>Graphic library</h2><span>24 graphics</span></div><p>Little details. A little more you.</p><div class="graphic-grid">${items.slice(0,libraryExpanded?24:12).map(a=>`<button type="button" data-add-graphic="${a.id}" aria-label="Add ${esc(locale()==='zh-CN'?a.zh:a.en)}" title="${esc(locale()==='zh-CN'?a.zh:a.en)}" ${disabled?'disabled':''}>${imageTag(a.src,{alt:"",sizes:"64px"})}<span>${esc(locale()==='zh-CN'?a.zh:a.en)}</span></button>`).join('')}</div><button class="text-button library-more" data-action="toggle-library">${libraryExpanded?'Show less':'View all 24 graphics'} ${libraryExpanded?'−':'+'}</button><p class="library-credit">Original POPOMO artwork + OpenMoji · CC BY-SA 4.0</p></section>
  <section class="text-editor"><h2>Your words</h2><p>Double-click text on your case to edit.<br>Choose fonts and colors right beside it.</p><button class="button text-add" data-action="text-submit" ${disabled?'disabled':''}>Add text ${icon('spark',16)}</button>${disabled?'<p class="field-note">Upload a photo to start adding graphics and text.</p>':''}</section></div></details>`;
 }
 
@@ -312,7 +315,7 @@ function highlightArtwork(){
  const photo=canvas.querySelector('[data-photo-layer]');if(photo){photo.setAttribute('role','button');photo.tabIndex=0;photo.setAttribute('aria-label',t('Move your photo'));photo.setAttribute('aria-pressed',String(selectedArtwork==='photo'));}
  syncTextTools(canvas);
  syncCanvasControls();
- if(!canvasExpanded){for(const layer of canvas.querySelectorAll('[data-layer-id],[data-photo-layer]'))layer.tabIndex=-1;return;}
+ if(!canvasExpanded&&!canvas.closest('.v35-design-editor')){for(const layer of canvas.querySelectorAll('[data-layer-id],[data-photo-layer]'))layer.tabIndex=-1;return;}
  canvas.setAttribute('aria-description',t(inlineTextId?'Type right here · Up to 80 characters · Tap outside to finish':selectedArtwork?'Drag to move · Corners to resize · ↻ to rotate · Tap outside to finish':'Tap artwork to adjust · Double-click text to edit'));
  if(!selectedArtwork)return;
  const all=selectedArtwork==='all',isPhotoLayer=selectedArtwork==='photo',model=makePersonalDesign(layoutSelection(state)),layer=model.layers.find(l=>l.id===selectedArtwork),element=isPhotoLayer?photo:all?null:canvas.querySelector(`[data-layer-id="${selectedArtwork}"]`),layout=artworkLayout(),placement=isPhotoLayer?photoTarget():null;
@@ -354,7 +357,7 @@ function fitCanvasEditor(){
  const extra=Math.max(0,canvas.offsetHeight-phone.offsetHeight);
  const width=Math.max(1,Math.min(preview.clientWidth-number(style.paddingLeft)-number(style.paddingRight),
   (preview.clientHeight-number(style.paddingTop)-number(style.paddingBottom)-reserved-extra-8)*ratio,
-  canvasExpanded?430:window.innerWidth<=760?180:225));
+  canvasExpanded?430:preview.closest('.v35-design-editor')?430:window.innerWidth<=760?180:225));
  canvas.style.width=width+'px';highlightArtwork();
 }
 function observeCanvasPreview(){
@@ -385,7 +388,7 @@ const arrow = () => icon('arrow',18);
 const currentDesign = id => designs.find(d=>d.id===id) || designs[0];
 const casePreview = (id,model=phoneModels[0]) => phone(designFor(id),model,'',{loading:'lazy',sizes:'(max-width: 700px) 100px, 180px'}).replace(/aria-label="[^"]*"/,`aria-label="${esc(currentDesign(id).name+' on '+model)}"`);
 function save() {
-  try {workspace.check();const ref=p=>p?.version===2?{code:p.code}:p;localStorage.setItem(KEY,JSON.stringify({...state,photo:undefined,pass:ref(state.pass),job:state.job?{...state.job,pass:ref(state.job.pass)}:null}));storageWarning=false;}
+  try {workspace.check();editorHistory.record(state,workspace.owner);syncEditorHistoryButtons();const ref=p=>p?.version===2?{code:p.code}:p;localStorage.setItem(KEY,JSON.stringify({...state,photo:undefined,pass:ref(state.pass),job:state.job?{...state.job,pass:ref(state.job.pass)}:null}));storageWarning=false;}
   catch {storageWarning=true;notify('Your design could not be saved on this browser. Please reload and try again.');}
 }
 function notify(message) {
@@ -407,9 +410,9 @@ function home() {
 }
 function phonePicker(){
  const choice=stockSelection(state.model,state.caseMaterial),lang=locale(),zh=lang==='zh-CN';
- const expanded=phoneSettingsOpen||!choice||colorNotice;
+ const expanded=phoneSettingsOpen||colorNotice;
  const summary=[caseMaterialLabel(state.caseMaterial,lang),phoneColorName(state.phoneColor,lang)].filter(Boolean).join(' · ');
- return `<details class="model-first phone-settings" ${expanded?'open':''}><summary class="model-summary-button phone-settings-summary"><span class="model-summary-label">${state.model?'Your phone':'First, choose your phone'}</span><span class="phone-settings-value"><strong class="model-summary-value">${esc(state.model||'')}</strong><small>${esc(summary)}</small></span><span class="model-summary-action">${expanded?(zh?'收起':'Done'):(zh?'更改':'Change')}</span><span class="model-summary-chevron" aria-hidden="true">⌄</span></summary><div class="phone-settings-body"><button type="button" class="text-button" data-action="choose-phone" aria-haspopup="dialog">${zh?'更改手机机型':'Change phone model'} →</button><p id="model-preview-note" class="field-note" ${!state.model||state.phoneTemplateId?'hidden':''}>Illustrative preview. The exact case template will be confirmed before printing.</p><div id="case-style-panel">${caseStylePicker(stockSelection(state.model),state.caseMaterial,{lang,scoped:Boolean(stockScope)})}</div><div id="phone-color-picker">${colorPicker(choice?.colors||[],state.phoneColor,lang,colorNotice)}</div></div></details>`;
+ return `<details class="model-first phone-settings" ${expanded?'open':''}><summary class="model-summary-button phone-settings-summary" aria-label="${esc([state.model||(zh?'选择手机机型':'Choose phone'),summary].filter(Boolean).join(' · '))}"><span class="model-summary-label">${state.model?'Your phone':'First, choose your phone'}</span><span class="phone-settings-value"><strong class="model-summary-value">${esc(state.model||(zh?'选择手机机型':'Choose phone'))}</strong><small>${esc(summary)}</small></span><span class="model-summary-action">${expanded?(zh?'收起':'Done'):(zh?'更改':'Change')}</span><span class="model-summary-chevron" aria-hidden="true">⌄</span></summary><div class="phone-settings-body"><button type="button" class="text-button" data-action="choose-phone" aria-haspopup="dialog">${zh?'更改手机机型':'Change phone model'} →</button><p id="model-preview-note" class="field-note" ${!state.model||state.phoneTemplateId?'hidden':''}>Illustrative preview. The exact case template will be confirmed before printing.</p><div id="case-style-panel">${caseStylePicker(stockSelection(state.model),state.caseMaterial,{lang,scoped:Boolean(stockScope)})}</div><div id="phone-color-picker">${colorPicker(choice?.colors||[],state.phoneColor,lang,colorNotice)}</div></div></details>`;
 }
 
 function openModelPicker(forAI=false){
@@ -512,23 +515,46 @@ app.addEventListener('drop',async event=>{
  const zone=event.target.closest('[data-photo-drop]');if(!zone)return;
  event.preventDefault();zone.classList.remove('is-drag-over');await receivePhoto(event.dataTransfer?.files[0]);
 });
+function syncEditorHistoryButtons(){
+ for(const [action,enabled] of [['undo-design',editorHistory.canUndo],['redo-design',editorHistory.canRedo]]){
+  const button=document.querySelector(`[data-action="${action}"]`);if(button)button.disabled=!enabled||photoBusy||passBusy||aiBusy;
+ }
+}
 function choose() {
- const d=currentDesign(state.designId),own=state.source==='photo',hasPhoto=Boolean(state.photo);
- return `${designSteps(state.model?1:0,locale())}<section class="flow wrap editor-flow v35-editor">${stationContext()}<div class="v35-editor-heading"><div><p class="v35-kicker">A LITTLE MORE YOU.</p><h1>${locale()==='zh-CN'?'让灵感，成为你的设计。':'Make it yours.'}</h1></div><a class="text-button" href="#my-designs">${locale()==='zh-CN'?'本机保存的设计 →':'Saved on this browser →'}</a></div>${phonePicker()}
+ const d=currentDesign(state.designId),own=state.source==='photo',hasPhoto=Boolean(state.photo),empty=own&&!hasPhoto&&!state.keepCollection,zh=locale()==='zh-CN';
+ editorHistory.record(state,workspace.owner);
+ return `<section class="flow wrap editor-flow v35-editor v35-design-editor">${stationContext()}
+ <header class="v35-design-top"><h1>${zh?'设计':'Design'}</h1>${phonePicker()}</header>
  <div class="choose-layout">
-  <div class="source-switch editor-sources" role="group" aria-label="Design source"><button type="button" data-source="collection" aria-pressed="${!own}" ${photoBusy?'disabled':''}>The collection</button><button type="button" data-source="photo" aria-pressed="${own}" aria-busy="${photoBusy}" ${photoBusy?'disabled':''}>${photoBusy?'<i class="studio-spinner"></i> Reading your photo…':icon('upload',15)+' Your photo'}</button></div>
-  <div class="large-preview" ${own?'data-photo-drop':''} aria-busy="${photoBusy}" style="--card:${own?'#eeece7':d.color}">
-   ${own&&!hasPhoto&&!state.keepCollection?`<div class="empty-photo-case" aria-hidden="true">${phone({art:'solid',background:'#f1def9',phoneTemplateId:state.phoneTemplateId,phoneColor:state.phoneColor},state.model||phoneModels[0])}</div><div class="photo-placeholder photo-start"><p>${locale()==='zh-CN'?'从一张喜欢的照片开始':'Start with a photo you love'}</p><button type="button" class="button primary" data-source="photo" ${photoBusy?'disabled':''}>${icon('image',20)} ${locale()==='zh-CN'?'上传照片':'Upload photo'}</button></div>`:`<div class="large-case artwork-canvas">${personalizedPreview(state,state.model||phoneModels[0],own?'Your photo':d.name,comparing)}</div>`}
-   ${!own||hasPhoto||state.keepCollection?`<button type="button" class="canvas-open-hit" data-action="open-canvas" aria-label="Expand to edit"><span>${icon('scan',16)} Expand to edit</span></button>`:''}
+  <div class="large-preview" ${own?'data-photo-drop':''} aria-busy="${photoBusy}">
+   <div class="v35-canvas-top"><p>${zh?'移动 · 缩放 · 旋转':'Move · Scale · Rotate'}</p><div class="v35-canvas-buttons">
+    <button type="button" data-action="undo-design" aria-label="${zh?'撤销':'Undo'}" ${!editorHistory.canUndo||photoBusy?'disabled':''}>↶</button>
+    <button type="button" data-action="redo-design" aria-label="${zh?'重做':'Redo'}" ${!editorHistory.canRedo||photoBusy?'disabled':''}>↷</button>
+    <button type="button" data-action="open-canvas" aria-label="${zh?'放大编辑':'Expand to edit'}" ${empty||photoBusy?'disabled':''}>${icon('scan',20)}</button>
+   </div></div>
+   ${empty?`<div class="empty-photo-case" aria-hidden="true">${phone({art:'solid',background:'#f1def9',phoneTemplateId:state.phoneTemplateId,phoneColor:state.phoneColor},state.model||phoneModels[0])}</div><div class="photo-placeholder photo-start"><p>${zh?'从一张喜欢的照片开始':'Start with a photo you love'}</p><button type="button" class="button primary" data-source="photo" ${photoBusy?'disabled':''}>${icon('image',20)} ${zh?'上传照片':'Upload photo'}</button></div>`:`<div class="large-case artwork-canvas">${personalizedPreview(state,state.model||phoneModels[0],own?'Your photo':d.name,comparing)}</div>`}
   </div>
-  <div class="choose-details"><h1 class="sr-only">${own?'Make it personal.':d.name+'.'}</h1>
+  <div class="choose-details" data-editor-tool-panel="${editorTool}">
    <input class="file-input" type="file" id="photo-file" accept="image/jpeg,image/png,image/webp" aria-label="Upload your photo" ${photoBusy?'disabled':''}>
-   ${own?'':`<details class="editor-panel" data-editor-panel="collection" ${editorPanels.collection?'open':''}><summary><span class="editor-tool-icon" aria-hidden="true">${icon('image',18)}</span><span>Collection</span><small>${esc(d.name)}</small><span class="editor-chevron" aria-hidden="true">⌄</span></summary><div class="editor-panel-body"><fieldset class="design-choices visual-design-choices"><legend class="sr-only">Pick a design</legend>${designs.map(item=>`<button type="button" data-design="${item.id}" class="design-thumbnail ${d.id===item.id?'selected':''}" aria-label="${item.name}" aria-pressed="${d.id===item.id}" style="--swatch:${designFor(item.id).background}"><span class="design-thumbnail-case">${casePreview(item.id,state.model||phoneModels[0])}</span><span class="design-thumbnail-check" aria-hidden="true">${d.id===item.id?'✓':''}</span></button>`).join('')}</fieldset></div></details>`}
-   ${stylePanel(state,aiJob,effectPanelOpen,membership,aiUi)}${creativeLibrary()}
-   ${own&&state.ai?'<p class="effect-selection">✓ AI image applied · You can adjust the crop or replace the photo above.</p>':''}
-   <div class="editor-next"><form id="design-form"><button class="button primary full" type="submit" ${photoBusy||passBusy||own&&!hasPhoto?'disabled':''}>${passBusy?(locale()==='zh-CN'?'正在检查设计…':'Checking your design…'):(locale()==='zh-CN'?'预览确认':'Review')} ${arrow()}</button></form><p class="v35-page-note">${locale()==='zh-CN'?'下一步确认机型和设计。':'Next, check your phone model and design.'}</p></div>
+   <div id="editor-tool-content" class="v35-tool-content" ${!editorToolsOpen?'hidden':''}>
+    <div class="v35-base-tools" ${editorTool!=='base'?'hidden':''}>
+     <div class="v35-source-tools" role="group" aria-label="${zh?'设计素材':'Design sources'}">
+      <button type="button" data-source="collection" aria-pressed="${!own}" ${photoBusy?'disabled':''}>${icon('image',22)}<span>${zh?'模板':'Templates'}</span></button>
+      <button type="button" data-source="photo" aria-pressed="${own}" ${photoBusy?'disabled':''}>${icon('upload',22)}<span>${photoBusy?(zh?'读取照片中…':'Reading your photo…'):(zh?'更换照片':'Replace photo')}</span></button>
+      ${stylePanel(state,aiJob,effectPanelOpen,membership,aiUi)}
+     </div>
+     ${own?'':`<details class="editor-panel" data-editor-panel="collection" ${editorPanels.collection?'open':''}><summary><span class="editor-tool-icon" aria-hidden="true">${icon('image',18)}</span><span>Collection</span><small>${esc(d.name)}</small><span class="editor-chevron" aria-hidden="true">⌄</span></summary><div class="editor-panel-body"><fieldset class="design-choices visual-design-choices"><legend class="sr-only">Pick a design</legend>${designs.map(item=>`<button type="button" data-design="${item.id}" class="design-thumbnail ${d.id===item.id?'selected':''}" aria-label="${item.name}" aria-pressed="${d.id===item.id}" style="--swatch:${designFor(item.id).background}"><span class="design-thumbnail-case">${casePreview(item.id,state.model||phoneModels[0])}</span><span class="design-thumbnail-check" aria-hidden="true">${d.id===item.id?'✓':''}</span></button>`).join('')}</fieldset></div></details>`}
+    </div>
+    <div class="v35-artwork-tools" ${editorTool==='base'?'hidden':''}>${creativeLibrary(true)}</div>
+   </div>
+   <div class="v35-tool-tabs" role="group" aria-label="${zh?'编辑工具':'Editing tools'}">
+    ${[['base','image','Base','底图'],['stickers','spark','Stickers','贴纸'],['text','text','Text','文字']].map(([id,symbol,en,cn])=>`<button type="button" data-editor-tool="${id}" aria-pressed="${editorTool===id}" aria-controls="editor-tool-content">${id==='text'?'<span class="v35-text-symbol" aria-hidden="true">T</span>':icon(symbol,22)}<span>${zh?cn:en}</span></button>`).join('')}
+    <button type="button" data-action="toggle-editor-tools" aria-expanded="${editorToolsOpen}" aria-controls="editor-tool-content" aria-label="${zh?(editorToolsOpen?'收起工具':'展开工具'):(editorToolsOpen?'Collapse tools':'Expand tools')}">${editorToolsOpen?'⌄':'⌃'}</button>
+   </div>
   </div>
- </div>${canvasEditor()}</section>`;
+ </div>
+ <div class="editor-next v35-design-bottom"><a class="button" href="#home">← ${zh?'返回':'Back'}</a><form id="design-form"><button class="button primary full" type="submit" ${photoBusy||passBusy||own&&!hasPhoto?'disabled':''}>${passBusy?(zh?'正在检查设计…':'Checking your design…'):(zh?'预览确认':'Review')} ${arrow()}</button></form></div>
+ ${canvasEditor()}</section>`;
 }
 function privateWorkspaceNotice(){
  const zh=locale()==='zh-CN';
@@ -890,7 +916,17 @@ app.addEventListener('submit',async event=>{
   if(event.target.id==='v35-work-search'){event.preventDefault();const fields=new FormData(event.target),params=new URLSearchParams({category:String(fields.get('category')||'all'),q:String(fields.get('q')||'').slice(0,100)});go('designs?'+params);}
 });
 app.addEventListener('click',async event=>{
-  const el=event.target.closest('[data-case-material],[data-phone-color],[data-action],[data-design],[data-start-design],[data-source],[data-effect],[data-ai-action],[data-ai-look-example],[data-ai-look-step],[data-look-action],[data-look-mode],[data-ai-group],[data-ai-view],[data-artwork-item],[data-add-graphic],[data-quick-font],[data-quick-color]');if(!el||el.disabled||photoBusy||passBusy||aiBusy||sessionCheckBusy)return;
+  const el=event.target.closest('[data-editor-tool],[data-case-material],[data-phone-color],[data-action],[data-design],[data-start-design],[data-source],[data-effect],[data-ai-action],[data-ai-look-example],[data-ai-look-step],[data-look-action],[data-look-mode],[data-ai-group],[data-ai-view],[data-artwork-item],[data-add-graphic],[data-quick-font],[data-quick-color]');if(!el||el.disabled||photoBusy||passBusy||aiBusy||sessionCheckBusy)return;
+  if(el.dataset.editorTool){
+   if(!['base','stickers','text'].includes(el.dataset.editorTool))return;
+   finishInlineText();editorTool=el.dataset.editorTool;editorToolsOpen=true;render(true);
+   document.querySelector(`[data-editor-tool="${editorTool}"]`)?.focus({preventScroll:true});return;
+  }
+  if(el.dataset.action==='toggle-editor-tools'){editorToolsOpen=!editorToolsOpen;render(true);document.querySelector('[data-action="toggle-editor-tools"]')?.focus({preventScroll:true});return;}
+  if(['undo-design','redo-design'].includes(el.dataset.action)){
+   finishInlineText();const changed=editorHistory[el.dataset.action==='undo-design'?'undo':'redo'](state,workspace.owner);
+   if(changed){selectedArtwork=null;reviewPass=null;save();updatePreview();syncEditorHistoryButtons();}return;
+  }
   if(el.dataset.action==='choose-phone'){openModelPicker();return;}
   if(el.dataset.action==='ai-choose-phone'){openModelPicker(true);return;}
   if(el.dataset.action==='home-photo'){event.preventDefault();go('choose?source=photo');return;}
@@ -977,7 +1013,7 @@ app.addEventListener('click',async event=>{
   if(el.dataset.source){
    if(el.dataset.source==='photo'){openPhotoPicker();return;}
    finishInlineText();
-   selectedArtwork=null;state.source=el.dataset.source;comparing=false;history.replaceState(null,'','#choose');save();render(true);return;
+   selectedArtwork=null;state.source=el.dataset.source;editorPanels.collection=true;editorTool='base';editorToolsOpen=true;comparing=false;history.replaceState(null,'','#choose');save();render(true);return;
   }
   if(el.dataset.design||el.dataset.startDesign){
    event.preventDefault();const startFresh=Boolean(el.dataset.startDesign);photoBusy=true;
@@ -1113,7 +1149,7 @@ async function navigate(){
   }
   state.source='photo';save();
  }
- if(route==='choose'&&params.get('studio')==='1')effectPanelOpen=true;
+ if(route==='choose'&&params.get('studio')==='1'){effectPanelOpen=true;editorTool='base';editorToolsOpen=true;}
  if(currentNavigation!==navigationId)return;
  syncStationFinder();render();document.querySelector('#main')?.focus({preventScroll:true});
  if(route==='choose'&&params.get('studio')==='1')openAIStudio();

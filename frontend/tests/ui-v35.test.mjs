@@ -555,7 +555,7 @@ async function startColorDraft(editor,response){
  const refreshEnd=source.indexOf('\nsetInterval(async()=>',refreshStart);
  assert.ok(start>=0&&end>start&&refreshStart>0&&refreshEnd>refreshStart);
  let currentResponse=response;
- const context=vm.createContext({singlePrintDraft,createStationFinder,selectSupplierTemplate,
+ const context=vm.createContext({singlePrintDraft,createStationFinder,selectSupplierTemplate,editorHistory:{record(){}},syncEditorHistoryButtons(){},
   document:{querySelector:()=>({textContent:''})},location:{hash:'#choose',href:'http://localhost/#choose'},
   localStorage:{getItem:key=>editor.get(key)||null,setItem:(key,value)=>editor.set(key,value)},
   t:value=>value,deviceScope:()=>'',scopeIds:()=>null,loadCatalog:async()=>null,
@@ -674,7 +674,7 @@ test('QA actual checkout bootstrap persists one-copy adjustment across reloads w
  let stored={quantity:3,requestKey:'previous-timeout-key',pass:{code:'synthetic',zoom:123,x:31,y:67}};
  const original=structuredClone(stored);let writes=0;
  for(let reload=0;reload<2;reload++){
-  const context=vm.createContext({singlePrintDraft,createStationFinder,selectSupplierTemplate,
+  const context=vm.createContext({singlePrintDraft,createStationFinder,selectSupplierTemplate,editorHistory:{record(){}},syncEditorHistoryButtons(){},
    privateRead:async key=>{assert.equal(key,'checkout-draft');return structuredClone(stored);},
    privateWrite:async(key,value)=>{assert.equal(key,'checkout-draft');stored=structuredClone(value);writes++;},
    stopForStorage:()=>assert.fail('bootstrap unexpectedly failed'),
@@ -907,4 +907,39 @@ test('prototype review shows one case and only configured body colors, without i
  assert.match(html,/Save draft/);assert.match(html,/Print now/);
  const colored=designReview({pass:{...pass,phoneColor:{name:'<script>test</script>'}},preview:()=>'',lang:'zh-CN'});
  assert.match(colored,/机身颜色/);assert.match(colored,/&lt;script&gt;test&lt;\/script&gt;/);assert.match(colored,/1 个手机壳/);
+});
+
+test('editor history restores composition without restoring phone, color or image selections',async()=>{
+ const {createEditorHistory}=await import('../storefront/editor-history.js');
+ const history=createEditorHistory(),state={source:'photo',photo:'private-original',model:'Phone A',caseMaterial:'standard',photoColor:'gold',photoArtwork:[],photoPlacement:null};
+ history.record(state,'owner-a');state.photoArtwork.push({id:'text-1',text:'Hello',x:50});history.record(state,'owner-a');
+ state.photoArtwork[0].x=65;history.record(state,'owner-a');
+ assert(history.undo(state,'owner-a'));assert.equal(state.photoArtwork[0].x,50);
+ assert(history.undo(state,'owner-a'));assert.deepEqual(state.photoArtwork,[]);
+ assert(history.redo(state,'owner-a'));assert.equal(state.photoArtwork[0].text,'Hello');
+ assert.equal(state.photo,'private-original');assert.equal(state.model,'Phone A');assert.equal(state.photoColor,'gold');
+ state.photoArtwork[0].text='New text';history.record(state,'owner-a');assert.equal(history.canRedo,false);
+ state.photo='replacement';assert.equal(history.undo(state,'owner-a'),false,'Replacing a photo starts a new composition history');
+ state.photoArtwork.push({id:'text-2'});history.record(state,'owner-a');assert(history.canUndo);
+ assert.equal(history.undo(state,'owner-b'),false,'History cannot cross customer workspaces');
+ state.model='Phone B';assert.equal(history.undo(state,'owner-b'),false,'History cannot restore a different phone');
+});
+test('editor composition history retains a bounded sequence and ignores unchanged saves',async()=>{
+ const {createEditorHistory}=await import('../storefront/editor-history.js');
+ const history=createEditorHistory(3),state={source:'collection',designId:'bloom',zoom:100};
+ history.record(state,'guest');history.record(state,'guest');assert.equal(history.canUndo,false);
+ for(const zoom of [110,120,130]){state.zoom=zoom;history.record(state,'guest');}
+ assert(history.undo(state,'guest'));assert.equal(state.zoom,120);
+ assert(history.undo(state,'guest'));assert.equal(state.zoom,110);
+ assert.equal(history.undo(state,'guest'),false);
+});
+test('opening editing controls does not add an undo step for lazily initialized layout defaults',async()=>{
+ const {createEditorHistory}=await import('../storefront/editor-history.js');
+ const history=createEditorHistory(),state={source:'photo',designId:'bloom',photo:'original',zoom:100,photoArtwork:[],artworkLayouts:{},photoPlacement:null};
+ history.record(state,'guest');
+ state.artworkLayouts.bloom={zoom:100,x:50,y:50,artworkEdits:{},addedArtwork:[]};
+ state.photoPlacement={x:50,y:50,scale:100,rotation:0};
+ history.record(state,'guest');assert.equal(history.canUndo,false);
+ state.photoArtwork.push({id:'sticker'});history.record(state,'guest');
+ assert(history.undo(state,'guest'));assert.deepEqual(state.photoArtwork,[]);
 });
