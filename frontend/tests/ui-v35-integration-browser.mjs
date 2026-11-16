@@ -8,7 +8,7 @@ assert(origin&&model&&order,'Use the disposable fixture runner.');
 const browser=await chromium.launch({headless:true,...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{})});
 await mkdir('test-results/v35-integration',{recursive:true});
 try{
- for(const [width,height] of [[390,844],[1440,900]]){
+ for(const [width,height] of [[320,568],[390,844],[768,1024],[1440,900]]){
   const context=await browser.newContext({viewport:{width,height},serviceWorkers:'block'}),errors=[],writes=[];
   // Both frontend and backend have independent outbound guards. This browser may
   // read only its fixture origin; payment/dispatch/print writes are forbidden.
@@ -38,6 +38,20 @@ try{
   await page.locator('#design-form button').click();
   await page.locator('[data-action="continue-design-checkout"]').click();
   await page.locator('.v35-checkout .pickup-station-row').waitFor();
+  const previewGeometry=await page.locator('.checkout-preview').evaluate(card=>{
+   const stage=card.querySelector('.checkout-case'),phone=stage.querySelector('.phone-case'),title=card.querySelector('h2');
+   const box=element=>element.getBoundingClientRect().toJSON();
+   return {card:box(card),stage:box(stage),phone:box(phone),title:box(title),ratio:getComputedStyle(phone).aspectRatio};
+  });
+  assert(previewGeometry.stage.width>=previewGeometry.card.width-3,'Preview stage must span the card instead of inheriting the legacy thumbnail column');
+  assert(previewGeometry.phone.height>=200&&previewGeometry.phone.width>=90,'Design must be large enough to review');
+  assert(previewGeometry.phone.top>=previewGeometry.stage.top&&previewGeometry.phone.bottom<=previewGeometry.stage.bottom,'Whole phone must fit vertically');
+  assert(previewGeometry.phone.left>=previewGeometry.stage.left&&previewGeometry.phone.right<=previewGeometry.stage.right,'Whole phone must fit horizontally');
+  assert(Math.abs(previewGeometry.phone.x+previewGeometry.phone.width/2-previewGeometry.stage.x-previewGeometry.stage.width/2)<2,'Phone must be centered');
+  assert(previewGeometry.title.top>=previewGeometry.stage.bottom,'Design title belongs below the preview');
+  const [rw,rh]=previewGeometry.ratio.split('/').map(Number);
+  assert(Math.abs(previewGeometry.phone.width/previewGeometry.phone.height-rw/rh)<.01,'Preserve template proportions');
+  await page.screenshot({path:`test-results/v35-integration/${width}-checkout.png`,fullPage:true});
   assert.match(await page.locator('.pickup-station-row').innerText(),/Synthetic preview station/);
   await page.goto(origin+'/#orders');
   await page.locator('.v35-orders .order-row').waitFor();
