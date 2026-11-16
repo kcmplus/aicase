@@ -245,3 +245,14 @@ test('pickup station information sits directly after its choice and before couri
  assert.ok(html.includes('请求定位'));
  for(const method of ['courier','air'])assert.ok(!deliveryOptions(method,'zh-CN',{pickupDetails:'Matching stations'}).includes('Matching stations'));
 });
+
+test('prototype delivery cards retain pickup, courier and air values without promising shipping availability',()=>{
+ for(const selected of ['pickup','courier','air']){
+  const html=deliveryOptions(selected,'en-US',{presentation:'checkout',pickupDetails:'Existing stock-aware station finder'});
+  assert.match(html,new RegExp(`value="${selected}" checked`));
+  assert.match(html,/Nearby printing/);assert.match(html,/Ship to home/);assert.match(html,/Air delivery/);
+  assert.match(html,/Coming soon\. No payment is taken\./);
+  assert.equal(html.includes('Existing stock-aware station finder'),selected==='pickup');
+  assert.doesNotMatch(html,/US\$4|3–4 days|reservation|pay-provider/);
+ }
+});

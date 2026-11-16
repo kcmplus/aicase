@@ -215,7 +215,7 @@ test('order status labels preserve historical fulfillment and refund precedence 
 
 test('saved design, payment page and order receipt render shared statuses from synthetic server snapshots',async()=>{
  const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
- const names=['orderStatus','isProviderOrder','providerName','paymentLabel','passPage','providerOrderPage','paymentPage'];
+ const names=['checkoutDesignCard','checkoutDock','orderStatus','isProviderOrder','providerName','paymentLabel','passPage','providerOrderPage','paymentPage'];
  const declarations=names.map(name=>{
   const start=source.indexOf(`function ${name}(`);
   assert.ok(start>=0,`${name} must exist`);
@@ -228,7 +228,7 @@ test('saved design, payment page and order receipt render shared statuses from s
   for(const mode of ['demo','stripe_test','airwallex_test','free_test']){
    const order=Object.freeze({id:'SYNTHETIC-ORDER',server:true,pass,status,refund,mode,priceCents:0,currency:'USD',fulfillmentType:'pickup'});
    const before=JSON.stringify(order);
-   const context={progressPanel,caseMaterialLabel,pickupStationPanel:()=>'',orderActionError:'',state:{pass},orderBook:{},orderForCode:()=>order,locale:()=> 'en-US',esc,
+   const context={progressPanel,caseMaterialLabel,phoneColorName,arrow:()=>'→',t:v=>v,pickupStationPanel:()=>'',orderActionError:'',state:{pass},orderBook:{},orderForCode:()=>order,locale:()=> 'en-US',esc,
     money:()=> '0.00',PRINT_PRICE:'0.00',passPreview:()=>'',passName:()=> 'Synthetic design',effectCaption:()=>'',
     previewStationPanel:()=>'',scannedStation:null,stockScope:'',paymentState,paymentOrder:order,paymentPollCount:0,paymentError:'',passBusy:false,
     document:{querySelector:()=>null},location:{hash:'#payment?order=SYNTHETIC-ORDER&result=success'},URLSearchParams,
@@ -243,6 +243,13 @@ test('saved design, payment page and order receipt render shared statuses from s
     if(status==='pending'){
      assert.match(html,/Confirming your payment/);
      assert.doesNotMatch(html,/data-action="pay-provider"|Payment received/);
+     if(!refund){
+      context.location.hash='#payment?order=SYNTHETIC-ORDER';
+      const pending=vm.runInNewContext(`${declarations}\npaymentPage()`,context);
+      assert.match(pending,/class="checkout-pay-dock"/);assert.match(pending,/data-action="pay-provider" data-id="SYNTHETIC-ORDER"/);
+      context.isPickup=()=>false;
+      assert.doesNotMatch(vm.runInNewContext(`${declarations}\npaymentPage()`,context),/data-action="pay-provider"/,'Delivery orders cannot gain payment eligibility from the presentation change');
+     }
     }
    }
   }
@@ -957,4 +964,24 @@ test('photo fit survives save/restore and uses matching cover/contain geometry',
  assert.throws(()=>validatePhotoPlacement({x:50,y:50,scale:100,rotation:0,fit:'url(secret)'}),/fit/);
  assert.deepEqual(photoRect(400,200,300,600,50,50,'contain'),{x:0,y:225,width:300,height:150,scale:.75});
  assert.deepEqual(photoRect(400,200,300,600,50,50,'cover'),{x:-450,y:0,width:1200,height:600,scale:3});
+});
+
+test('prototype checkout dock preserves consent, loading, fulfillment and availability gates',async()=>{
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
+ const declarations=['checkoutDesignCard','checkoutDock','checkoutPage'].map(name=>appFunction(source,name)).join('\n');
+ const base={checkoutDraft:{quantity:1,fulfillmentType:'pickup',pass:{source:'photo',model:'Synthetic phone',caseMaterial:'standard'}},orderBook:{orders:{}},locale:()=> 'en-US',
+  PRINT_PRICE:'$12.34',PRINT_AVAILABLE:true,paymentConfig:{available:true,provider:'stripe',mode:'live'},paymentError:'',paymentLoading:false,passBusy:false,
+  providerName:()=> 'Stripe',money:()=> '12.34',esc,caseMaterialLabel,phoneColorName,passPreview:()=>'<div class="phone-case"></div>',passName:()=> 'My design',arrow:()=> '→',
+  pickupStationPanel:()=>'',pickupCheckoutReady:()=>true,singlePrintNotice:()=>'',deliveryOptions:()=>'',deliveryLabel:()=> 'Courier delivery',scannedStation:null,
+  quoteBreakdown:()=>'',checkoutEmailField:()=>'',membership:{},devicePrinting:{simulated:false}};
+ const html=extra=>vm.runInNewContext(declarations+'\ncheckoutPage()',{...base,...extra});
+ const normal=html({});assert.match(normal,/id="print-checkout-form"/);assert.match(normal,/name="accepted" type="checkbox" required/);assert.match(normal,/type="submit"/);assert.match(normal,/\$12.34/);
+ for(const extra of [{paymentLoading:true},{paymentConfig:{available:false}},{paymentError:'Unavailable'},{PRINT_AVAILABLE:false},{checkoutDraft:{...base.checkoutDraft,fulfillmentType:'courier'}},{checkoutDraft:{...base.checkoutDraft,fulfillmentType:'air'}}]){
+  const rendered=html(extra);assert.doesNotMatch(rendered,/id="print-checkout-form"/);
+  assert.equal((rendered.match(/class="checkout-pay-dock"/g)||[]).length,1);
+  assert.match(rendered,/class="button primary"\s+disabled/);
+ }
+ assert.match(html({pickupCheckoutReady:()=>false}),/type="submit" class="button primary"\s+disabled/);
+ const free=html({paymentConfig:{available:true,provider:'free_test',zero_price_test:true},PRINT_PRICE:'$0.00'});
+ assert.match(free,/Confirm free order/);assert.doesNotMatch(free,/Awaiting payment/);
 });

@@ -1,5 +1,5 @@
 /* V35 checkout.css / checkout-theme.css, adapted to server-backed order controls.
-   No fixed checkout footer: consent, channel errors and station controls stay in flow. */
+   Consent, channel errors and station controls remain in flow above the payment dock. */
 body:is([data-v35-route="checkout"],[data-v35-route="orders"],[data-v35-route="payment"],[data-v35-route="pass"]) {
   --ink:#100519; --muted:#786785; --line:#dfcceb; background:#faf6ff; color:var(--ink);
 }
@@ -51,3 +51,57 @@ body:is([data-v35-route="checkout"],[data-v35-route="orders"],[data-v35-route="p
  .v35-orders .order-row>div:last-child {align-items:stretch}
  .v35-checkout .steps {max-width:100%;flex-wrap:wrap;gap:8px}
 }
+
+/* Prototype checkout presentation; existing station and payment handlers remain authoritative. */
+.v35-checkout-design{width:calc(100% - 40px);max-width:900px;padding:20px 0 130px;margin:0 auto}
+.v35-checkout-design>.back-link{display:inline-flex;min-height:44px;align-items:center;font-size:15px;color:#100519}
+.checkout-heading{margin:20px 0 24px}.checkout-heading .eyebrow{font-size:13px;letter-spacing:1px;font-weight:400;color:#100519;margin-bottom:20px}
+.checkout-title-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px}
+.checkout-title-row h1,.checkout-heading h1{font-size:clamp(28px,5vw,38px);font-weight:600;letter-spacing:-1px;line-height:1.25;margin:0}
+.checkout-status{display:inline-flex;align-items:center;padding:7px 10px;border-radius:24px;background:#f0e3fc;color:#7021b0;font-size:12px;line-height:1.4}
+.checkout-fulfillment-tag{display:inline-flex;padding:6px 9px;border:1px dashed #d7b3f0;border-radius:6px;background:#eddbfa;color:#7021b0;font-size:13px;margin-bottom:12px}
+.checkout-heading>p:last-child{font-size:15px;line-height:1.7;margin:0;color:#100519}
+.v35-checkout-design .ai-order-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+.v35-checkout .checkout-preview{display:grid;grid-template-columns:100px minmax(0,1fr);align-items:center;gap:16px;padding:14px;text-align:left;border-radius:14px}
+.v35-checkout .checkout-preview>.checkout-case{height:140px;width:100%;margin:0;padding:8px;background:#efe3fa;border-radius:9px;overflow:hidden}
+.v35-checkout .checkout-preview>.checkout-case>.phone-case{height:100%;width:auto;max-width:100%;flex:none;margin:0}
+.v35-checkout .checkout-design-copy{min-width:0}.v35-checkout .checkout-design-copy h2{font-size:17px;line-height:1.4;font-weight:600;margin:0 0 10px}
+.v35-checkout .checkout-design-copy p{font-size:14px;line-height:1.6;margin:0;color:#100519}
+.v35-checkout .checkout-design-copy small{display:block;font-size:12px;line-height:1.5;color:#786785;margin-top:5px}
+.v35-checkout-design .ai-order-card{padding:20px;border-radius:14px}
+.v35-checkout-design .checkout-fulfillment>.single-print-notice{margin-top:0}
+.v35-checkout .checkout-delivery-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:0;min-width:0}
+.v35-checkout .checkout-delivery-options legend{padding:0;margin-bottom:18px;font-size:20px;font-weight:600;line-height:1.4}
+.v35-checkout .checkout-delivery-options>label{position:relative;display:block;min-width:0;margin:0;padding:14px 12px;border:1px solid #dfcceb;border-radius:12px;background:white;line-height:1.45}
+.v35-checkout .checkout-delivery-options>label:has(input:checked){border:2px solid #a234fd;padding:13px 11px;background:#f9f2ff}
+.v35-checkout .checkout-delivery-options input{position:absolute;right:10px;top:10px;width:16px;height:16px;margin:0;accent-color:#a234fd}
+.v35-checkout .checkout-delivery-options .delivery-option-icon{display:block;font-size:24px;font-weight:400;line-height:1;margin-bottom:16px;color:#100519}
+.v35-checkout .checkout-delivery-options strong{display:block;font-size:16px;font-weight:600}.v35-checkout .checkout-delivery-options small{font-size:12px;font-weight:400;line-height:1.5;margin-top:8px;color:#786785}
+.v35-checkout .checkout-delivery-options>label[data-delivery=air]{grid-column:1/-1;padding:10px 12px}
+.v35-checkout .checkout-delivery-options>label[data-delivery=air]:has(input:checked){padding:9px 11px}
+.v35-checkout .checkout-delivery-options>label[data-delivery=air] .delivery-option-icon{display:none}
+.v35-checkout .checkout-delivery-options>label[data-delivery=air] strong{font-size:13px;padding-right:22px}
+.v35-checkout .checkout-delivery-options>label[data-delivery=air] small{font-size:11px;margin-top:3px}
+.v35-checkout .checkout-delivery-options>.pickup-option-details{grid-column:1/-1;min-width:0}
+.v35-checkout .checkout-delivery-options>.pickup-option-details>.pickup-stations{margin:8px 0 0}
+.v35-checkout-design .print-quote h2{font-size:20px}.v35-checkout-design .ai-consent{font-size:12px;margin-top:16px;line-height:1.6}
+.checkout-pay-dock{position:fixed;z-index:25;bottom:0;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:minmax(96px,1fr) auto minmax(130px,1fr);align-items:center;gap:16px;width:100%;max-width:940px;box-sizing:border-box;padding:14px 20px calc(14px + env(safe-area-inset-bottom));border-top:1px solid #dfcceb;background:#faf6fff5;box-shadow:0 -4px 22px #36115408}
+.v35-checkout .checkout-pay-dock .button{display:flex;align-items:center;justify-content:center;gap:5px;min-width:0;min-height:46px;margin:0;padding:10px;font-size:14px;line-height:1.35;border-radius:8px;text-decoration:none}
+.v35-checkout .checkout-pay-dock .checkout-back{background:#fff8;border:1px solid #cda2ec;color:#7021b0}
+.checkout-due{font-size:24px;line-height:1.2;font-weight:700;white-space:nowrap;color:#100519}
+.v35-checkout .checkout-pay-dock button:disabled{cursor:not-allowed}
+.v35-checkout-design :is(input,.ai-consent,.pickup-station-row){scroll-margin-bottom:110px}
+@media(max-width:760px){
+ .v35-checkout-design{width:calc(100% - 36px);padding:10px 0 calc(120px + env(safe-area-inset-bottom))}
+ .checkout-heading{margin:14px 0 22px}.checkout-heading .eyebrow{font-size:12px;letter-spacing:.8px}
+ .v35-checkout-design .ai-order-card{padding:18px}.checkout-pay-dock{gap:9px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));grid-template-columns:minmax(78px,1fr) auto minmax(102px,1fr)}
+ .v35-checkout .checkout-pay-dock .button{font-size:12px;padding:9px 6px}.checkout-due{font-size:22px}
+}
+@media(max-width:360px){
+ .v35-checkout-design{width:calc(100% - 28px)}.v35-checkout .checkout-preview{grid-template-columns:76px minmax(0,1fr);gap:12px;padding:12px}
+ .v35-checkout .checkout-preview>.checkout-case{height:120px;padding:7px}.v35-checkout .checkout-design-copy h2{font-size:15px}.v35-checkout .checkout-design-copy p{font-size:12px}
+ .v35-checkout-design .ai-order-card{padding:14px}.v35-checkout .checkout-delivery-options>label{padding:12px 10px}.v35-checkout .checkout-delivery-options>label:has(input:checked){padding:11px 9px}
+ .v35-checkout .checkout-delivery-options strong{font-size:14px}.v35-checkout .checkout-delivery-options small{font-size:11px}
+ .checkout-pay-dock{padding-inline:12px;gap:6px;grid-template-columns:minmax(72px,1fr) auto minmax(92px,1fr)}.checkout-due{font-size:19px}.v35-checkout .checkout-pay-dock .button{font-size:11px}
+}
+.v35-checkout .ai-order-layout>#pickup-station-panel:empty{display:none}

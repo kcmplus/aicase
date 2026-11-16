@@ -37,8 +37,9 @@ export function deliveryLabel(type,lang='en-US'){
  const labels={pickup:['On-site pickup','到网点自取'],courier:['Courier delivery','快递配送'],air:['Air delivery','空运配送'],unspecified:['Delivery method not confirmed','配送方式待确认']};
  return (labels[type]||labels.unspecified)[lang==='zh-CN'?1:0];
 }
-export function deliveryOptions(selected='pickup',lang='en-US',{pickupDetails=''}={}){
+export function deliveryOptions(selected='pickup',lang='en-US',{pickupDetails='',presentation='default'}={}){
  const zh=lang==='zh-CN';
+ if(presentation==='checkout')return `<fieldset class="delivery-options checkout-delivery-options"><legend>${zh?'选择如何收取手机壳':'Choose how to receive your case'}</legend>${['pickup','courier','air'].map(type=>`<label data-delivery="${type}"><input type="radio" name="fulfillment_type" value="${type}" ${selected===type?'checked':''}><span><span class="delivery-option-icon" aria-hidden="true">${type==='pickup'?'⌖':type==='courier'?'▱':'↗'}</span><strong>${type==='pickup'?(zh?'附近打印':'Nearby printing'):type==='courier'?(zh?'配送到家':'Ship to home'):deliveryLabel(type,lang)}</strong><small>${type==='pickup'?(zh?'查看有库存的网点，到设备前扫码打印。':'View stations with stock. Scan the station when you arrive.'):(zh?'暂未开放，暂不收款。':'Coming soon. No payment is taken.')}</small></span></label>`).join('')}${selected==='pickup'?`<div id="pickup-station-panel" class="pickup-option-details">${pickupDetails}</div>`:''}</fieldset>`;
  return `<fieldset class="delivery-options"><legend>${zh?'选择配送方式':'Delivery method'}</legend>${['pickup','courier','air'].map(type=>`<label><input type="radio" name="fulfillment_type" value="${type}" ${selected===type?'checked':''}><span>${deliveryLabel(type,lang)}${type==='pickup'?`<small>${zh?'点击查看网点并请求定位，到设备前扫码打印。':'Choose to view stations and request your location. Scan the station when you arrive.'}</small>`:`<small>${zh?'暂未开放，下单前不会收款':'Coming soon. Checkout is not available yet.'}</small>`}</span></label>${type==='pickup'&&selected==='pickup'?`<div id="pickup-station-panel" class="pickup-option-details">${pickupDetails}</div>`:''}`).join('')}</fieldset>`;
 }
 export function deliveryStatusPanel(order,{lang='en-US',busy=false}={}){
