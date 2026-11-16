@@ -18,6 +18,7 @@ from .fulfillment import cloud_release_available
 from .models import PrintOrder, SupplierOrder
 from .orders import Conflict
 from .store_catalog import available_stocks, stock_template
+from .case_materials import stock_material
 from .supplier_orders import audit_state, digest, can_dispatch_payment
 
 
@@ -244,6 +245,7 @@ def record_merchant_payment(pk):
             if (not stock or stock.device_id != current.device_id
                     or stock.product.connection_id != current.device.connection_id
                     or stock.product.goods_id != str(current.goods_id)
+                    or (order.case_material and stock_material(stock) != order.case_material)
                     or stock_template(stock) != order.snapshot.get('_template')):
                 raise Conflict('The station inventory or template needs updating before printing.')
         current.print_confirmed_at, current.release_claim = timezone.now(), uuid.uuid4()

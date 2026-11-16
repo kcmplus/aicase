@@ -11,7 +11,7 @@ def preserve_manual_settings(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("management_api", "0031_direct_debug_transport"),
+        ("management_api", "0031_supplier_catalog_auto_publish"),
     ]
 
     operations = [

@@ -235,3 +235,13 @@ test('zero-price print controls follow server authorization and show observed re
  assert.equal(fulfillmentView(current).state,'released');
  assert.equal(fulfillmentView(current).canPrint,undefined);
 });
+
+
+test('pickup station information sits directly after its choice and before courier options',()=>{
+ const html=deliveryOptions('pickup','zh-CN',{pickupDetails:'<section>Matching stations</section>'});
+ assert.ok(html.indexOf('value="pickup"')<html.indexOf('Matching stations'));
+ assert.ok(html.indexOf('Matching stations')<html.indexOf('value="courier"'));
+ assert.ok(html.includes('</label><div id="pickup-station-panel"'));
+ assert.ok(html.includes('请求定位'));
+ for(const method of ['courier','air'])assert.ok(!deliveryOptions(method,'zh-CN',{pickupDetails:'Matching stations'}).includes('Matching stations'));
+});

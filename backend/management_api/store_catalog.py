@@ -6,7 +6,8 @@ from django.db.models import F
 from django.conf import settings
 from django.utils import timezone
 from rest_framework import serializers
-from .models import Device, DeviceProduct
+from .models import Device, DeviceProduct, PhoneModel
+from .case_materials import MATERIALS, stock_material
 
 
 def catalog_stocks():
@@ -70,10 +71,49 @@ def available_colors(model, template):
     return result
 
 
+def model_record(model, sources, *, scoped):
+    record = {'name': model.name, 'code': model.code, 'brand': model.brand.name, 'styles': [], 'colors': []}
+    templates = []
+    for material in MATERIALS:
+        stock = sources.get((model.pk, material))
+        style = {'caseMaterial': material, 'available': bool(stock) if scoped else True, 'colors': []}
+        if stock:
+            template = stock_template(stock)
+            style.update(templateId=template['id'], inventoryItemId=stock.pk, colors=available_colors(model, template))
+            if scoped:
+                style['quantity'] = stock.stock
+            templates.append(template)
+            if 'templateId' not in record:
+                record.update(templateId=template['id'], inventoryItemId=stock.pk, colors=style['colors'])
+        record['styles'].append(style)
+    return record, templates
+
+
+def design_models():
+    """Published models and styles can be designed without pickup inventory."""
+    models, templates, sources = [], [], {}
+    previews = DeviceProduct.objects.select_related('product__phone_model').filter(
+        product__active=True, product__phone_model__active=True, product__phone_model__brand__active=True,
+        template_imported_url=F('template_url'), template_width__gt=0, template_height__gt=0,
+    ).exclude(template_image='').exclude(template_mask='').order_by('pk')
+    for stock in [*available_stocks().order_by('pk'), *previews]:
+        material = stock_material(stock)
+        if material:
+            sources.setdefault((stock.product.phone_model_id, material), stock)
+    for model in PhoneModel.objects.filter(active=True, brand__active=True).select_related('brand').order_by('sort_order', 'pk'):
+        record, variants = model_record(model, sources, scoped=False)
+        models.append(record)
+        templates.extend(variants)
+    return {'version': 1, 'scope': 'catalog', 'models': models, 'templates': templates,
+            'device_id': None, 'availability': 'ready' if models else 'empty', 'max_age_seconds': 60}
+
+
 def store_models(params):
+    device_id, shop_id = params.get('device_id'), params.get('shop_id')
+    if device_id is None and shop_id is None:
+        return design_models()
     stocks = available_stocks()
     candidates = catalog_stocks()
-    device_id, shop_id = params.get('device_id'), params.get('shop_id')
     if shop_id and not device_id:
         raise serializers.ValidationError({'detail': 'A device_id is required with shop_id.'})
     if device_id is not None:
@@ -88,17 +128,18 @@ def store_models(params):
             raise serializers.ValidationError({'detail': 'The device identifier is ambiguous. Please check the device link.'})
         stocks = stocks.filter(device__in=devices)
         candidates = candidates.filter(device__in=devices)
-    models, templates, seen = [], [], set()
+    models, templates, sources, phone_models = [], [], {}, {}
     for stock in stocks.order_by('product__phone_model__sort_order', 'product__phone_model_id', 'pk'):
         model = stock.product.phone_model
-        if model.pk in seen:
+        material = stock_material(stock)
+        if not material:
             continue
-        seen.add(model.pk)
-        template = stock_template(stock)
-        models.append({'name': model.name, 'code': model.code, 'brand': model.brand.name,
-                       'templateId': template['id'], 'inventoryItemId': stock.pk,
-                       'colors': available_colors(model, template)})
-        templates.append(template)
+        phone_models.setdefault(model.pk, model)
+        sources.setdefault((model.pk, material), stock)
+    for model in phone_models.values():
+        record, variants = model_record(model, sources, scoped=True)
+        models.append(record)
+        templates.extend(variants)
     availability = 'ready' if models else 'updating' if candidates.exists() else 'empty'
-    return {'version': 1, 'models': models, 'templates': templates, 'device_id': device_id, 'availability': availability,
+    return {'version': 1, 'scope': 'device', 'models': models, 'templates': templates, 'device_id': device_id, 'availability': availability,
             'max_age_seconds': 60}

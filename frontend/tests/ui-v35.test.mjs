@@ -1,3 +1,7 @@
+import {progressPanel,progressPaymentText} from '../storefront/order-progress.js';
+import {caseMaterialLabel} from '../storefront/case-styles.js';
+import {createStationFinder} from '../storefront/pickup-stations.js';
+import {selectSupplierTemplate} from '../storefront/phone-templates.js';
 import {singlePrintDraft} from '../storefront/order-service.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -171,7 +175,7 @@ test('orders page renders a server order and its status',async()=>{
  const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
  const declaration=source.match(/^function ordersPage\(\)\{.*$/m)?.[0];
  assert.ok(declaration,'ordersPage must exist');
- const context={stationContext:()=>'',orderLoading:false,orderError:'',orderRows:[{status:'paid',mode:'free_test',model_name:'Synthetic model',fulfillment_type:'pickup',reference:'SYNTHETIC-1',created_at:'2026-01-01T00:00:00Z',currency:'USD',amount:0}],esc:String,paymentLabel:()=>'',deliveryLabel:()=>'',locale:()=> 'en-US',orderPage:1,orderHasMore:false};
+ const context={progressPanel,progressPaymentText,caseMaterialLabel,stationContext:()=>'',orderLoading:false,orderError:'',orderRows:[{status:'paid',mode:'free_test',model_name:'Synthetic model',fulfillment_type:'pickup',reference:'SYNTHETIC-1',created_at:'2026-01-01T00:00:00Z',currency:'USD',amount:0}],esc:String,paymentLabel:()=>'',deliveryLabel:()=>'',locale:()=> 'en-US',orderPage:1,orderHasMore:false};
  const statusDeclaration=source.match(/^function orderStatus\([^\n]+$/m)?.[0]||'';
  const html=vm.runInNewContext(`${statusDeclaration}\n${declaration}\nordersPage()`,context);
  assert.match(html,/SYNTHETIC-1/);
@@ -186,7 +190,7 @@ test('orders list renders each server refund state without changing historical a
  for(const [refund,label] of [[null,'Paid'],[{status:'requested'},'Checking refund status.'],[{status:'pending'},'Refund processing.'],[{status:'succeeded'},'Payment refunded.'],[{status:'failed'},'Refund could not be completed.']]){
   const order=Object.freeze({status:'paid',refund,mode:'stripe_test',model_name:'Synthetic model',fulfillment_type:'pickup',reference:'SYNTHETIC-REFUND',created_at:'2026-01-01T00:00:00Z',currency:'USD',amount:'10.00'});
   const before=JSON.stringify(order);
-  const html=vm.runInNewContext(`${status}\n${page}\nordersPage()`,{stationContext:()=>'',orderLoading:false,orderError:'',orderRows:[order],esc:String,paymentLabel:()=>'',deliveryLabel:()=>'',locale:()=> 'en-US',orderPage:1,orderHasMore:false});
+  const html=vm.runInNewContext(`${status}\n${page}\nordersPage()`,{progressPanel,progressPaymentText,caseMaterialLabel,stationContext:()=>'',orderLoading:false,orderError:'',orderRows:[order],esc:String,paymentLabel:()=>'',deliveryLabel:()=>'',locale:()=> 'en-US',orderPage:1,orderHasMore:false});
   assert.ok(html.includes(label),`refund ${refund?.status||'none'}`);
   assert.ok(html.includes('USD 10.00'));
   assert.equal(JSON.stringify(order),before);
@@ -224,7 +228,7 @@ test('saved design, payment page and order receipt render shared statuses from s
   for(const mode of ['demo','stripe_test','airwallex_test','free_test']){
    const order=Object.freeze({id:'SYNTHETIC-ORDER',server:true,pass,status,refund,mode,priceCents:0,currency:'USD',fulfillmentType:'pickup'});
    const before=JSON.stringify(order);
-   const context={state:{pass},orderBook:{},orderForCode:()=>order,locale:()=> 'en-US',esc,
+   const context={progressPanel,caseMaterialLabel,pickupStationPanel:()=>'',orderActionError:'',state:{pass},orderBook:{},orderForCode:()=>order,locale:()=> 'en-US',esc,
     money:()=> '0.00',PRINT_PRICE:'0.00',passPreview:()=>'',passName:()=> 'Synthetic design',effectCaption:()=>'',
     previewStationPanel:()=>'',scannedStation:null,stockScope:'',paymentState,paymentOrder:order,paymentPollCount:0,paymentError:'',passBusy:false,
     document:{querySelector:()=>null},location:{hash:'#payment?order=SYNTHETIC-ORDER&result=success'},URLSearchParams,
@@ -331,7 +335,7 @@ test('actual editor submit opens a validated preview; saving stays local and onl
  const workspace=createDesignWorkspace(customerIdentity(8),storage),library=createDesignLibrary(workspace,{validate:validateLocal});
  let submit,click;const writes=[],routes=[],notices=[];const pass=syntheticPass();
  const context={app:{addEventListener:(name,fn)=>{if(name==='submit')submit=fn;else click=fn;}},sessionCheckBusy:false,photoBusy:false,aiBusy:false,passBusy:false,reviewPass:null,reviewSaved:false,comparing:false,
-  state:{...pass,editOrderId:null},phoneModels:[pass.model],refreshStockChoices:async()=>{},stockSelection:()=>({templateId:pass.phoneTemplateId}),createPersonalPass,layoutSelection:value=>value,workspace,library,
+  state:{...pass,caseMaterial:'standard',editOrderId:null},phoneModels:[pass.model],refreshStockChoices:async()=>{},stockSelection:()=>({templateId:pass.phoneTemplateId}),createPersonalPass,layoutSelection:value=>value,workspace,library,
   phoneTemplate,orderBook:{orders:{}},checkoutDraft:null,PRINT_AVAILABLE:true,privateWrite:async(name,value)=>{writes.push({name,value});await workspace.write(name,value);},crypto,
   location:{hash:'#choose'},render:()=>{},notify:message=>notices.push(message),go:route=>routes.push(route),locale:()=> 'en-US'};
  const submitStart=source.indexOf("app.addEventListener('submit',async event=>{");
@@ -522,7 +526,7 @@ async function startColorDraft(editor,response){
  const refreshEnd=source.indexOf('\nsetInterval(async()=>',refreshStart);
  assert.ok(start>=0&&end>start&&refreshStart>0&&refreshEnd>refreshStart);
  let currentResponse=response;
- const context=vm.createContext({singlePrintDraft,
+ const context=vm.createContext({singlePrintDraft,createStationFinder,selectSupplierTemplate,
   document:{querySelector:()=>({textContent:''})},location:{hash:'#choose',href:'http://localhost/#choose'},
   localStorage:{getItem:key=>editor.get(key)||null,setItem:(key,value)=>editor.set(key,value)},
   t:value=>value,deviceScope:()=>'',scopeIds:()=>null,loadCatalog:async()=>null,
@@ -549,8 +553,8 @@ function draftColorCatalog(){
  const template={...phoneTemplates[0],id:'supplier-889-'+'a'.repeat(20),inventoryItemId:889,dpi:null,previewOnly:true,model:'Synthetic Draft Color Model',
   overlay:'/media/supplier-templates/'+'e'.repeat(64)+'-overlay.png',previewOverlay:'/media/supplier-templates/'+'e'.repeat(64)+'-overlay.png',mask:'/media/supplier-templates/'+'f'.repeat(64)+'-mask.png'};
  const selected=previewColor(template,'chosen'),fallback={...previewColor(template,'default'),isDefault:true};
- const catalog=colors=>({version:1,templates:[template],models:[{name:template.model,brand:'Synthetic',templateId:template.id,inventoryItemId:889,colors}]});
- const draft={designId:'bloom',model:template.model,phoneColor:selected,source:'collection',zoom:123,x:35,y:67};
+ const catalog=colors=>({version:1,templates:[template],models:[{name:template.model,brand:'Synthetic',templateId:template.id,inventoryItemId:889,colors,styles:[{caseMaterial:'standard',available:true,templateId:template.id,inventoryItemId:889,colors},{caseMaterial:'magnetic',available:false,colors:[]}]}]});
+ const draft={designId:'bloom',model:template.model,caseMaterial:'standard',phoneColor:selected,source:'collection',zoom:123,x:35,y:67};
  return {selected,fallback,catalog,draft};
 }
 test('503 startup and saves preserve the non-default draft color until a successful catalog refresh',async()=>{
@@ -641,7 +645,7 @@ test('QA actual checkout bootstrap persists one-copy adjustment across reloads w
  let stored={quantity:3,requestKey:'previous-timeout-key',pass:{code:'synthetic',zoom:123,x:31,y:67}};
  const original=structuredClone(stored);let writes=0;
  for(let reload=0;reload<2;reload++){
-  const context=vm.createContext({singlePrintDraft,
+  const context=vm.createContext({singlePrintDraft,createStationFinder,selectSupplierTemplate,
    privateRead:async key=>{assert.equal(key,'checkout-draft');return structuredClone(stored);},
    privateWrite:async(key,value)=>{assert.equal(key,'checkout-draft');stored=structuredClone(value);writes++;},
    stopForStorage:()=>assert.fail('bootstrap unexpectedly failed'),
@@ -671,13 +675,13 @@ test('orders loading and failure remain distinct from empty, and server text is 
  const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
  const page=source.match(/^function ordersPage\(\)\{.*$/m)[0];
  const status=source.match(/^function orderStatus\([^\n]+$/m)[0];
- const base={stationContext:()=>'',orderLoading:false,orderError:'',orderRows:[],esc,paymentLabel:()=>'',deliveryLabel:()=>'',locale:()=> 'en-US',orderPage:2,orderHasMore:true};
+ const base={progressPanel,progressPaymentText,caseMaterialLabel,stationContext:()=>'',orderLoading:false,orderError:'',orderRows:[],esc,paymentLabel:()=>'',deliveryLabel:()=>'',locale:()=> 'en-US',orderPage:2,orderHasMore:true};
  const render=overrides=>vm.runInNewContext(`${status}\n${page}\nordersPage()`,{...base,...overrides});
  const busy=render({orderLoading:true});assert.match(busy,/aria-busy="true"/);assert.match(busy,/role="status">Loading your orders/);assert.doesNotMatch(busy,/Your first design/);assert.match(busy,/data-action="refresh-orders" disabled/);
  const error=render({orderError:'<script>bad</script>'});assert.match(error,/role="alert"/);assert.match(error,/&lt;script&gt;/);assert.doesNotMatch(error,/Your first design|<script>/);
  assert.match(render({}),/Your first design/);
  const row=Object.freeze({reference:'<img>',model_name:'<script>',status:'paid',mode:'stripe_test',currency:'USD',amount:'30.00',created_at:'2026-11-14T00:00:00Z'});
- const list=render({orderRows:[row]});assert.match(list,/USD 30.00/);assert.match(list,/data-id="&lt;img&gt;"/);assert.match(list,/View order →/);assert.match(list,/data-page="1"/);assert.match(list,/data-page="3"/);assert.doesNotMatch(list,/<script>|pay-provider/);
+ const list=render({orderRows:[row]});assert.match(list,/USD 30.00/);assert.match(list,/data-id="&lt;img&gt;"/);assert.match(list,/View print progress →/);assert.match(list,/data-page="1"/);assert.match(list,/data-page="3"/);assert.doesNotMatch(list,/<script>|pay-provider/);
 });
 
 // Run the complete production navigation function with controlled identity/API
@@ -692,7 +696,7 @@ async function qaOrdersNavigation(){
   URLSearchParams,location:{hash:'#orders'},navigationId:0,
   syncAIAccount:()=>new Promise(resolve=>identity.push(resolve)),
   workspace:{active:true},customerUI:{},clearTimeout:()=>{},
-  paymentPollTimer:null,paymentPollCount:0,paymentLoading:false,
+  stopPaymentPolling:()=>{},syncStationFinder:()=>{},paymentPollCount:0,paymentLoading:false,
   orderLoading:false,orderError:'',orderRows:[],orderHasMore:false,
   orderPage:1,entryOrders:null,entryOrderError:'',
   orderRequest:async()=>({results:[{reference:'QA-SYNTHETIC'}],has_more:false}),
@@ -803,3 +807,19 @@ for(const oldFails of [false,true]){
   assert.equal(context.orderRows[0].reference,'LATEST');assert.equal(context.orderHasMore,true);
  });
 }
+
+test('merged catalog keeps body colors scoped to a case style and preserves both choices through a saved pass',()=>{
+ const {catalog,selected,draft}=draftColorCatalog();
+ const data=catalog([selected]),model=data.models[0];
+ const magnetic={...data.templates[0],id:'supplier-890-'+'b'.repeat(20),inventoryItemId:890};
+ data.templates.push(magnetic);
+ model.styles[1]={caseMaterial:'magnetic',available:true,templateId:magnetic.id,inventoryItemId:890,colors:[selected]};
+ applyStockCatalog(data);
+ const standard=stockSelection(model.name,'standard'),magnet=stockSelection(model.name,'magnetic');
+ assert.equal(standard.colors[0].code,'chosen');assert.deepEqual(magnet.colors,[]);
+ assert.equal(magnet.templateId,magnetic.id);assert.equal(magnet.available,true);
+ const pass=createPersonalPass({...draft,phoneTemplateId:standard.templateId,effect:'original',intensity:65});
+ const restored=readPass(pass.code,JSON.parse(JSON.stringify(pass)));
+ assert.equal(restored.caseMaterial,'standard');assert.equal(restored.phoneColor.code,'chosen');
+ assert.equal(colorPicker(magnet.colors,null),'');
+});

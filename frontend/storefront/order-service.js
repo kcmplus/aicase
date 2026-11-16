@@ -26,8 +26,8 @@ export async function orderRequest(path='',{method='GET',body,fetcher=fetch,key=
 }
 export function savedOrder(data,previous){
  if(data.phone_template)registerSupplierTemplates([data.phone_template]);
- const pass=readPass(data.snapshot.code,data.snapshot);
- return {id:data.reference,...(data.phone_template?{phoneTemplate:data.phone_template}:{}),server:true,fulfillmentType:data.fulfillment_type||'unspecified',fulfillment:data.fulfillment||null,refund:data.refund||null,mode:data.mode,status:data.status==='completed'?'collected':data.status,priceCents:Math.round(Number(data.amount)*100),currency:data.currency,revision:data.revision,stationId:data.station_id,customerEmail:data.customer_email,pass,oldCodes:[...new Set([...(previous?.oldCodes||[]),...(previous&&previous.pass.code!==pass.code?[previous.pass.code]:[])])],createdAt:Date.parse(data.created_at),updatedAt:Date.parse(data.updated_at)};
+ const pass=readPass(data.snapshot.code,{...data.snapshot,...(data.case_material?{caseMaterial:data.case_material}:{})});
+ return {id:data.reference,...(data.phone_template?{phoneTemplate:data.phone_template}:{}),server:true,progress:data.progress||null,fulfillmentType:data.fulfillment_type||'unspecified',fulfillment:data.fulfillment||null,refund:data.refund||null,mode:data.mode,status:data.status==='completed'?'collected':data.status,priceCents:Math.round(Number(data.amount)*100),currency:data.currency,revision:data.revision,stationId:data.station_id,customerEmail:data.customer_email,pass,oldCodes:[...new Set([...(previous?.oldCodes||[]),...(previous&&previous.pass.code!==pass.code?[previous.pass.code]:[])])],createdAt:Date.parse(data.created_at),updatedAt:Date.parse(data.updated_at)};
 }
 // Only local, unsubmitted drafts are normalized. Never rewrite a server order
 // or rotate its request key: an interrupted write may already have succeeded.
@@ -64,4 +64,21 @@ export function stripeCheckoutUrl(value){
  const url=new URL(value);
  if(url.protocol!=='https:'||url.hostname!=='checkout.stripe.com'||url.username||url.password)throw Error('Invalid Stripe checkout address.');
  return url.href;
+}
+
+export function mergeOrderProgress(order,data){
+ if(data.reference!==order.id)throw Error('Order identity mismatch.');
+ return {...order,progress:data.progress||null,fulfillment:data.fulfillment||null,refund:data.refund||null,
+  status:data.status==='completed'?'collected':data.status,updatedAt:Date.parse(data.updated_at)};
+}
+
+export function providerOrderRoute(order){
+ return order?.server&&(/^(stripe|airwallex)_(test|live)$/.test(order.mode||'')||order.mode==='free_test')
+  ?'payment?order='+encodeURIComponent(order.id):null;
+}
+export function requireDisplayedOrder(order,displayedId,hash){
+ const [route,query='']=hash.slice(1).split('?');
+ if(!order||!displayedId||order.id!==displayedId||route!=='payment'||new URLSearchParams(query).get('order')!==order.id)
+  throw Error('Open this order again from My orders, then retry.');
+ return order;
 }

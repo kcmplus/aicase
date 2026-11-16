@@ -7,7 +7,7 @@ from management_api import views
 from management_api.phone_colors import PhoneColorViewSet
 from management_api.inventory import (ConnectionViewSet, DeviceViewSet, ProductViewSet,
                                      StockViewSet, RunViewSet, InventoryOptions)
-from management_api.orders import StoreOrders, StoreOrder, StoreOrderAction, OrderFulfillment
+from management_api.orders import StoreOrders, StoreOrder, StoreOrderAction, OrderFulfillment, StoreOrderProgress
 from management_api.ai_service import AIServiceSettingsView, AIServiceCheckView
 from management_api.ai_generation import AIAccountView, AIRenders, AIRenderDetail, AIRenderImage
 from management_api.ai_reporting import AIUsageView, AICallLogsView, AIRenderCostView, AIAdminImageView
@@ -20,6 +20,7 @@ from management_api.payments import PublicPaymentConfig, PaymentCheckout
 from management_api.airwallex_payments import AirwallexSettings, AirwallexWebhook
 
 from management_api.refunds import AdminRefund
+from management_api.order_stations import OrderStations, public_print_stations
 from management_api.device_info import public_device_info
 from management_api.supplier_orders import OrderTarget, OrderFiles, ConfirmSupplierPrint, SupplierFile, SupplierImage, FulfillmentConfig, RetrySupplierOrder
 from management_api.terminal_orders import RetiredTerminalAPI
@@ -72,6 +73,9 @@ urlpatterns = [
     path("api/v1/terminal/orders/", RetiredTerminalAPI.as_view()),
     path("api/v1/terminal/orders/<uuid:reference>/claim/", RetiredTerminalAPI.as_view()),
     path("api/v1/terminal/orders/<uuid:reference>/observe/", RetiredTerminalAPI.as_view()),
+    path("api/v1/store/print-stations/", public_print_stations),
+    path("api/v1/store/orders/<uuid:reference>/stations/", OrderStations.as_view()),
+    path("api/v1/store/orders/<uuid:reference>/progress/", StoreOrderProgress.as_view()),
     path("api/v1/store/orders/<uuid:reference>/", StoreOrder.as_view()),
     path("api/v1/store/orders/<uuid:reference>/actions/", StoreOrderAction.as_view()),
     path("api/health/", lambda request: JsonResponse({"status": "ok"})),

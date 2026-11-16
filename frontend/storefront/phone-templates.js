@@ -2,6 +2,9 @@ import templates from './assets/phone-templates/templates.json' with {type:'json
 
 // Versioned files are immutable. Retain old entries when adding a new revision.
 export const phoneTemplates=Object.freeze(templates.map(t=>Object.freeze({...t})));
+const knownDesignModels=new Set();
+export function registerDesignModels(models){for(const model of models)knownDesignModels.add(model);}
+export const isKnownDesignModel=model=>knownDesignModels.has(model);
 const supplierTemplates=new Map(),selectedTemplates=new Map();
 export function registerSupplierTemplates(items,{select=false}={}){
  if(!Array.isArray(items))throw Error('Invalid phone templates.');
@@ -16,6 +19,7 @@ export function registerSupplierTemplates(items,{select=false}={}){
  if(select)selectedTemplates.clear();
  for(const t of validated){supplierTemplates.set(t.id,t);if(select)selectedTemplates.set(t.model,t.id);}
 }
+export function selectSupplierTemplate(model,id){if(id)selectedTemplates.set(model,id);else selectedTemplates.delete(model);}
 export function phoneTemplate(model,id){
  const supplier=supplierTemplates.get(id??selectedTemplates.get(model));
  const template=supplier?.model===model?supplier:phoneTemplates.findLast(t=>t.model===model&&(id===undefined||t.id===id));

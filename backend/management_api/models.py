@@ -301,6 +301,7 @@ class PrintOrder(Timestamped):
     customer = models.ForeignKey('Customer', null=True, blank=True, on_delete=models.SET_NULL,
                                  related_name='print_orders', editable=False)
     model_name = models.CharField(max_length=120)
+    case_material = models.CharField(max_length=20, blank=True, default='', choices=[('', '款式待确认'), ('standard', '普通款'), ('magnetic', '磁吸款')])
     status = models.CharField(max_length=30, default="pending", choices=[("pending", "待付款"), ("paid", "已确认"), ("printing", "打印中"), ("ready", "待取货"), ("completed", "已完成"), ("cancelled", "已取消")])
     amount = models.DecimalField(max_digits=8, decimal_places=2, validators=[MinValueValidator(0)])
     currency = models.CharField(max_length=3, default="USD")

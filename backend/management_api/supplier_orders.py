@@ -1,4 +1,5 @@
 """Phone-selected cloud orders. Unknown remote writes are never replayed."""
+from .case_materials import stock_material
 import hashlib
 import json
 import re
@@ -138,6 +139,10 @@ class OrderTarget(StoreOrders):
             product__phone_model__name=order.model_name).first()
         if not stock or stock.product.connection_id != stock.device.connection_id:
             raise Conflict('The selected device does not have this phone model available.')
+        if order.case_material and stock_material(stock) != order.case_material:
+            raise Conflict('This device does not have the selected case style available.')
+        if not order.case_material and order.snapshot.get('_inventory_item') != stock.pk:
+            raise Conflict('The case style of this existing order must be confirmed before changing its product.')
         # Bind the exact server-validated template selected in the design. Switching
         # to another template requires a new render/review, never a silent substitute.
         if order.snapshot.get('_inventory_item') != stock.pk and not data['accept_template']:
@@ -232,6 +237,7 @@ class RetrySupplierOrder(StoreOrders):
         if (not stock or stock.device_id != row.device_id
                 or stock.product.connection_id != row.device.connection_id
                 or str(stock.product.goods_id) != str(row.goods_id)
+                or (row.order.case_material and stock_material(stock) != row.order.case_material)
                 or stock_template(stock) != order.snapshot.get('_template')
                 or row.snapshot_sha256 != digest(order.snapshot) or not row.image_sha256):
             raise Conflict('The station stock or template changed. Contact staff before sending.')
@@ -346,6 +352,7 @@ def dispatch_order(pk):
         stock = available_stocks().filter(pk=row.inventory_item_id).first()
         if (not stock or stock.device_id != row.device_id or stock.product.connection_id != row.device.connection_id
                 or stock.product.goods_id != str(row.goods_id)
+                or (row.order.case_material and stock_material(stock) != row.order.case_material)
                 or stock_template(stock) != order.snapshot.get('_template')):
             SupplierOrder.objects.filter(pk=pk).update(message='库存或模板正在更新，暂未推送到设备。', updated_at=timezone.now())
             return False

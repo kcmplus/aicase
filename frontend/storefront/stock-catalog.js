@@ -1,18 +1,31 @@
-import {registerSupplierTemplates} from './phone-templates.js';
+import {registerSupplierTemplates,registerDesignModels,selectSupplierTemplate} from './phone-templates.js';
 import {validPhoneColors} from './phone-colors.js';
 export const stockedPhoneModels=[];
 export let stockCatalogStatus='loading';
 let records=[];
-export const stockSelection=model=>records.find(r=>r.name===model)||null;
+export function stockSelection(model,material){
+ const record=records.find(r=>r.name===model);if(!record)return null;
+ if(material===undefined)return record;
+ const style=record.styles?.find(s=>s.caseMaterial===material);
+ return style?.available?{...record,...style,templateId:style.templateId,inventoryItemId:style.inventoryItemId}:null;
+}
 export function applyStockCatalog(data){
  if(data?.version!==1||!Array.isArray(data.models)||!Array.isArray(data.templates))throw Error('Invalid stock catalog.');
  const names=new Set();
  for(const r of data.models){
-  if(typeof r.name!=='string'||!r.name||names.has(r.name)||typeof r.brand!=='string'||!data.templates.some(t=>t.model===r.name&&t.id===r.templateId&&t.inventoryItemId===r.inventoryItemId))throw Error('Invalid stocked model.');
+  if(typeof r.name!=='string'||!r.name||names.has(r.name)||typeof r.brand!=='string'||!((data.scope==='catalog'&&r.templateId===undefined&&r.inventoryItemId===undefined)||data.templates.some(t=>t.model===r.name&&t.id===r.templateId&&t.inventoryItemId===r.inventoryItemId)))throw Error('Invalid stocked model.');
+  if(r.styles!==undefined){
+   if(!Array.isArray(r.styles)||r.styles.length!==2||new Set(r.styles.map(s=>s.caseMaterial)).size!==2)throw Error('Invalid case styles.');
+   for(const s of r.styles){
+    if(!['standard','magnetic'].includes(s.caseMaterial)||typeof s.available!=='boolean'||(s.templateId!==undefined&&!data.templates.some(t=>t.model===r.name&&t.id===s.templateId&&t.inventoryItemId===s.inventoryItemId))||(data.scope==='device'&&s.available&&!s.templateId))throw Error('Invalid case style.');
+   }
+  }
   names.add(r.name);
  }
  registerSupplierTemplates(data.templates,{select:true});
- records=data.models.map(r=>({...r,colors:validPhoneColors(r.colors,data.templates.find(t=>t.id===r.templateId))}));stockedPhoneModels.splice(0,stockedPhoneModels.length,...records.map(r=>r.name));stockCatalogStatus=data.availability==='updating'?'updating':'ready';
+ for(const r of data.models)selectSupplierTemplate(r.name,r.templateId);
+ registerDesignModels(data.models.map(r=>r.name));
+ records=data.models.map(r=>({...r,colors:validPhoneColors(r.colors,data.templates.find(t=>t.id===r.templateId)),...(r.styles?{styles:r.styles.map(style=>({...style,colors:validPhoneColors(style.colors,data.templates.find(t=>t.id===style.templateId))}))}:{})}));stockedPhoneModels.splice(0,stockedPhoneModels.length,...records.map(r=>r.name));stockCatalogStatus=data.availability==='updating'?'updating':'ready';
 }
 export function unavailableStockCatalog(){
  records=[];stockedPhoneModels.splice(0);registerSupplierTemplates([],{select:true});stockCatalogStatus='unavailable';

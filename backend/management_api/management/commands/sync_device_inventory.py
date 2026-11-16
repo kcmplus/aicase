@@ -40,7 +40,7 @@ class Command(BaseCommand):
     def sync_once(self, options):
         failed = False
         # Skip all supplier I/O in the isolated local simulator.
-        if settings.DIRECT_DEBUG_ENABLED:
+        if getattr(settings, 'DIRECT_DEBUG_ENABLED', False):
             self.stdout.write('直连模拟模式不查询供应商设备资料或库存。')
             return
         connections = DeviceProviderConnection.objects.filter(active=True)

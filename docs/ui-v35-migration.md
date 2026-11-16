@@ -315,3 +315,7 @@ backend/.venv/bin/python -m unittest discover -s scripts -p test_v35_runtime.py 
 浏览器布局回归 `frontend/tests/preview-fit-browser.mjs` 使用真实 CSS、机型渲染器和适配函数，在 1440×900、390×844、320×568、844×390 下分别检查普通/放大模式，8 项通过，截图位于忽略提交的 `test-results/preview-fit/`。以旧适配函数作负向验证，桌面放大预览即超出容器内容区（未扣除完整内边距与说明）。这是合成设计的布局验收，不代表真实下单或完整业务端到端验收。运行需先启动 storefront，并提供 Playwright；可通过 `PLAYWRIGHT_MODULE`、`CHROMIUM_PATH`、`PREVIEW_URL` 指定本机依赖及地址。
 
 既有用户端测试 216/216、V35 与启动回归 67/67 通过；未部署、未执行真实打印。
+
+## 2026-11-16 · dev 业务整合检查点
+
+在 `codex/ui-v35-dev-integration` 合并 dev `a2e74c1` 与 V35 `ceb718d`，保留 dev 的已发布机型目录、普通款／磁吸款、网点和订单进度，并接入新版页面、RGB 颜色和单份协议。迁移兼容、冲突处理及本地验证见 [整合记录](ui-v35-dev-integration.md)。本检查点不替代上述未完成的完整产品验收。

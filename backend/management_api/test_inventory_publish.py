@@ -24,7 +24,7 @@ class AutoPublishTests(TestCase):
         override.enable(); self.addCleanup(override.disable)
         self.rows = [lane()]
         self.rows[0].update(product_brand_name='Google', product_name='Google Pixel 11',
-            specs=[{'spec_name':'型号','spec_value':'Pixel 11 Pro XL'}],
+            specs=[{'spec_name':'型号','spec_value':'Pixel 11 Pro XL'},{'spec_name':'版本','spec_value':'普通款'}],
             template_url='https://file.autovendpro.com/one.png')
 
     def test_sync_publishes_new_google_and_refreshes_template_without_duplicates(self):
@@ -45,15 +45,15 @@ class AutoPublishTests(TestCase):
             self.assertEqual(PhoneModel.objects.count(), 1)
             self.rows[0]['surplus_stock'] = 0
             self.sync()
-            self.assertEqual(store_models({})['models'], [])
+            self.assertEqual(store_models({'device_id':'401','shop_id':'146'})['models'], [])
 
     def test_failed_template_retries_and_does_not_expose_incomplete_model(self):
         with patch('management_api.supplier_templates.download_template', side_effect=TemplateError('暂不可用')):
             self.assertEqual(self.sync().status, 'success')
-        self.assertEqual(store_models({})['models'], [])
+        self.assertEqual(store_models({'device_id':'401','shop_id':'146'})['models'], [])
         with patch('management_api.supplier_templates.download_template', return_value=png()):
             self.sync()
-        self.assertEqual(len(store_models({})['models']), 1)
+        self.assertEqual(len(store_models({'device_id':'401','shop_id':'146'})['models']), 1)
 
     def test_manual_disable_while_pending_is_not_undone(self):
         for kind, serializer in [('product', ProductSerializer), ('model', PhoneModelSerializer), ('brand', BrandSerializer)]:
@@ -70,7 +70,7 @@ class AutoPublishTests(TestCase):
                 obj.refresh_from_db()
                 self.assertFalse(obj.active)
                 self.assertFalse(obj.auto_publish_pending)
-                self.assertEqual(store_models({})['models'], [])
+                self.assertEqual(store_models({'device_id':'401','shop_id':'146'})['models'], [])
                 # Restore for the next independent manual override.
                 obj.active = True; obj.save()
 
@@ -81,7 +81,7 @@ class AutoPublishTests(TestCase):
             self.sync()
         model.refresh_from_db()
         self.assertFalse(model.active)
-        self.assertEqual(store_models({})['models'], [])
+        self.assertEqual(store_models({'device_id':'401','shop_id':'146'})['models'], [])
 
     def test_changed_template_failure_hides_old_template_until_recovered(self):
         with patch('management_api.supplier_templates.download_template', return_value=png()):
@@ -89,10 +89,10 @@ class AutoPublishTests(TestCase):
         self.rows[0]['template_url'] = 'https://file.autovendpro.com/changed.png'
         with patch('management_api.supplier_templates.download_template', side_effect=TemplateError('暂不可用')):
             self.sync()
-        self.assertEqual(store_models({})['models'], [])
+        self.assertEqual(store_models({'device_id':'401','shop_id':'146'})['models'], [])
         with patch('management_api.supplier_templates.download_template', return_value=png()):
             self.sync()
-        self.assertEqual(len(store_models({})['models']), 1)
+        self.assertEqual(len(store_models({'device_id':'401','shop_id':'146'})['models']), 1)
 
     def test_pixel_variants_are_distinct_and_unknown_models_remain_unpublished(self):
         from types import SimpleNamespace
@@ -104,4 +104,4 @@ class AutoPublishTests(TestCase):
         with patch('management_api.supplier_templates.download_template') as download:
             self.sync()
         download.assert_not_called()
-        self.assertEqual(store_models({})['models'], [])
+        self.assertEqual(store_models({'device_id':'401','shop_id':'146'})['models'], [])

@@ -8,7 +8,7 @@ from .models import Device
 
 
 def sync_connection(connection, actor_name='管理命令', *, device_id=None):
-    if settings.DIRECT_DEBUG_ENABLED:
+    if getattr(settings, 'DIRECT_DEBUG_ENABLED', False):
         raise ProviderError('直连模拟模式不查询供应商设备资料或库存。')
     if not connection.active:
         raise ProviderError('连接已停用，请先启用连接。')

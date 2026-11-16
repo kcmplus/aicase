@@ -5,12 +5,12 @@ import {exportCase} from './print-export.js';
 import {esc} from './art.js';
 import {stationNavigation} from './station-navigation.js';
 
-export function stationIdentity(device,{lang='en-US'}={}){
+export function stationIdentity(device,{lang='en-US',navigation=true}={}){
  const text=value=>typeof value==='string'?value.trim():'';
  const zh=lang==='zh-CN',name=text(device?.name)||(zh?'打印设备':'Print station');
  const location=text(device?.location)||(zh?'位置暂未填写，请核对现场设备。':'Location not provided. Check the station on site.');
  const number=text(device?.number),id=device?.device_id;
- return `<div class="station-identity"><strong class="station-identity-name">${esc(name)}</strong><p class="station-identity-location">${esc(location)}</p><small>${zh?'设备编号':'Device ID'}：${esc(id||'—')}${number&&number!==id?` · ${esc(number)}`:''}</small>${stationNavigation(device,{lang})}</div>`;
+ return `<div class="station-identity"><strong class="station-identity-name">${esc(name)}</strong><p class="station-identity-location">${esc(location)}</p><small>${zh?'设备编号':'Device ID'}：${esc(id||'—')}${number&&number!==id?` · ${esc(number)}`:''}</small>${navigation?stationNavigation(device,{lang}):''}</div>`;
 }
 
 export async function fulfillmentConfig(fetcher=fetch){
@@ -34,12 +34,12 @@ export function scopeIds(scope){
 }
 export function isPickup(order){return order?.fulfillmentType==='pickup';}
 export function deliveryLabel(type,lang='en-US'){
- const labels={pickup:['On-site pickup','设备现场自取'],courier:['Courier delivery','快递配送'],air:['Air delivery','空运配送'],unspecified:['Delivery method not confirmed','配送方式待确认']};
+ const labels={pickup:['On-site pickup','到网点自取'],courier:['Courier delivery','快递配送'],air:['Air delivery','空运配送'],unspecified:['Delivery method not confirmed','配送方式待确认']};
  return (labels[type]||labels.unspecified)[lang==='zh-CN'?1:0];
 }
-export function deliveryOptions(selected='pickup',lang='en-US'){
+export function deliveryOptions(selected='pickup',lang='en-US',{pickupDetails=''}={}){
  const zh=lang==='zh-CN';
- return `<fieldset class="delivery-options"><legend>${zh?'选择配送方式':'Delivery method'}</legend>${['pickup','courier','air'].map(type=>`<label><input type="radio" name="fulfillment_type" value="${type}" ${selected===type?'checked':''}><span>${deliveryLabel(type,lang)}${type==='pickup'?`<small>${zh?'到设备前扫码，打印后自取':'Scan a station and collect your printed case.'}</small>`:`<small>${zh?'暂未开放，下单前不会收款':'Coming soon. Checkout is not available yet.'}</small>`}</span></label>`).join('')}</fieldset>`;
+ return `<fieldset class="delivery-options"><legend>${zh?'选择配送方式':'Delivery method'}</legend>${['pickup','courier','air'].map(type=>`<label><input type="radio" name="fulfillment_type" value="${type}" ${selected===type?'checked':''}><span>${deliveryLabel(type,lang)}${type==='pickup'?`<small>${zh?'点击查看网点并请求定位，到设备前扫码打印。':'Choose to view stations and request your location. Scan the station when you arrive.'}</small>`:`<small>${zh?'暂未开放，下单前不会收款':'Coming soon. Checkout is not available yet.'}</small>`}</span></label>${type==='pickup'&&selected==='pickup'?`<div id="pickup-station-panel" class="pickup-option-details">${pickupDetails}</div>`:''}`).join('')}</fieldset>`;
 }
 export function deliveryStatusPanel(order,{lang='en-US',busy=false}={}){
  const zh=lang==='zh-CN',say=(en,cn)=>zh?cn:en;
@@ -86,8 +86,10 @@ export async function prepareDeviceOrder(order,scope,{save,request=orderRequest,
  if(!current.fulfillment){
   const response=await fetcher('/api/v1/store/phone-models/?'+new URLSearchParams(ids),{cache:'no-store',credentials:'omit',signal:AbortSignal.timeout(10000)});
   if(!response.ok)throw Error('This station’s phone models could not be loaded.');
-  const catalog=await response.json(),model=catalog.models?.find(m=>m.name===order.pass.model);
-  if(!model)throw Error('This station has no stock for your phone model.');
+  const catalog=await response.json(),phone=catalog.models?.find(m=>m.name===order.pass.model);
+  const style=order.pass.caseMaterial?phone?.styles?.find(s=>s.caseMaterial===order.pass.caseMaterial&&s.available):null;
+  const model=order.pass.caseMaterial?(style?.templateId?{...phone,...style}:null):phone;
+  if(!model)throw Error('This station has no stock for your phone model and case style.');
   registerSupplierTemplates(catalog.templates);
   await request(order.id+'/device/',{method:'POST',body:{...ids,inventory_item_id:model.inventoryItemId,accept_template:true}});
   current=await save(await request(order.id+'/'));

@@ -273,7 +273,7 @@ class PhoneColorTests(TestCase):
         self.assertEqual(self.client.get(f'{self.base}?phone_model=bad').status_code, 400)
         self.model.refresh_from_db()
         self.assertFalse(self.model.print_ready)
-        self.assertEqual(self.client.get('/api/v1/store/phone-models/').data['models'], [])
+        self.assertEqual(self.client.get('/api/v1/store/phone-models/', {'device_id': '401', 'shop_id': '146'}).data['models'], [])
 
     def test_out_of_range_model_filter_returns_validation_error(self):
         response = self.client.get(self.base, {'phone_model': '999999999999999999999999999999'})
@@ -562,7 +562,7 @@ class PhoneColorInitializationTests(TestCase):
 
 class PhoneColorMigrationTests(TransactionTestCase):
     def test_additive_migration_preserves_historical_models_and_order_snapshots(self):
-        before = [('management_api', '0033_merge_catalog_location')]
+        before = [('management_api', '0033_merge_catalog_location'), ('management_api', '0033_order_case_material'), ('management_api', '0031_direct_debug_transport')]
         after = MigrationExecutor(connection).loader.graph.leaf_nodes('management_api')
         executor = MigrationExecutor(connection)
         executor.migrate(before)
