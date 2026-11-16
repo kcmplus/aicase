@@ -17,7 +17,7 @@ from rest_framework.test import APIClient
 
 from .ai_generation import edit_image, GenerationError, run_render, restore_credit
 from .ai_service import encrypt_api_key, switch_provider, NoRedirect
-from .models import AIAccount, AIRender, AIServiceConfig, AIStyle, Customer, CreditEntry
+from .models import AIAccount, AIRender, AIServiceConfig, AIStyle, Customer, CreditEntry, PhoneModel
 
 
 def png():
@@ -71,6 +71,53 @@ class LiveGenerationTests(TestCase):
         entry=CreditEntry.objects.get(kind='generation');self.assertEqual(entry.amount,-1);self.assertEqual(entry.balance_after,0)
         self.assertNotIn('Private English style prompt',str(response.data));self.assertNotIn('api_key',str(response.data))
         conflict,_=self.create(model='iPhone 16e');self.assertEqual(conflict.status_code,409)
+
+    def test_published_model_without_bundled_template_can_generate_and_retry_once(self):
+        model = PhoneModel.objects.create(brand=PhoneModel.objects.get(name='iPhone 17').brand,
+            code='iphone-13-pro', name='iPhone 13 Pro', active=True, adaptation_prompt='Keep the portrait centered.')
+        # This is an actual published catalog choice with no stock/template.
+        catalog = self.client.get('/api/v1/store/phone-models/').data
+        choice = next(item for item in catalog['models'] if item['name'] == model.name)
+        self.assertNotIn('templateId', choice)
+        response, dispatch = self.create(model=model.name)
+        self.assertEqual(response.status_code, 202, response.data)
+        self.assertEqual(dispatch.call_count, 1)
+        job = AIRender.objects.get(pk=response.data['id'])
+        self.assertEqual(job.phone_model, model.name)
+        self.assertEqual(job.phone_template_id, '')
+        self.assertEqual(response.data['phoneTemplateId'], '')
+        self.assertIn('Exact case template geometry is not available', job.prompt)
+        self.assertIn('Keep the portrait centered.', job.prompt)
+        self.assertNotIn('The final case canvas ratio is', job.prompt)
+        self.assertTrue(job.prompt.startswith('PHONE-CASE CAMERA CUTOUT SAFETY'))
+        self.assertEqual(AIAccount.objects.get().trial_used, 1)
+        again, dispatch = self.create(model=model.name)
+        self.assertEqual(again.status_code, 200)
+        self.assertFalse(dispatch.called)
+        self.assertEqual(AIRender.objects.count(), 1)
+        self.assertEqual(CreditEntry.objects.filter(kind='generation').count(), 1)
+        # Generating a design cannot grant print eligibility for an unknown template.
+        from .orders import Snapshot
+        snapshot = Snapshot(data={'version': 2, 'code': 'POP-C-0123456789ABCDEF',
+            'source': 'collection', 'designId': 'bloom', 'model': model.name,
+            'caseMaterial': 'standard', 'photo': '', 'effect': 'original',
+            'intensity': 65, 'zoom': 100, 'x': 50, 'y': 50})
+        self.assertFalse(snapshot.is_valid())
+
+    def test_unpublished_models_or_brands_do_not_reserve_generation_credit(self):
+        model = PhoneModel.objects.create(brand=PhoneModel.objects.get(name='iPhone 17').brand,
+            code='unpublished-phone', name='Unpublished Phone', active=False)
+        response, dispatch = self.create(model=model.name)
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(dispatch.called)
+        model.active = True; model.save()
+        model.brand.active = False; model.brand.save()
+        response, dispatch = self.create(model=model.name)
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(dispatch.called)
+        self.assertEqual(AIAccount.objects.get().trial_used, 0)
+        self.assertFalse(AIRender.objects.exists())
+        self.assertFalse(CreditEntry.objects.filter(kind='generation').exists())
 
     def test_default_catalog_styles_accept_generation_without_manual_prompt_edits(self):
         AIStyle.objects.filter(code='anime').update(prompt=self.seeded_anime_prompt)
