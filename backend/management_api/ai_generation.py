@@ -148,6 +148,16 @@ class RenderInput(StrictSerializer):
 
 
 def build_prompt(style, model, template):
+    # AI design is allowed for every published model, independently of print
+    # inventory/templates. Missing geometry must not masquerade as an exact fit.
+    canvas_guidance = (
+        f'The final case canvas ratio is {template["printWidth"]}:{template["printHeight"]}. '
+        'Create a full-bleed portrait artwork that can be cropped to that narrower ratio. '
+        if template else
+        'Exact case template geometry is not available for this model. '
+        'Create full-bleed portrait artwork using the conservative placement rules above; '
+        'the exact print fit will be checked separately before printing. '
+    )
     # Text guidance, not a claim that the provider receives the actual cutout mask.
     # Put composition constraints before every style, including custom styles.
     return ('PHONE-CASE CAMERA CUTOUT SAFETY — APPLY BEFORE STYLE\n'
@@ -168,8 +178,7 @@ def build_prompt(style, model, template):
             'recognizable features and main subject of the uploaded photo. Apply the following style '
             'to this uploaded subject; do not substitute a stock example or invent a different person.\n\n'
             'STYLE\n'+style.prompt+'\n\nCOMPOSITION\n'+model.adaptation_prompt+
-            f'\nThe final case canvas ratio is {template["printWidth"]}:{template["printHeight"]}. '
-            'Create a full-bleed portrait artwork that can be cropped to that narrower ratio. '
+            '\n'+canvas_guidance+
             'Keep the main subject within the central half of the image and important facial details '
             'below the upper quarter. Extend the background to the edges. The application will apply '
             'the case mask after generation. Do not depict a phone, case border, camera lens, camera '
@@ -296,7 +305,7 @@ class AIRenders(AIPrivateView):
             template=template_for(data['model'])
             if not style or not style.prompt.strip():
                 raise serializers.ValidationError('This AI style is unavailable or has no saved prompt.')
-            if not model or not template:
+            if not model:
                 raise serializers.ValidationError('Choose an available phone model first.')
             if AIRender.objects.filter(owner_hash=key,status__in=['queued','generating']).exists():
                 return Response({'detail':'Finish your current render before starting another.'},status=409)
@@ -317,7 +326,7 @@ class AIRenders(AIPrivateView):
                 return Response({'detail':'No AI generations remaining. Subscribe or wait for your next monthly reset.'},status=409)
             account.save(update_fields=['trial_used','subscription','updated_at'])
             job=AIRender.objects.create(request_key=data['request_key'],owner_hash=key,style_code=style.code,
-                style_name=style.name,provider=config.provider,model_name=config.model_name,phone_model=model.name,phone_template_id=template['id'],
+                style_name=style.name,provider=config.provider,model_name=config.model_name,phone_model=model.name,phone_template_id=template['id'] if template else '',
                 prompt=build_prompt(style,model,template),input_image=raw,input_mime=mime,input_hash=digest,allocation=allocation)
             pool = 'gift' if allocation['type']=='trial' else 'monthly'
             record(account, 'render:'+str(job.pk), 'generation', pool, gift_before if pool=='gift' else monthly_before, balance(account,pool), render_id=job.pk, period=allocation.get('period'))

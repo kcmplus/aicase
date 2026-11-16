@@ -9,11 +9,13 @@ body:is([data-v35-route="checkout"],[data-v35-route="orders"],[data-v35-route="p
 .v35-checkout .ai-heading p,.v35-orders .ai-heading p {max-width:65ch;color:var(--muted);line-height:1.7}
 .v35-checkout .ai-order-layout {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px;align-items:start}
 .v35-checkout .checkout-preview,.v35-checkout .ai-order-card {min-width:0;border:1px solid var(--line);border-radius:13px;background:#fff;box-shadow:none;padding:24px}
-.v35-checkout .checkout-preview {padding:0 0 22px;overflow:hidden;text-align:left}
+.v35-checkout .checkout-preview {display:block;padding:0 0 22px;overflow:hidden;text-align:left}
 .v35-checkout .checkout-preview>h2,.v35-checkout .checkout-preview>p {margin-left:22px;margin-right:22px}
 .v35-checkout .checkout-preview h2 {font-size:18px;font-weight:600}
 .v35-checkout .checkout-case {margin:0 0 22px;height:340px;padding:25px;background:#efe3fa;display:flex;align-items:center;justify-content:center}
-.v35-checkout .checkout-case .case {max-height:290px}
+/* Reset the legacy 64px mobile summary column; the whole design is the review focus. */
+.v35-checkout .checkout-preview>.checkout-case {width:100%;max-width:none}
+.v35-checkout .checkout-preview>.checkout-case>.phone-case {width:auto;height:100%;max-width:100%;flex:none}
 .v35-checkout .device-fulfillment .checkout-case {height:auto;border-radius:10px;margin-top:16px}
 .v35-checkout .ai-order-card h2 {font-size:23px}
 .v35-checkout .print-quote {border:0;padding:0;background:transparent}
@@ -45,7 +47,6 @@ body:is([data-v35-route="checkout"],[data-v35-route="orders"],[data-v35-route="p
  .v35-checkout .ai-order-layout {grid-template-columns:minmax(0,1fr);gap:20px}
  .v35-checkout .ai-order-card {padding:20px}
  .v35-checkout .checkout-case {height:280px}
- .v35-checkout .checkout-case .case {max-height:240px}
  .v35-orders .order-row {flex-direction:column;padding:18px;gap:16px}
  .v35-orders .order-row>div:last-child {align-items:stretch}
  .v35-checkout .steps {max-width:100%;flex-wrap:wrap;gap:8px}

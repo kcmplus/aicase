@@ -44,3 +44,73 @@ body{font-family:'DM Sans','PingFang SC','Microsoft YaHei',sans-serif;background
 .v35-phone-colors button[aria-pressed=true]{border-color:#7c3aed;box-shadow:0 0 0 1px #7c3aed}
 .v35-phone-colors button:focus-visible{outline:3px solid #7c3aed;outline-offset:3px}
 .v35-phone-colors button span{display:block;flex:none;width:22px;height:22px;border:1px solid #aaa;border-radius:50%}
+
+/* Match the supplied live prototype; keep the real catalog and editor underneath. */
+.v35-wordmark>span{font-style:italic;font-synthesis:style}
+.v35-hero .v35-kicker{display:flex;align-items:center;justify-content:center;gap:14px}
+.v35-hero .v35-kicker svg{width:20px;height:20px;color:#a234fd;display:block}
+.v35-hero .v35-intro{color:#372c3d;max-width:700px}
+.v35-entries{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+.v35-entries .v35-entry i{display:none}
+.v35-entries .v35-tertiary{border:2px solid white}
+.v35-journey{color:#5e4b69!important;line-height:2}
+.v35-demo-camera{width:78px;height:83px;left:25px;top:26px;border:1px solid #dfc9ef;border-radius:20px;background:#d8bfeb;box-shadow:1px 3px 4px #0004;display:block;padding:0}
+.v35-demo-camera i{position:absolute;width:29px;height:29px;border:0;background:radial-gradient(circle at 45% 40%,#577b8a 1px,#11171c 3px,#1e2530 7px,#050a0c 9px,#6d7977 10px,#1e2424 12px);box-shadow:0 0 0 2px #d8bfeb}
+.v35-demo-camera i:nth-child(1){top:8px;left:8px}.v35-demo-camera i:nth-child(2){top:43px;left:8px}.v35-demo-camera i:nth-child(3){top:26px;right:5px}
+.v35-demo-camera b{position:absolute;right:14px;top:8px;width:11px;height:11px;border-radius:50%;background:#f4ecd8}
+.v35-fan-note{transform:rotate(-8deg);line-height:1.8}
+.v35-orbit>i,.v35-orbit>b,.v35-orbit>em{position:absolute;display:block;width:17px;height:17px;border-radius:50%;background:radial-gradient(circle at 25% 25%,#8bbdff,#4169e8 45%,#2636ad 80%);box-shadow:0 3px 9px #3611543d;left:50%;bottom:-8px}
+.v35-orbit>i{left:5%;bottom:25%;width:11px;height:11px;background:radial-gradient(circle at 25% 25%,#d8bfeb,#47c6c4 50%,#238d99 80%)}
+.v35-orbit>em{left:85%;bottom:80%;background:radial-gradient(circle at 25% 25%,#ffcc92,#ef6a49 45%,#b94756 80%)}
+.v35-phone-open{overflow:hidden}
+.v35-home-phone,.v35-home-phone *{box-sizing:border-box}
+.v35-home-phone{padding:0;width:min(600px,calc(100% - 24px));max-width:calc(100% - 24px);max-height:90dvh;margin:auto;color:#100519;background:#fcf9ff;border:1px solid #dfc9ef;border-radius:24px;box-shadow:0 20px 60px #36115433;overflow:hidden}
+.v35-home-phone[open]{display:flex;flex-direction:column}
+.v35-home-phone::backdrop{background:#19062466}
+.v35-home-phone header{display:flex;justify-content:space-between;align-items:center;gap:8px;background:#f3e8ff;padding:24px;border-bottom:1px solid #dfc9ef;flex:none}
+.v35-home-phone h2{margin:0;font-size:24px;font-weight:600;line-height:1.3;letter-spacing:-.5px}
+.v35-home-phone button,.v35-home-phone select{font:inherit;color:inherit;cursor:pointer}
+.v35-home-phone header button{border:0;background:transparent;font-size:28px;min-width:44px;min-height:44px}
+.v35-home-phone-body{padding:24px;overflow:auto;min-height:0;overscroll-behavior:contain}
+.v35-phone-selects{display:grid;grid-template-columns:42% 58%;align-items:center;padding:18px 0;background:white;border:1px solid #dfc9ef;border-radius:18px}
+.v35-phone-selects label{min-width:0;margin:0}.v35-phone-selects label+label{border-left:1px solid #dfc9ef}
+.v35-phone-selects select{width:100%;min-height:44px;background:transparent;border:0;padding:0 12px;font-size:16px;font-weight:400;text-overflow:ellipsis}
+.v35-home-phone .sr-only{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.v35-home-phone .case-style-picker{margin-top:22px}
+.v35-home-phone .case-style-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.v35-home-phone .case-style-options button{padding:10px;min-height:44px}
+.v35-home-phone .case-style-options button[aria-pressed=true]{background:#efe3fa;border-color:#a234fd;color:#7021b0}
+.v35-home-colors{padding:0;margin:24px 0 0;border:0;min-width:0}
+.v35-home-colors legend{font-weight:600;margin-bottom:18px}
+.v35-home-colors>div{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:6px}
+.v35-home-colors button{width:44px;height:44px;flex:none;border:1px solid #0002;border-radius:50%;background:var(--body-color)}
+.v35-home-colors button[aria-pressed=true]{outline:6px solid #a234fd}
+.v35-home-colors p{font-size:16px;line-height:1.6;margin:16px 0 0}
+.v35-home-phone footer{padding:18px 24px;display:flex;align-items:center;justify-content:space-between;gap:18px;background:#faf6ff;border-top:1px solid #dfc9ef;flex:none}
+.v35-home-phone footer>span{color:#786185;font-size:14px;overflow-wrap:anywhere;min-width:0}
+.v35-home-phone footer button{width:auto;min-height:48px;flex:none}
+.v35-home-phone button:disabled{cursor:default;opacity:.45}
+.v35-home-phone :focus-visible{outline:3px solid #7821b9;outline-offset:3px}
+@media(max-width:760px){
+ .v35-hero{min-height:810px;padding-top:124px}
+ .v35-hero h1{font-size:clamp(26px,8.2vw,43px);line-height:1.2;letter-spacing:-.8px;margin:20px 0 22px}
+ .v35-hero .v35-kicker{font-size:12px;letter-spacing:1.4px;gap:12px}
+ .v35-hero .v35-intro{font-size:15px;line-height:1.8;max-width:340px;margin-bottom:22px}
+ .v35-entries{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;max-width:420px}
+ .v35-entries .v35-entry{min-height:50px;padding:10px 6px;gap:8px;font-size:14px}
+ .v35-entries .v35-entry svg{width:17px;height:17px;margin:0}
+ .v35-entries .v35-tertiary{grid-column:1/-1}
+ .v35-journey{margin-top:18px;font-size:13px;line-height:2}
+ .v35-orbit{width:540px;height:275px;top:200px}
+ .v35-fan{margin-top:50px;height:270px}
+ .v35-fan-case{width:142px;height:270px;--fan-x:calc((var(--fan-index) - 2)*149px - 71px)}
+ .v35-demo-camera{left:24px;top:21px;scale:.62}
+ .v35-fan-note{left:22px;top:-20px;font-size:12px;letter-spacing:0}
+ .v35-fan-controls{top:-35px;right:20px;font-size:12px;gap:8px}
+ .v35-fan-controls button{width:30px;height:30px}
+ .v35-fan-spark{display:block;top:0;right:26px;font-size:40px}
+ .v35-home-phone header{padding:20px}.v35-home-phone h2{font-size:21px}
+ .v35-home-phone-body{padding:20px}.v35-home-phone footer{padding:16px 20px;gap:10px}
+ .v35-home-phone footer button{font-size:14px;padding:10px 16px}
+}
+@media(max-width:360px){.v35-hero-copy{padding-inline:16px}.v35-entries .v35-entry{font-size:12px;gap:5px}.v35-hero .v35-kicker{font-size:10px}.v35-home-phone header{padding:16px}.v35-home-phone h2{font-size:19px}.v35-home-phone-body{padding:16px}.v35-home-phone footer{padding:12px 16px}}

@@ -1,3 +1,4 @@
+import {openHomePhoneDialog} from './home-phone-dialog.js';
 import {worksPage,workDetailPage,tutorialPage,aboutPage,locationsPage,membershipInfoPage} from './v35-pages.js';
 import {shellHeader,shellFooter,homePresentation,mountShell} from './v35-shell.js';
 import {caseStylePicker,caseMaterialLabel} from './case-styles.js';
@@ -69,6 +70,7 @@ let aiJob=null,aiBusy=false;
 const aiUi={mode:'pair',compare:50,lookMode:'effect',lookCompare:50,accepted:false,error:'',reconnecting:false};
 let cleanupAIStudio=()=>{};
 let cleanupShell=()=>{};
+let cleanupHomePhone=()=>{};
 const customerUI={email:'',codeSent:false,busy:false,error:'',success:'',ledger:[],ledgerNext:null,ledgerOpen:false,ledgerBusy:false,ledgerError:'',resendAt:0,next:'choose'};
 let resendTimer;
 let membership={...freshMembership(),server:true,authenticated:false,customer:null,...(initialData[4]||{})};
@@ -442,6 +444,12 @@ function selectPhoneModel(model){
  const styles=document.querySelector('#case-style-panel');if(styles)styles.innerHTML=caseStylePicker(stockSelection(state.model),state.caseMaterial,{lang:locale(),scoped:Boolean(stockScope)});
  localize(panel);panel.open=false;panel.querySelector('summary').focus({preventScroll:true});
 }
+function openHomePhone(entry){
+ cleanupHomePhone();
+ cleanupHomePhone=openHomePhoneDialog({root:app,initial:state,lang:locale(),scoped:Boolean(stockScope),
+  catalog:()=>({models:phoneModels,status:stockCatalogStatus,selection:stockSelection}),refresh:refreshStockChoices,
+  onConfirm:choice=>{Object.assign(state,choice);selectSupplierTemplate(state.model,state.phoneTemplateId);colorNotice=false;reviewPass=null;save();if(entry==='photo')openPhotoPicker();else go('choose?source=photo&studio=1');}});
+}
 function openPhotoPicker(){
  // Run inside the click gesture, before any await, so mobile browsers allow it.
  const input=document.querySelector('#photo-file');
@@ -673,6 +681,7 @@ function render(preserveScroll=false) {
   finishInlineText();
   cleanupAIStudio();
   cleanupShell();
+  cleanupHomePhone();
   const oldY=window.scrollY;
   const [route='home',query='']=location.hash.slice(1).split('?');
   if(route!=='choose'){reviewPass=null;reviewSaved=false;}
@@ -680,7 +689,7 @@ function render(preserveScroll=false) {
   if(route!=='choose')canvasExpanded=false;
   if(route!=='choose')effectPanelOpen=false;
   document.body.classList.toggle('canvas-editor-open',canvasExpanded);
-  const pages={account:()=>customerPage(membership,customerUI),'my-designs':()=>myDesignsPage({rows:localDesigns,lang:locale(),preview:passPreview,error:localDesignError,busy:localDesignBusy,guest:workspace.owner==='guest'}),choose,pass:passPage,kiosk:()=>publicStationPage(true),designs:()=>worksPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),work:()=>workDetailPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),'how-it-works':()=>tutorialPage({lang:locale()}),about:()=>aboutPage({lang:locale()}),locations:publicStationPage,printers:publicStationPage,ai:()=>aiPage(aiJob,membership,aiBusy,aiUi),membership:()=>membershipInfoPage({account:membership,lang:locale()}),checkout:checkoutPage,orders:ordersPage,payment:paymentPage};
+  const pages={account:()=>customerPage(membership,customerUI),'my-designs':()=>myDesignsPage({rows:localDesigns,lang:locale(),preview:passPreview,error:localDesignError,busy:localDesignBusy,guest:workspace.owner==='guest'}),choose,pass:passPage,kiosk:()=>publicStationPage(true),designs:()=>worksPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),work:()=>workDetailPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),'how-it-works':()=>tutorialPage({lang:locale()}),about:()=>aboutPage({lang:locale()}),locations:publicStationPage,printers:publicStationPage,ai:()=>aiPage(aiJob,membership,aiBusy,{...aiUi,phoneModels,stockCatalogStatus}),membership:()=>membershipInfoPage({account:membership,lang:locale()}),checkout:checkoutPage,orders:ordersPage,payment:paymentPage};
   app.classList.toggle('is-ai-studio',route==='ai'&&aiJob?.mode==='live');
   app.classList.toggle('is-editor',route==='choose');
   document.body.classList.toggle('v35-home-page',!Object.hasOwn(pages,route));
@@ -795,6 +804,7 @@ app.addEventListener('toggle',event=>{const el=event.target;if(!el.isConnected||
 app.addEventListener('click',event=>{if(event.target.closest('.pickup-stations a')&&(stationFinder.state.error||Date.now()-stationFinder.state.loadedAt>60000)){event.preventDefault();void stationFinder.refresh();}},true);
 app.addEventListener('click',event=>{if(event.target.matches('input[name=fulfillment_type][value=pickup]')&&checkoutDraft&&!checkoutDraft.editId&&(checkoutDraft.fulfillmentType||'pickup')==='pickup')void requestStationLocation();});
 app.addEventListener('change',async event=>{
+  if(event.target.id==='ai-phone-model'){await changeAIPhoneModel(event.target.value);return;}
   if(event.target.matches('#ai-credit-form [name=accepted]'))aiUi.accepted=event.target.checked;
   if(event.target.name==='fulfillment_type'&&checkoutDraft&&!checkoutDraft.editId){
     if(passBusy)return;
@@ -881,7 +891,7 @@ app.addEventListener('submit',async event=>{
 });
 app.addEventListener('click',async event=>{
   const el=event.target.closest('[data-case-material],[data-phone-brand],[data-phone-model],[data-phone-color],[data-action],[data-design],[data-start-design],[data-source],[data-effect],[data-ai-action],[data-ai-look-example],[data-ai-look-step],[data-look-action],[data-look-mode],[data-ai-group],[data-ai-view],[data-artwork-item],[data-add-graphic],[data-quick-font],[data-quick-color]');if(!el||el.disabled||photoBusy||passBusy||aiBusy||sessionCheckBusy)return;
-  if(el.dataset.action==='home-photo'){openPhotoPicker();return;}
+  if(['home-photo','home-ai'].includes(el.dataset.action)){event.preventDefault();openHomePhone(el.dataset.action==='home-photo'?'photo':'ai');return;}
   if(el.dataset.action==='reload-private-workspace'){location.reload();return;}
   if(el.dataset.action==='close-design-review'){closeDesignReview();return;}
   if(['save-local-design','continue-design-checkout','restore-design','delete-design','refresh-designs','restore-legacy-draft'].includes(el.dataset.action)){
@@ -1167,6 +1177,20 @@ async function rememberLiveJob(job){
  membership=await privateUpdate('ai-membership-v1',a=>({...a,jobs:{...a.jobs,[job.id]:job}}),freshMembership());
  aiJob=job;state.aiJobId=job.id;save();
 }
+async function changeAIPhoneModel(model){
+ if(aiBusy||photoBusy||passBusy||sessionCheckBusy||aiJob?.mode!=='live'||aiJob.status!=='awaiting_confirmation'||aiJob.remoteId||aiJob.submissionAttempted||model===aiJob.model)return;
+ const jobId=aiJob.id;aiBusy=true;aiUi.error='';render(true);
+ try{
+  await syncAIAccount();workspace.check();await refreshStockChoices();
+  if(!aiJob||aiJob.id!==jobId||aiJob.status!=='awaiting_confirmation'||aiJob.remoteId||aiJob.submissionAttempted)throw Error('This render has changed. Please review it again.');
+  if(stockCatalogStatus!=='ready'||!phoneModels.includes(model))throw Error('This phone model is unavailable. Please choose again.');
+  // Preserve the request key, photo and style. Changing a draft must not submit a render.
+  await rememberLiveJob({...aiJob,model});
+  Object.assign(state,{model,caseMaterial:'',phoneTemplateId:undefined,phoneColor:null});
+  selectSupplierTemplate(model,undefined);colorNotice=false;reviewPass=null;aiUi.accepted=false;save();
+ }catch(error){aiUi.error=error.message;notify(error.message);}
+ finally{aiBusy=false;render(true);document.querySelector('#ai-phone-model')?.focus({preventScroll:true});}
+}
 async function confirmAI(generation,accepted){
  if(aiBusy)return;
  if(!membership.authenticated){customerUI.next='ai';go('account');return;}
@@ -1175,6 +1199,13 @@ async function confirmAI(generation,accepted){
   await syncAIAccount();workspace.check();
   if(generation){
    if(aiJob?.mode!=='live')throw Error('Choose your photo and start a new AI render.');
+   if(!accepted)throw Error('Confirm using one AI generation first.');
+   if(!aiJob.submissionAttempted){
+    await refreshStockChoices();
+    if(stockCatalogStatus!=='ready'||!phoneModels.includes(aiJob.model))throw Error('This phone model is unavailable. Please choose again.');
+   }
+   // Freeze model changes before sending: a timeout may already have reserved a credit.
+   await rememberLiveJob({...aiJob,submissionAttempted:true});
    await rememberLiveJob(await submitLiveRender(aiJob,accepted));
    await syncAIAccount();
   }else await mergeAIAccount(await changeAIAccount('subscribe',accepted));
