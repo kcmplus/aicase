@@ -81,7 +81,7 @@ export function aiPhonePicker(job,busy,models=[],status='ready'){
  const zh=locale()==='zh-CN';
  if(job.status!=='awaiting_confirmation'||job.remoteId||job.submissionAttempted)return '';
  const available=status==='ready'&&models.length>0;
- return `<div class="studio-phone-picker"><label for="ai-phone-model">${zh?'更改手机机型':'Change phone model'}</label><select id="ai-phone-model" ${busy||!available?'disabled':''}>${!models.includes(job.model)?`<option value="" selected disabled>${esc(job.model)} — ${zh?'请选择可用机型':'choose an available model'}</option>`:''}${models.map(model=>`<option value="${esc(model)}" ${model===job.model?'selected':''}>${esc(model)}</option>`).join('')}</select>${!available?`<p role="status">${zh?'暂时没有可选择的机型，请刷新后重试。':'Phone models are unavailable. Refresh to try again.'}</p><button type="button" class="text-button" data-action="refresh-models" ${busy?'disabled':''}>${zh?'刷新机型':'Refresh phone models'}</button>`:''}</div>`;
+ return `<div class="studio-phone-picker"><label for="ai-phone-model">${zh?'更改手机机型':'Change phone model'}</label><button type="button" id="ai-phone-model" data-action="ai-choose-phone" aria-haspopup="dialog" ${busy?'disabled':''}>${esc(job.model|| (zh?'选择手机机型':'Choose phone model'))} <span aria-hidden="true">⌄</span></button>${!available?`<p role="status">${zh?'暂时没有可选择的机型，请刷新后重试。':'Phone models are unavailable. Refresh to try again.'}</p><button type="button" class="text-button" data-action="refresh-models" ${busy?'disabled':''}>${zh?'刷新机型':'Refresh phone models'}</button>`:''}</div>`;
 }
 
 export function aiPage(job,account,busy=false,ui={}){
