@@ -47,36 +47,41 @@ def resolve_stock_template(model, template_id):
     return None, None
 
 
-def available_colors(model, template):
-    """Optional body previews; invalid colors never remove a saleable base model."""
+def available_colors(model, template=None):
+    """RGB choices belong to the model; verified image resources are optional."""
     from .phone_colors import checked_resource, validate_rgb
     result = []
     for color in model.colors.filter(active=True).select_related('current_resource', 'phone_model').order_by('sort_order', 'pk'):
         try:
             validate_rgb(color.rgb)
-            resource = color.current_resource
-            if not resource or not resource.verified_at or resource.template_id != template['id']:
-                continue
-            resource = checked_resource(color)
-            if (resource.width, resource.height) != (template['sourceWidth'], template['sourceHeight']):
-                continue
         except serializers.ValidationError:
             continue
-        result.append({'code': color.code, 'name': color.name, 'rgb': color.rgb,
-                       'isDefault': color.is_default, 'resource': {
-                           'version': resource.version, 'templateId': resource.template_id,
-                           'width': resource.width, 'height': resource.height,
-                           'overlay': default_storage.url(resource.overlay),
-                           'mask': default_storage.url(resource.mask)}})
+        item = {'code': color.code, 'name': color.name, 'rgb': color.rgb,
+                'isDefault': color.is_default, 'previewMode': 'rgb', 'resource': None}
+        resource = color.current_resource
+        if (template and resource and resource.verified_at
+                and resource.template_id == template['id']
+                and (resource.width, resource.height) == (template['sourceWidth'], template['sourceHeight'])):
+            try:
+                resource = checked_resource(color)
+            except serializers.ValidationError:
+                pass  # Invalid image resources cannot paint a preview, but RGB is still usable.
+            else:
+                item.pop('previewMode')
+                item['resource'] = {'version': resource.version, 'templateId': resource.template_id,
+                                    'width': resource.width, 'height': resource.height,
+                                    'overlay': default_storage.url(resource.overlay),
+                                    'mask': default_storage.url(resource.mask)}
+        result.append(item)
     return result
 
 
 def model_record(model, sources, *, scoped):
-    record = {'name': model.name, 'code': model.code, 'brand': model.brand.name, 'styles': [], 'colors': []}
+    record = {'name': model.name, 'code': model.code, 'brand': model.brand.name, 'styles': [], 'colors': available_colors(model)}
     templates = []
     for material in MATERIALS:
         stock = sources.get((model.pk, material))
-        style = {'caseMaterial': material, 'available': bool(stock) if scoped else True, 'colors': []}
+        style = {'caseMaterial': material, 'available': bool(stock) if scoped else True, 'colors': available_colors(model) if stock or not scoped else []}
         if stock:
             template = stock_template(stock)
             style.update(templateId=template['id'], inventoryItemId=stock.pk, colors=available_colors(model, template))

@@ -294,7 +294,7 @@ async function orderAction(order,action,stationId){
  return rememberOrder(data);
 }
 function personalizedPreview(selection,model,label,original=false){
- const changed=selection.phoneColor&&selection.phoneColor.resource.templateId!==phoneTemplate(model,selection.phoneTemplateId)?.id;
+ const changed=selection.phoneColor?.resource&&selection.phoneColor.resource.templateId!==phoneTemplate(model,selection.phoneTemplateId)?.id;
  const note=changed?`<p class="field-note" role="status">${locale()==='zh-CN'?'当前设备模板不适用原机身颜色，已显示基础预览；原订单颜色快照保留。':'The original body color does not match this station template. Showing the base preview; the original order color is preserved.'}</p>`:'';
  return note+phone(makePersonalDesign(layoutSelection(selection),original),model).replace(/aria-label="[^"]*"/,`aria-label="${esc(label+' on '+model)}"`).replace('alt="你上传的设计照片"',`alt="Your uploaded photo"`);
 }

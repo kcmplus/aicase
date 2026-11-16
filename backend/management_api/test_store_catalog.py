@@ -91,7 +91,8 @@ class StockCatalogTests(TestCase):
             model = next(m for m in self.catalog(params)['models'] if m['name'] == self.model.name)
             standard, magnet = model['styles']
             self.assertEqual([c['code'] for c in standard['colors']], ['natural'])
-            self.assertEqual(magnet['colors'], [])
+            self.assertEqual(magnet['colors'][0]['previewMode'], 'rgb')
+            self.assertIsNone(magnet['colors'][0]['resource'])
             self.assertTrue(magnet['available'])
             self.assertEqual(magnet['templateId'], stock_template(magnetic)['id'])
             self.assertNotEqual(standard['templateId'], magnet['templateId'])
@@ -105,7 +106,7 @@ class StockCatalogTests(TestCase):
 
     def test_inactive_unverified_missing_mismatched_and_corrupt_colors_do_not_hide_base_model(self):
         color = self.color(); resource = color.current_resource
-        changes = [('active', False), ('current_resource', None), ('rgb', {'r': True, 'g': 0, 'b': 0})]
+        changes = [('active', False), ('rgb', {'r': True, 'g': 0, 'b': 0})]
         for field, value in changes:
             original = getattr(color, field)
             PhoneColor.objects.filter(pk=color.pk).update(**{field: value})
@@ -114,16 +115,34 @@ class StockCatalogTests(TestCase):
         for field, value in [('verified_at', None), ('template_id', 'other'), ('width', 42), ('overlay', '../private.png'), ('overlay_sha256', '0'*64)]:
             original = getattr(resource, field)
             PhoneColorResource.objects.filter(pk=resource.pk).update(**{field: value})
-            self.assertEqual(self.catalog()['models'][0]['colors'], [], field)
+            self.assertIsNone(self.catalog()['models'][0]['colors'][0]['resource'], field)
             PhoneColorResource.objects.filter(pk=resource.pk).update(**{field: original})
         default_storage.delete(resource.mask)
-        self.assertEqual(self.catalog()['models'][0]['colors'], [])
+        self.assertIsNone(self.catalog()['models'][0]['colors'][0]['resource'])
         self.assertEqual(self.catalog()['templates'][0], stock_template(self.stock))
         # Even a matching hash cannot turn invalid image bytes into a preview.
         with default_storage.open(resource.mask, 'wb') as output:
             output.write(b'not-a-png')
         PhoneColorResource.objects.filter(pk=resource.pk).update(mask_sha256=hashlib.sha256(b'not-a-png').hexdigest())
-        self.assertEqual(self.catalog()['models'][0]['colors'], [])
+        self.assertIsNone(self.catalog()['models'][0]['colors'][0]['resource'])
+
+    def test_rgb_only_colors_work_without_resources_and_freeze_server_values(self):
+        color = PhoneColor.objects.create(phone_model=self.model, code='rgb-only', name='RGB only',
+                                          rgb={'r': 11, 'g': 22, 'b': 33}, active=True)
+        exposed = self.catalog()['models'][0]['colors'][0]
+        self.assertEqual(exposed['previewMode'], 'rgb')
+        self.assertIsNone(exposed['resource'])
+        valid = Snapshot(data={**self.snapshot, 'phoneColor': {'code': color.code, 'version': 0, 'rgb': color.rgb}})
+        self.assertTrue(valid.is_valid(), valid.errors)
+        self.assertEqual(valid.validated_data['phoneColor'], exposed)
+        for changes in [{'rgb': {'r': 0, 'g': 0, 'b': 0}}, {'rgb': {'r': True, 'g': 22, 'b': 33}}, {'version': 1}, {'code': 'foreign'}]:
+            selection = {'code': color.code, 'version': 0, 'rgb': color.rgb, **changes}
+            invalid = Snapshot(data={**self.snapshot, 'phoneColor': selection})
+            self.assertFalse(invalid.is_valid(), selection)
+        DeviceProduct.objects.filter(pk=self.stock.pk).update(template_image='', template_mask='')
+        record = next(m for m in self.catalog({})['models'] if m['name'] == self.model.name)
+        self.assertTrue(all(style['colors'][0]['rgb'] == color.rgb for style in record['styles']))
+        self.assertEqual(self.catalog()['models'], [])  # RGB does not authorize device printing.
 
     def test_colors_do_not_make_zero_stock_or_missing_template_saleable(self):
         self.color()

@@ -75,7 +75,7 @@ function close(done){if(!busy.value){if(typeof done==='function')done();else ope
     <el-table-column label="颜色 / RGB" min-width="200"><template #default="{row}"><span class="swatch" :style="{background:swatch(row.rgb)}"></span>{{row.name||row.code}} · {{row.rgb.r}}, {{row.rgb.g}}, {{row.rgb.b}}</template></el-table-column>
     <el-table-column prop="code" label="稳定编码"/><el-table-column prop="sort_order" label="排序"/>
     <el-table-column label="状态"><template #default="{row}">{{row.active?'启用':'停用'}}{{row.is_default?' · 默认':''}}</template></el-table-column>
-    <el-table-column label="预览资源" min-width="200"><template #default="{row}">{{row.resource?`v${row.resource.version} · ${row.resource.verified_at?'已人工核验':'待人工核验'}`:'缺资源，可保存草稿'}}</template></el-table-column>
+    <el-table-column label="预览资源" min-width="200"><template #default="{row}">{{row.resource?`v${row.resource.version} · ${row.resource.verified_at?'已人工核验':'待人工核验'}`:'RGB 色块（未配置预览素材）'}}</template></el-table-column>
     <el-table-column label="操作"><template #default="{row}"><el-button link type="primary" @click="edit(row)">{{allowed('change')?'管理':'查看'}}</el-button></template></el-table-column>
    </el-table>
   </div>
@@ -105,7 +105,7 @@ function close(done){if(!busy.value){if(typeof done==='function')done();else ope
     <el-form-item label="资料来源（不自动抓取）"><el-input v-model="form.source" maxlength="500"/></el-form-item>
     <el-form-item label="排序"><el-input-number v-model="form.sort_order" :min="0" :precision="0"/></el-form-item>
     <el-form-item label="默认项（每机型最多一项）"><el-switch v-model="form.is_default"/></el-form-item>
-    <el-form-item label="启用（须资源完整且已人工核验）"><el-switch v-model="form.active" :disabled="!editing?.resource?.verified_at"/></el-form-item>
+    <el-form-item label="启用颜色选项"><el-switch v-model="form.active"/></el-form-item>
     <el-button v-if="editing?allowed('change'):allowed('add')" type="primary" :loading="busy" native-type="submit">保存颜色配置</el-button>
    </el-form>
    <section v-if="editing" class="resource-panel">

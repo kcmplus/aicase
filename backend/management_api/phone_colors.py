@@ -144,12 +144,6 @@ class ColorSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'code': '当前机型已存在此颜色编码。'})
         if attrs.get('is_default', instance.is_default if instance else False) and others.filter(is_default=True).exists():
             raise serializers.ValidationError({'is_default': '该机型已有默认颜色，请先取消原默认项。'})
-        if attrs.get('active', instance.active if instance else False):
-            if instance is None:
-                raise serializers.ValidationError({'active': '新颜色须先保存为停用草稿并上传、核验资源。'})
-            resource = checked_resource(instance)
-            if not resource.verified_at:
-                raise serializers.ValidationError({'active': '资源尚未人工核验。'})
 
     @transaction.atomic
     def create(self, validated_data):

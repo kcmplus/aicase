@@ -2,11 +2,13 @@
 const asset=(value,role)=>typeof value==='string'&&new RegExp('^/media/phone-colors/[a-f0-9]{32}/'+role+'\\.png$').test(value);
 export function validatePhoneColor(value,template){
  const r=value?.resource,rgb=value?.rgb;
+ const rgbOnly=value?.previewMode==='rgb'&&value.resource===null;
  if(!value||typeof value.code!=='string'||!/^[-a-zA-Z0-9_]{1,80}$/.test(value.code)||typeof value.name!=='string'||value.name.length>120||typeof value.isDefault!=='boolean'||
   !rgb||Object.keys(rgb).sort().join(',')!=='b,g,r'||!Object.values(rgb).every(n=>Number.isInteger(n)&&n>=0&&n<=255)||
-  !r||!Number.isSafeInteger(r.version)||r.version<1||typeof r.templateId!=='string'||!/^[-a-zA-Z0-9_]{1,160}$/.test(r.templateId)||
+  (!rgbOnly&&(!r||!Number.isSafeInteger(r.version)||r.version<1||typeof r.templateId!=='string'||!/^[-a-zA-Z0-9_]{1,160}$/.test(r.templateId)||
   ![r.width,r.height].every(n=>Number.isInteger(n)&&n>=32&&n<=4096)||r.width*r.height>8_000_000||
-  r.templateId!==template?.id||r.width!==template.sourceWidth||r.height!==template.sourceHeight||!asset(r.overlay,'overlay')||!asset(r.mask,'mask'))throw Error('Invalid phone color preview.');
+  r.templateId!==template?.id||r.width!==template.sourceWidth||r.height!==template.sourceHeight||!asset(r.overlay,'overlay')||!asset(r.mask,'mask'))))throw Error('Invalid phone color preview.');
+ if(rgbOnly)return {code:value.code,name:value.name,rgb:{...rgb},isDefault:value.isDefault,previewMode:'rgb',resource:null};
  return {code:value.code,name:value.name,rgb:{...rgb},isDefault:value.isDefault,resource:{version:r.version,templateId:r.templateId,width:r.width,height:r.height,overlay:r.overlay,mask:r.mask}};
 }
 // A paid snapshot remains readable after an explicit device-template change.
@@ -20,11 +22,11 @@ export function validPhoneColors(values,template){
  return values.flatMap(value=>{try{const color=validatePhoneColor(value,template);if(seen.has(color.code))return [];seen.add(color.code);return [color];}catch{return [];}});
 }
 export function reconcilePhoneColor(saved,colors=[]){
- const current=saved&&colors.find(c=>c.code===saved.code&&c.resource.version===saved.resource?.version);
+ const current=saved&&colors.find(c=>c.code===saved.code&&(c.resource?.version??0)===(saved.resource?.version??0));
  const color=current||colors.find(c=>c.isDefault)||colors[0]||null;
  return {color,changed:Boolean(saved)&&JSON.stringify(saved)!==JSON.stringify(current||null)};
 }
-export function colorSelection(value){return value?{code:value.code,version:value.resource.version}:undefined;}
+export function colorSelection(value){return value?{code:value.code,version:value.resource?.version??0,...(!value.resource?{rgb:{...value.rgb}}:{})}:undefined;}
 export function colorPicker(colors,selected,lang='en-US',changed=false){
  const zh=lang==='zh-CN',esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const note=changed?`<p class="field-note" role="status">${zh?'原选颜色已失效或配置已变化，请重新确认预览。':'Your saved color changed or is unavailable. Please review the preview again.'}</p>`:'';

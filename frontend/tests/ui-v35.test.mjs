@@ -18,7 +18,7 @@ import {myDesignsPage,designReview} from '../storefront/v35-designs.js';
 import {createPersonalPass,readPass} from '../storefront/simple-core.js';
 import {phoneTemplates,phoneTemplate} from '../storefront/phone-templates.js';
 import {makePersonalDesign,isPhoto,validateAddedArtwork,validatePlacement} from '../storefront/simple-personalize.js';
-import {validatePhoneColor,validPhoneColors,frozenPhoneColor,reconcilePhoneColor,colorPicker} from '../storefront/phone-colors.js';
+import {validatePhoneColor,validPhoneColors,frozenPhoneColor,reconcilePhoneColor,colorPicker,colorSelection} from '../storefront/phone-colors.js';
 import {phone} from '../storefront/art.js';
 import {exportCase} from '../storefront/print-export.js';
 import {orderRequest,savedOrder} from '../storefront/order-service.js';
@@ -403,6 +403,17 @@ test('managed preview colors validate RGB, exact template, dimensions and local 
  for(const changes of [{version:0},{version:'1'},{templateId:'wrong'},{width:1},{overlay:'https://evil.test/a.png'},{mask:'/media/../private.png'}])assert.throws(()=>validatePhoneColor({...color,resource:{...color.resource,...changes}},template));
  assert.deepEqual(validPhoneColors([color,color,{...color,code:'bad',resource:null}],template),[color]);
 });
+test('RGB-only model colors survive drafts, render safely and send a validated RGB selection',()=>{
+ const color={code:'blue',name:'Blue',rgb:{r:20,g:40,b:80},isDefault:false,previewMode:'rgb',resource:null};
+ assert.deepEqual(validatePhoneColor(color),color);
+ assert.deepEqual(colorSelection(color),{code:'blue',version:0,rgb:color.rgb});
+ const pass=createPersonalPass({source:'collection',designId:'bloom',model:phoneTemplates[0].model,phoneColor:color,effect:'original',intensity:0,zoom:100,x:50,y:50});
+ assert.deepEqual(readPass(pass.code,pass).phoneColor,color);
+ assert.doesNotThrow(()=>phone(makePersonalDesign(pass),pass.model));
+ assert.equal(reconcilePhoneColor(color,[{...color,rgb:{r:1,g:2,b:3}}]).changed,true);
+ assert.match(colorPicker([color],color),/background:rgb\(20,40,80\)/);
+ for(const rgb of [{r:true,g:0,b:0},{r:300,g:0,b:0},{r:1,g:2}])assert.throws(()=>validatePhoneColor({...color,rgb}));
+});
 test('no colors skip the picker; defaults, single/multiple colors and stale selections stay model-specific',()=>{
  const one=previewColor(),two={...previewColor(undefined,'other'),isDefault:true};
  for(const colors of [undefined,[],null])assert.equal(colorPicker(colors||[],null),'');
@@ -462,6 +473,11 @@ test('actual export uses body assets only for preview and keeps native print dim
   assert.equal(canvases[0].width,template.printWidth);assert.equal(canvases[0].height,template.printHeight);
   loads.length=0;await exportCase(design,template.model,'preview');
   assert.ok(loads.some(s=>s.endsWith(color.resource.mask)));assert.ok(loads.some(s=>s.endsWith(color.resource.overlay)));
+  loads.length=0;const rgbOnly={...color,previewMode:'rgb',resource:null};
+  await exportCase({...design,phoneColor:rgbOnly},template.model,'preview');
+  assert.ok(loads.every(s=>!s.includes('/phone-colors/')));
+  loads.length=0;await exportCase({...design,phoneColor:rgbOnly},template.model,'print');
+  assert.ok(loads.some(s=>s.endsWith(template.mask)));assert.ok(loads.every(s=>!s.includes('/phone-colors/')));
  }finally{for(const [key,value] of Object.entries(original)){if(value===undefined)delete globalThis[key];else globalThis[key]=value;}}
 });
 

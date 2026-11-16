@@ -88,11 +88,17 @@ class AIMetadata(StrictSerializer):
 
 class ColorSelection(StrictSerializer):
     code = serializers.SlugField(max_length=80)
-    version = serializers.IntegerField(min_value=1)
+    version = serializers.IntegerField(min_value=0)
+    rgb = serializers.JSONField(required=False)
 
     def to_internal_value(self, data):
         if not isinstance(data, dict) or type(data.get('version')) is not int or not isinstance(data.get('code'), str):
             raise serializers.ValidationError('Invalid color resource version.')
+        if data['version'] == 0:
+            from .phone_colors import validate_rgb
+            validate_rgb(data.get('rgb'))
+        elif 'rgb' in data:
+            raise serializers.ValidationError('Resource colors must use their saved version.')
         return super().to_internal_value(data)
 
 class Snapshot(Layout):
@@ -158,7 +164,13 @@ class Snapshot(Layout):
                     name=data['model'], code=color_template['code']).first()
             selection = data['phoneColor']
             color = next((c for c in available_colors(model, color_template)
-                          if c['code'] == selection['code'] and c['resource']['version'] == selection['version']), None) if model else None
+                          if c['code'] == selection['code'] and (
+                              (c['resource'] and c['resource']['version'] == selection['version'])
+                              or (c.get('previewMode') == 'rgb' and selection['version'] == 0
+                                  and type(selection.get('rgb')) is dict
+                                  and set(selection['rgb']) == {'r', 'g', 'b'}
+                                  and all(type(v) is int for v in selection['rgb'].values())
+                                  and selection['rgb'] == c['rgb']))), None) if model else None
             if color is None:
                 raise serializers.ValidationError('This phone color changed or is unavailable. Please preview your design again.')
             # Resolve all display values and immutable resource paths on the server.

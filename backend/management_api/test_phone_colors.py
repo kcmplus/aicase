@@ -127,13 +127,13 @@ class PhoneColorTests(TestCase):
             with self.subTest(code=code), self.assertRaises(IntegrityError), transaction.atomic():
                 PhoneColor.objects.create(phone_model=self.model, code=code, rgb={'r':0,'g':0,'b':0}, is_default=default)
 
-    def test_draft_cannot_enable_without_uploaded_verified_resources(self):
-        self.assertEqual(self.client.post(self.base, self.payload(active=True), format='json').status_code, 400)
+    def test_rgb_can_enable_without_resources_but_image_verification_stays_separate(self):
+        self.assertEqual(self.client.post(self.base, self.payload(code='active-rgb', active=True), format='json').status_code, 201)
         color = self.create()
-        self.assertEqual(self.enable(color).status_code, 400)
+        self.assertEqual(self.enable(color).status_code, 200)
         self.assertEqual(self.verify(color).status_code, 400)
         self.assertEqual(self.upload(color).status_code, 200)
-        self.assertEqual(self.enable(color).status_code, 400)
+        self.assertEqual(self.enable(color).status_code, 200)
         self.assertEqual(self.verify(color).status_code, 200)
         self.assertEqual(self.enable(color).status_code, 200)
         self.assertTrue(PhoneColor.objects.get(pk=color['id']).active)
@@ -149,7 +149,7 @@ class PhoneColorTests(TestCase):
         self.assertFalse(result.data['active'])
         self.assertIsNone(result.data['resource']['verified_at'])
         self.assertEqual(self.verify(color, version=1).status_code, 400)
-        self.assertEqual(self.enable(color).status_code, 400)
+        self.assertEqual(self.enable(color).status_code, 200)
         versions = PhoneColorResource.objects.filter(color_id=color['id']).order_by('version')
         self.assertEqual(versions.count(), 2)
         self.assertIsNotNone(versions[0].verified_at)
@@ -182,7 +182,7 @@ class PhoneColorTests(TestCase):
             self.assertEqual(self.client.patch(f'{self.base}{color["id"]}/', {field: value}, format='json').status_code, 400)
         self.assertEqual(PhoneColorResource.objects.count(), 0)
 
-    def test_corrupt_missing_and_wrong_model_resources_cannot_verify_or_enable(self):
+    def test_corrupt_missing_and_wrong_model_resources_cannot_verify_but_allow_rgb(self):
         color = self.create()
         for mode in ('corrupt', 'missing', 'path', 'wrong-template'):
             self.assertEqual(self.upload(color).status_code, 200)
@@ -197,7 +197,7 @@ class PhoneColorTests(TestCase):
             else:
                 resource.template_id = 'other-template'; resource.save()
             self.assertEqual(self.verify(color, resource.version).status_code, 400)
-            self.assertEqual(self.enable(color).status_code, 400)
+            self.assertEqual(self.enable(color).status_code, 200)
 
     def test_resource_cannot_be_reused_by_another_color_even_if_manually_referenced(self):
         first, second = self.create(), self.create(code='second')
@@ -205,7 +205,7 @@ class PhoneColorTests(TestCase):
         self.assertEqual(self.verify(first).status_code, 200)
         resource = PhoneColor.objects.get(pk=first['id']).current_resource
         PhoneColor.objects.filter(pk=second['id']).update(current_resource=resource)
-        self.assertEqual(self.enable(second).status_code, 400)
+        self.assertEqual(self.enable(second).status_code, 200)
 
     def test_revalidate_decode_even_when_hash_was_replaced(self):
         color = self.create(); self.assertEqual(self.upload(color).status_code, 200)
@@ -303,7 +303,7 @@ class PhoneColorTests(TestCase):
         self.assertEqual(PhoneColor.objects.count(), 2)
         self.assertEqual(PhoneColor.objects.get(pk=other_color['id']).phone_model_id, self.other.pk)
 
-    def test_supplier_template_is_bound_to_model_and_replacement_invalidates_activation(self):
+    def test_supplier_template_replacement_invalidates_resource_verification(self):
         from django.utils import timezone
         from .models import DeviceProviderConnection, Device, SupplierProduct, DeviceProduct
         from .store_catalog import stock_template
@@ -321,7 +321,7 @@ class PhoneColorTests(TestCase):
         self.assertEqual(self.verify(color).status_code, 200)
         self.assertEqual(self.enable(color).status_code, 200)
         stock.template_image = 'synthetic-replacement.png'; stock.save()
-        self.assertEqual(self.enable(color).status_code, 400)
+        self.assertEqual(self.enable(color).status_code, 200)
         self.assertEqual(self.verify(color).status_code, 400)
 
 

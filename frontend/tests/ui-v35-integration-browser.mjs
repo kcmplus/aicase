@@ -88,7 +88,7 @@ try{
   assert(modal.x>=0&&modal.y>=0&&modal.x+modal.width<=width&&modal.y+modal.height<=height,'Modal stays in viewport');
   assert(await page.locator('[data-home-confirm]').isVisible(),'Footer stays reachable in a short viewport');
   await page.locator('[data-home-material="magnetic"]').click();
-  assert.equal(await page.locator('[data-home-color]').count(),0,'Unconfigured style hides body colors in onboarding too');
+  assert.equal(await page.locator('[data-home-color]').count(),1,'Model RGB colors remain available without style image resources');
   await page.locator('[data-home-material="standard"]').click();
   const photoBytes=await page.evaluate(()=>{const canvas=document.createElement('canvas');canvas.width=64;canvas.height=128;const ctx=canvas.getContext('2d');ctx.fillStyle='#3951af';ctx.fillRect(0,0,64,128);return canvas.toDataURL().split(',')[1];});
   const chooser=page.waitForEvent('filechooser');
@@ -137,6 +137,7 @@ try{
   await page.locator('.large-preview[aria-busy="false"]').waitFor({state:'attached'});
   await page.keyboard.press('Escape');
   await page.goto(origin+'/#choose?design=bloom');
+  await page.waitForLoadState('networkidle');
   await page.locator('[data-action="choose-phone"]').click();
   await page.locator('.v35-model-dialog[open]').waitFor();
   await page.screenshot({path:`test-results/v35-integration/${width}-editor-model-list.png`});
@@ -145,7 +146,9 @@ try{
   await page.locator('[data-phone-color="synthetic-blue"]').waitFor();
   assert.equal(await page.locator('[data-phone-color="synthetic-blue"]').getAttribute('aria-pressed'),'true');
   await page.locator('[data-case-material="magnetic"]').click();
-  assert.equal(await page.locator('[data-phone-color]').count(),0,'Unconfigured style skips colors');
+  assert.equal(await page.locator('[data-phone-color]').count(),1,'RGB selection does not require a style preview resource');
+  await page.locator('[data-phone-color="synthetic-blue"]').click();
+  await page.screenshot({path:`test-results/v35-integration/${width}-rgb-only-color.png`});
   await page.locator('[data-case-material="standard"]').click();
   await page.locator('#design-form button').click();
   await page.locator('[data-action="save-local-design"]').waitFor();
