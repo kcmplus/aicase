@@ -306,7 +306,7 @@ test('local design pages expose distinct empty/loading/error states and bilingua
   const populated=myDesignsPage({lang,guest:true,rows:[{id:'"><script>',pass:{model:'<Synthetic>'},updatedAt:1234}],preview:()=>'<div>SYNTHETIC PREVIEW</div>'});
   assert.match(populated,/data-action="restore-design"/);assert.match(populated,/data-action="delete-design"/);assert.match(populated,/data-action="restore-legacy-draft"/);assert.match(populated,/SYNTHETIC PREVIEW/);assert.match(populated,/&lt;Synthetic&gt;/);assert.doesNotMatch(populated,/<script>/);
   const preview=designReview({pass:syntheticPass(),preview:()=>'<div>SYNTHETIC PREVIEW</div>',lang,busy:true});
-  assert.match(preview,/<dialog .*aria-labelledby="v35-review-title"/);assert.match(preview,/data-action="save-local-design" disabled/);assert.match(preview,/data-action="continue-design-checkout" disabled/);assert.match(preview,/data-action="close-design-review"/);
+  assert.match(preview,/<section .*aria-labelledby="v35-review-title"/);assert.doesNotMatch(preview,/<dialog|physical verification|print command/);assert.match(preview,/aria-current="step"/);assert.match(preview,/data-action="save-local-design" disabled/);assert.match(preview,/data-action="continue-design-checkout" disabled/);assert.match(preview,/data-action="close-design-review"/);
   assert.doesNotMatch(preview,/Design saved on this browser/);assert.match(designReview({pass:syntheticPass(),preview:()=>'',lang,saved:true}),/role="status"/);
   assert.doesNotMatch(preview,/sessionStorage|pay_status|QRCode|setTimeout|data-action="confirm-device-print"/);
  }
@@ -335,17 +335,17 @@ test('actual editor submit opens a validated preview; saving stays local and onl
  const workspace=createDesignWorkspace(customerIdentity(8),storage),library=createDesignLibrary(workspace,{validate:validateLocal});
  let submit,click;const writes=[],routes=[],notices=[];const pass=syntheticPass();
  const context={app:{addEventListener:(name,fn)=>{if(name==='submit')submit=fn;else click=fn;}},sessionCheckBusy:false,photoBusy:false,aiBusy:false,passBusy:false,reviewPass:null,reviewSaved:false,comparing:false,
-  state:{...pass,caseMaterial:'standard',editOrderId:null},phoneModels:[pass.model],refreshStockChoices:async()=>{},stockSelection:()=>({templateId:pass.phoneTemplateId}),createPersonalPass,layoutSelection:value=>value,workspace,library,
+  isPhoto,state:{...pass,caseMaterial:'standard',editOrderId:null},phoneModels:[pass.model],refreshStockChoices:async()=>{},stockSelection:()=>({templateId:pass.phoneTemplateId}),createPersonalPass,layoutSelection:value=>value,workspace,library,
   phoneTemplate,orderBook:{orders:{}},checkoutDraft:null,PRINT_AVAILABLE:true,privateWrite:async(name,value)=>{writes.push({name,value});await workspace.write(name,value);},crypto,
   location:{hash:'#choose'},render:()=>{},notify:message=>notices.push(message),go:route=>routes.push(route),locale:()=> 'en-US'};
  const submitStart=source.indexOf("app.addEventListener('submit',async event=>{");
  const clickStart=source.indexOf("app.addEventListener('click',async event=>{",submitStart);
  const clickEnd=source.indexOf("  if(el.dataset.lookAction==='open')",clickStart);
- vm.createContext(context);vm.runInContext(appFunction(source,'assertCurrentColor')+'\n'+source.slice(submitStart,clickStart)+source.slice(clickStart,clickEnd)+'});',context);
+ vm.createContext(context);vm.runInContext(appFunction(source,'assertCurrentColor')+'\n'+appFunction(source,'prepareDesignReview')+'\n'+source.slice(submitStart,clickStart)+source.slice(clickStart,clickEnd)+'});',context);
  await submit({target:{id:'design-form'},preventDefault(){}});
- assert.ok(context.reviewPass);assert.deepEqual(context.reviewPass.photoPlacement,pass.photoPlacement);assert.equal(context.checkoutDraft,null);assert.equal(writes.length,0);assert.equal(routes.length,0);
+ assert.ok(context.reviewPass);assert.deepEqual(context.reviewPass.photoPlacement,pass.photoPlacement);assert.equal(context.checkoutDraft,null);assert.equal(writes.length,0);assert.deepEqual(routes,['review']);
  const button=action=>({preventDefault(){},target:{closest:()=>({dataset:{action},disabled:false})}});
- await click(button('save-local-design'));assert.equal((await library.list()).length,1);assert.equal(writes.length,0);assert.equal(routes.length,0);assert.equal(notices.length,1);
+ await click(button('save-local-design'));assert.equal((await library.list()).length,1);assert.equal(writes.length,0);assert.deepEqual(routes,['review']);assert.equal(notices.length,1);
  await click(button('continue-design-checkout'));assert.equal(writes.length,1);assert.equal(writes[0].name,'checkout-draft');assert.deepEqual(writes[0].value.pass.photoPlacement,pass.photoPlacement);assert.equal(routes.at(-1),'checkout');assert.equal(context.reviewPass,null);
 });
 test('actual restore handler retains rotations, text, crop and original bytes while clearing order authority',async()=>{
@@ -866,4 +866,16 @@ test('an ambiguous AI submission freezes model changes and retries with the orig
  await context.changeAIPhoneModel('iPhone 13 Pro');assert.equal(context.aiJob.model,'iPhone 17');
  await context.confirmAI(true,true);
  assert.equal(requests.length,2);assert.equal(requests[0].id,requests[1].id);assert.equal(requests[0].model,requests[1].model);
+});
+
+
+test('prototype review shows one case and only configured body colors, without internal technical copy',()=>{
+ const pass={...syntheticPass(),caseMaterial:'magnetic',quantity:20};
+ const html=designReview({pass,preview:()=>'<div>preview</div>'});
+ assert.match(html,/Phone model/);assert.match(html,/Design your case/);assert.match(html,/Review &amp; confirm|Review & confirm/);
+ assert.match(html,/<dd>Magnetic<\/dd>/);assert.match(html,/<dd>1 case<\/dd>/);
+ assert.doesNotMatch(html,/Phone body color|physical verification|print command|<dialog/);
+ assert.match(html,/Save draft/);assert.match(html,/Print now/);
+ const colored=designReview({pass:{...pass,phoneColor:{name:'<script>test</script>'}},preview:()=>'',lang:'zh-CN'});
+ assert.match(colored,/机身颜色/);assert.match(colored,/&lt;script&gt;test&lt;\/script&gt;/);assert.match(colored,/1 个手机壳/);
 });

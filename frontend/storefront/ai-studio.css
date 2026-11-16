@@ -236,6 +236,8 @@ body:has(.studio-photo-dialog[open]){overflow:hidden}
 /* Native model selection remains usable in the compact AI confirmation layout. */
 .studio-phone-picker{margin:0 0 20px;min-width:0}
 .studio-phone-picker label{display:block;font-size:13px;font-weight:600;margin-bottom:8px}
-.studio-phone-picker select{display:block;width:100%;max-width:100%;min-height:44px;padding:10px 12px;border:1px solid #d9c5e8;border-radius:10px;background:#fff;color:#100519;font:inherit;font-size:16px}
-.studio-phone-picker select:focus-visible{outline:2px solid #a234fd;outline-offset:3px}
+.studio-phone-picker #ai-phone-model{display:block;width:100%;max-width:100%;min-height:44px;padding:10px 12px;border:1px solid #d9c5e8;border-radius:10px;background:#fff;color:#100519;font:inherit;font-size:16px}
+.studio-phone-picker #ai-phone-model:focus-visible{outline:2px solid #a234fd;outline-offset:3px}
 .studio-phone-picker p{font-size:12px;line-height:1.5;margin-top:8px}
+
+.studio-phone-picker #ai-phone-model{display:flex;justify-content:space-between;align-items:center;text-align:left;cursor:pointer}

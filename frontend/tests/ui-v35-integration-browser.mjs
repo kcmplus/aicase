@@ -1,14 +1,23 @@
+import {phoneBrand} from '../storefront/phone-catalog.js';
 // Run through scripts/test_v35_dev_browser.py: synthetic data and fresh browser contexts.
 import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE?pathToFileURL(process.env.PLAYWRIGHT_MODULE).href:'playwright');
+async function pickModel(page,model,opener){
+ if(opener)await page.locator(opener).click();
+ await page.locator('.v35-model-dialog[open]').waitFor();
+ await page.locator('.v35-model-brands').getByRole('button',{name:phoneBrand(model),exact:true}).click();
+ await page.locator('.v35-model-list').getByRole('button',{name:model,exact:true}).click();
+ await page.locator('.v35-model-dialog').waitFor({state:'detached'});
+}
 const origin=process.env.PREVIEW_URL,model=process.env.TEST_MODEL,order=process.env.TEST_ORDER;
 assert(origin&&model&&order,'Use the disposable fixture runner.');
 const browser=await chromium.launch({headless:true,...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{})});
 await mkdir('test-results/v35-integration',{recursive:true});
 try{
  for(const [width,height] of [[320,568],[390,844],[768,1024],[1440,900]]){
+  if(process.env.TEST_VIEWPORT_WIDTH&&width!==Number(process.env.TEST_VIEWPORT_WIDTH))continue;
   const context=await browser.newContext({viewport:{width,height},serviceWorkers:'block'}),errors=[],writes=[];
   // Both frontend and backend have independent outbound guards. This browser may
   // read only its fixture origin; payment/dispatch/print writes are forbidden.
@@ -36,11 +45,13 @@ try{
    const catalogPattern='**/api/v1/store/phone-models/**';
    await context.route(catalogPattern,route=>route.fulfill({status:503,contentType:'application/json',body:'{}'}));
    await page.reload();await page.locator('[data-action="home-photo"]').click();
-   assert(await page.locator('#home-phone-model').isDisabled(),'Failed catalog never falls back to static sale models');
+   await page.locator('#home-phone-model').click();
+   assert.equal(await page.locator('[data-picker-model]').count(),0,'Failed catalog never falls back to static sale models');
    assert(await page.locator('[data-home-confirm]').isDisabled());
    await context.unroute(catalogPattern);
-   await page.locator('[data-home-retry]').click();
-   await page.waitForFunction(()=>document.querySelector('#home-phone-model')?.disabled===false);
+   await page.locator('[data-picker-retry]').click();
+   await page.locator('[data-picker-model]').first().waitFor();
+   await page.keyboard.press('Escape');await page.locator('.v35-model-dialog').waitFor({state:'detached'});
    await page.keyboard.press('Escape');await page.locator('.v35-home-phone').waitFor({state:'detached'});
   }
 
@@ -52,7 +63,23 @@ try{
   assert.equal(await page.locator('.v35-home-phone').count(),0);
   assert.equal(await page.evaluate(()=>document.activeElement.dataset.action),'home-photo');
   await page.locator('[data-action="home-photo"]').click();
-  await page.locator('#home-phone-model').selectOption(model);
+  await page.locator('#home-phone-model').click();
+  await page.locator('.v35-model-dialog[open]').waitFor();
+  const chooserBox=await page.locator('.v35-model-dialog').boundingBox();
+  assert(chooserBox.x>=0&&chooserBox.y>=0&&chooserBox.x+chooserBox.width<=width&&chooserBox.y+chooserBox.height<=height,'Model sheet fits the viewport');
+  const buttons=page.locator('[data-picker-brand]');
+  if(await buttons.count()>1){await buttons.nth(1).click();assert.equal(await buttons.nth(1).getAttribute('aria-pressed'),'true');}
+  await page.keyboard.press('Escape');await page.locator('.v35-model-dialog').waitFor({state:'detached'});
+  assert.equal(await page.locator('.v35-home-phone[open]').count(),1,'Closing the list returns to the parent chooser');
+  assert(!(await page.locator('#home-phone-model').innerText()).includes(model),'Browsing brands does not change the draft');
+  await page.locator('#home-phone-model').click();
+  await page.locator('.v35-model-brands').getByRole('button',{name:phoneBrand(model),exact:true}).click();
+  await page.screenshot({path:`test-results/v35-integration/${width}-model-list.png`});
+  const body=page.locator('.v35-model-body');
+  await body.evaluate(el=>el.scrollTop=el.scrollHeight);
+  if(await page.locator('[data-picker-model]').count()>5)assert(await body.evaluate(el=>el.scrollTop>0),'Long lists scroll within the sheet');
+  await page.keyboard.press('Escape');await page.locator('.v35-model-dialog').waitFor({state:'detached'});
+  await pickModel(page,model,'#home-phone-model');
   assert(await page.locator('[data-home-confirm]').isDisabled(),'Selecting a model alone does not select a case style');
   await page.locator('[data-home-material="standard"]').click();
   await page.locator('[data-home-color="synthetic-blue"][aria-pressed="true"]').waitFor();
@@ -72,15 +99,15 @@ try{
   await page.locator('[data-phone-color="synthetic-blue"][aria-pressed="true"]').waitFor();
   await page.goto(origin+'/#home');
   await page.locator('.v35-entries [data-action="home-ai"]').click();
-  assert.equal(await page.locator('#home-phone-model').inputValue(),model);
+  assert((await page.locator('#home-phone-model').innerText()).includes(model));
   await page.locator('[data-home-confirm]').click();
   await page.locator('.look-browser[open]').waitFor();
   await page.keyboard.press('Escape');
   await page.goto(origin+'/#choose?design=bloom');
-  await page.locator('.model-first summary').waitFor();
-  if(!await page.locator('[data-phone-model]').first().isVisible())await page.locator('.model-first summary').click();
-  await page.locator('[data-phone-model]').first().waitFor();
-  await page.locator('[data-phone-model]').filter({hasText:model}).click();
+  await page.locator('[data-action="choose-phone"]').click();
+  await page.locator('.v35-model-dialog[open]').waitFor();
+  await page.screenshot({path:`test-results/v35-integration/${width}-editor-model-list.png`});
+  await pickModel(page,model);
   await page.locator('[data-case-material="standard"]').click();
   await page.locator('[data-phone-color="synthetic-blue"]').waitFor();
   assert.equal(await page.locator('[data-phone-color="synthetic-blue"]').getAttribute('aria-pressed'),'true');
@@ -89,6 +116,35 @@ try{
   await page.locator('[data-case-material="standard"]').click();
   await page.locator('#design-form button').click();
   await page.locator('[data-action="save-local-design"]').waitFor();
+  assert.equal(new URL(page.url()).hash,'#review');
+  assert.equal(await page.locator('dialog.v35-design-review').count(),0,'Review is a page, not an extra dialog');
+  await page.reload();
+  await page.locator('.v35-review-summary').waitFor().catch(async error=>{console.error({width,url:page.url(),errors,text:await page.locator('body').innerText()});throw error;});
+  assert.match(await page.locator('.v35-review-summary').innerText(),/1 case/);
+  assert.match(await page.locator('.v35-review-summary').innerText(),/Standard/);
+  assert.match(await page.locator('.v35-review-summary').innerText(),/Synthetic blue/);
+  const reviewGeometry=await page.locator('.v35-review-case').evaluate(stage=>({stage:stage.getBoundingClientRect().toJSON(),phone:stage.querySelector('.phone-case').getBoundingClientRect().toJSON()}));
+  assert(reviewGeometry.phone.height>=200&&reviewGeometry.stage.height<=500,'Review phone has a readable, bounded size');
+  assert.equal(await page.locator('.v35-design-steps ol').evaluate(el=>getComputedStyle(el).display),'flex','Journey steps appear in a horizontal row');
+  assert(reviewGeometry.phone.top>=reviewGeometry.stage.top&&reviewGeometry.phone.bottom<=reviewGeometry.stage.bottom,'Review phone fits vertically');
+  assert(reviewGeometry.phone.left>=reviewGeometry.stage.left&&reviewGeometry.phone.right<=reviewGeometry.stage.right,'Review phone fits horizontally');
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Review never scrolls horizontally');
+  await page.evaluate(()=>{document.activeElement?.blur();window.scrollTo(0,document.body.scrollHeight);});
+  await page.screenshot({path:`test-results/v35-integration/${width}-review.png`,fullPage:true});
+  await page.goBack();
+  await page.locator('.v35-editor').waitFor();
+  await page.goForward();
+  await page.locator('.v35-review-summary').waitFor().catch(async error=>{console.error({width,url:page.url(),errors,text:await page.locator('body').innerText()});throw error;});
+  assert.match(await page.locator('.v35-review-summary').innerText(),/Synthetic blue/);
+  if(width===390){
+   await page.locator('.v35-design-steps a[href="#choose?step=model"]').click();
+   await page.locator('.v35-model-dialog[open]').waitFor();
+   await page.keyboard.press('Escape');
+   await page.locator('.v35-model-dialog').waitFor({state:'detached'});
+   await page.locator('#design-form button').click();
+   await page.locator('.v35-review-summary').waitFor().catch(async error=>{console.error({width,url:page.url(),errors,text:await page.locator('body').innerText()});throw error;});
+  }
+
   await page.locator('[data-action="save-local-design"]').click();
   await page.locator('[data-action="close-design-review"]').first().click();
   await page.reload();
@@ -122,13 +178,11 @@ try{
   await page.locator('.v35-editor').waitFor();
   await page.locator('.v35-header .v35-wordmark').click();
   await page.locator('[data-action="home-photo"]').click();
-  await page.locator('#home-phone-model').selectOption(model);
+  await pickModel(page,model,'#home-phone-model');
   assert(await page.locator('[data-home-material="magnetic"]').isDisabled(),'Onboarding respects the scanned station inventory');
   await page.keyboard.press('Escape');
   await page.goto(origin+'/?device_id=101&shop_id=999#choose?design=bloom');
-  await page.locator('.model-first summary').waitFor();
-  if(!await page.locator('[data-phone-model]').first().isVisible())await page.locator('.model-first summary').click();
-  await page.locator('[data-phone-model]').filter({hasText:model}).click();
+  await pickModel(page,model,'[data-action="choose-phone"]');
   assert.equal(await page.locator('[data-case-material="magnetic"]').isDisabled(),true,'Scanned device must disable out-of-stock style');
   await page.locator('[data-case-material="standard"]').click();
   await page.locator('[data-phone-color="synthetic-blue"]').waitFor();
@@ -153,12 +207,12 @@ try{
    return {id:job.id,photo:job.photo,model:catalog.models.find(item=>item.name!==model).name};
   },model);
   await page.goto(origin+'/#ai');
-  await page.locator('#ai-phone-model').waitFor();
-  await page.locator('#ai-phone-model').selectOption(aiFixture.model);
+  await page.locator('#ai-phone-model').waitFor().catch(async error=>{console.error({width,url:page.url(),errors,text:await page.locator('body').innerText()});throw error;});
+  await pickModel(page,aiFixture.model,'#ai-phone-model');
   await page.waitForFunction(model=>!document.querySelector('#ai-phone-model')?.disabled&&JSON.parse(localStorage.getItem('v35:guest:editor')||'{}').model===model,aiFixture.model);
   await page.reload();
-  await page.locator('#ai-phone-model').waitFor();
-  assert.equal(await page.locator('#ai-phone-model').inputValue(),aiFixture.model);
+  await page.locator('#ai-phone-model').waitFor().catch(async error=>{console.error({width,url:page.url(),errors,text:await page.locator('body').innerText()});throw error;});
+  assert((await page.locator('#ai-phone-model').innerText()).includes(aiFixture.model));
   const savedAI=await page.evaluate(async()=>{const {readDesign}=await import('/simple-storage.js');const editor=JSON.parse(localStorage.getItem('v35:guest:editor'));return (await readDesign('v35:guest:ai-membership-v1')).jobs[editor.aiJobId];});
   assert.equal(savedAI.id,aiFixture.id);assert.equal(savedAI.photo,aiFixture.photo);assert.equal(savedAI.styleId,'anime');assert.equal(savedAI.model,aiFixture.model);
   const selectBox=await page.locator('#ai-phone-model').boundingBox();assert(selectBox.width>150&&selectBox.x>=0&&selectBox.x+selectBox.width<=width,'Model picker fits the viewport');
