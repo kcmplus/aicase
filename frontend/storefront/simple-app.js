@@ -436,11 +436,11 @@ function selectPhoneModel(model){
  if(location.hash==='#choose?step=model')history.replaceState(null,'','#choose');
  render(true);document.querySelector(phoneSettingsOpen?'[data-action="choose-phone"]':'.phone-settings-summary')?.focus({preventScroll:true});
 }
-function openHomePhone(entry){
+function openHomePhone(){
  cleanupHomePhone();
  cleanupHomePhone=openHomePhoneDialog({root:app,initial:state,lang:locale(),scoped:Boolean(stockScope),
   catalog:()=>({models:phoneModels,status:stockCatalogStatus,selection:stockSelection}),refresh:refreshStockChoices,
-  onConfirm:choice=>{phoneSettingsOpen=false;Object.assign(state,choice);selectSupplierTemplate(state.model,state.phoneTemplateId);colorNotice=false;reviewPass=null;save();if(entry==='photo')openPhotoPicker();else go('choose?source=photo&studio=1');}});
+  onConfirm:choice=>{phoneSettingsOpen=false;Object.assign(state,choice);selectSupplierTemplate(state.model,state.phoneTemplateId);colorNotice=false;reviewPass=null;save();go('choose?source=photo&studio=1');}});
 }
 function openPhotoPicker(){
  // Run inside the click gesture, before any await, so mobile browsers allow it.
@@ -518,7 +518,7 @@ function choose() {
  <div class="choose-layout">
   <div class="source-switch editor-sources" role="group" aria-label="Design source"><button type="button" data-source="collection" aria-pressed="${!own}" ${photoBusy?'disabled':''}>The collection</button><button type="button" data-source="photo" aria-pressed="${own}" aria-busy="${photoBusy}" ${photoBusy?'disabled':''}>${photoBusy?'<i class="studio-spinner"></i> Reading your photo…':icon('upload',15)+' Your photo'}</button></div>
   <div class="large-preview" ${own?'data-photo-drop':''} aria-busy="${photoBusy}" style="--card:${own?'#eeece7':d.color}">
-   ${own&&!hasPhoto&&!state.keepCollection?`<div class="photo-placeholder">${icon('image',32)}<h2>Your photo goes here.</h2><label class="button primary" for="photo-file">Upload a photo ${icon('upload',17)}</label></div>`:`<div class="large-case artwork-canvas">${personalizedPreview(state,state.model||phoneModels[0],own?'Your photo':d.name,comparing)}</div>`}
+   ${own&&!hasPhoto&&!state.keepCollection?`<div class="empty-photo-case" aria-hidden="true">${phone({art:'solid',background:'#f1def9',phoneTemplateId:state.phoneTemplateId,phoneColor:state.phoneColor},state.model||phoneModels[0])}</div><div class="photo-placeholder photo-start"><p>${locale()==='zh-CN'?'从一张喜欢的照片开始':'Start with a photo you love'}</p><button type="button" class="button primary" data-source="photo" ${photoBusy?'disabled':''}>${icon('image',20)} ${locale()==='zh-CN'?'上传照片':'Upload photo'}</button></div>`:`<div class="large-case artwork-canvas">${personalizedPreview(state,state.model||phoneModels[0],own?'Your photo':d.name,comparing)}</div>`}
    ${!own||hasPhoto||state.keepCollection?`<button type="button" class="canvas-open-hit" data-action="open-canvas" aria-label="Expand to edit"><span>${icon('scan',16)} Expand to edit</span></button>`:''}
   </div>
   <div class="choose-details"><h1 class="sr-only">${own?'Make it personal.':d.name+'.'}</h1>
@@ -893,7 +893,8 @@ app.addEventListener('click',async event=>{
   const el=event.target.closest('[data-case-material],[data-phone-color],[data-action],[data-design],[data-start-design],[data-source],[data-effect],[data-ai-action],[data-ai-look-example],[data-ai-look-step],[data-look-action],[data-look-mode],[data-ai-group],[data-ai-view],[data-artwork-item],[data-add-graphic],[data-quick-font],[data-quick-color]');if(!el||el.disabled||photoBusy||passBusy||aiBusy||sessionCheckBusy)return;
   if(el.dataset.action==='choose-phone'){openModelPicker();return;}
   if(el.dataset.action==='ai-choose-phone'){openModelPicker(true);return;}
-  if(['home-photo','home-ai'].includes(el.dataset.action)){event.preventDefault();openHomePhone(el.dataset.action==='home-photo'?'photo':'ai');return;}
+  if(el.dataset.action==='home-photo'){event.preventDefault();go('choose?source=photo');return;}
+  if(el.dataset.action==='home-ai'){event.preventDefault();openHomePhone();return;}
   if(el.dataset.action==='reload-private-workspace'){location.reload();return;}
   if(el.dataset.action==='close-design-review'){closeDesignReview();return;}
   if(['save-local-design','continue-design-checkout','restore-design','delete-design','refresh-designs','restore-legacy-draft'].includes(el.dataset.action)){

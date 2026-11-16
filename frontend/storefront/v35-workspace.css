@@ -117,3 +117,13 @@ body[data-v35-route=ai] .studio-render-dialog .studio-generation-meter{box-shado
 .phone-settings[open] .model-summary-chevron{transform:rotate(180deg)}
 @media(max-width:360px){.phone-settings .model-summary-label{display:none}.phone-settings-body{padding-inline:12px}}
 .phone-settings .model-summary-value{font-size:16px;line-height:1.4;color:#100519}
+
+/* Photo design opens a blank workspace; only its upload button opens the album. */
+.v35-editor .large-preview:has(.photo-start){position:relative;isolation:isolate;background:linear-gradient(135deg,#f6edfc,#ead4f6)!important}
+.v35-editor .empty-photo-case{position:absolute;inset:20px;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:.24}
+.v35-editor .empty-photo-case>.phone-case{height:100%;width:auto;max-width:100%;aspect-ratio:300/590;flex:none;margin:0}
+.v35-editor .photo-start{position:relative;z-index:1;max-width:100%;padding:16px;text-align:center}
+.v35-editor .photo-start p{font-size:16px;line-height:1.5;margin:0 0 16px;color:#786185}
+.v35-editor .photo-start .button{min-height:48px;border:2px solid white;border-radius:8px;background:#a234fd;color:white;gap:10px;padding:12px 24px}
+.v35-editor .photo-start .button:focus-visible{outline:3px solid #7021b0;outline-offset:3px}
+@media(max-width:360px){.v35-editor .photo-start{padding:8px}.v35-editor .photo-start p{font-size:14px}.v35-editor .photo-start .button{font-size:14px;padding-inline:16px}}

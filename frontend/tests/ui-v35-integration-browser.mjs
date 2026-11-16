@@ -35,6 +35,18 @@ try{
   const entries=await page.locator('.v35-entries').evaluate(el=>[...el.children].map(c=>c.getBoundingClientRect().toJSON()));
   if(width<=760){assert.equal(entries[0].top,entries[1].top);assert(entries[2].top>=entries[0].bottom);assert(entries[2].width>entries[0].width*1.9);}
   await page.screenshot({path:`test-results/v35-integration/${width}-home.png`});
+  let firstEntryChoosers=0;
+  const countFirstEntry=()=>firstEntryChoosers++;
+  page.on('filechooser',countFirstEntry);
+  await page.locator('[data-action="home-photo"]').click();
+  await page.locator('.photo-start').waitFor();
+  assert.equal(firstEntryChoosers,0,'First-time photo design does not open the album');
+  assert.equal(await page.locator('.v35-home-phone').count(),0);
+  assert(await page.locator('[data-action="choose-phone"]').isVisible(),'A new visitor can choose their phone inside the editor');
+  assert(await page.locator('#design-form button').isDisabled());
+  page.off('filechooser',countFirstEntry);
+  await page.goto(origin+'/#home');
+  await page.waitForLoadState('networkidle');
   if(width===390){
    const phone=await page.locator('.v35-fan-case').nth(2).boundingBox();
    await page.mouse.move(phone.x+phone.width/2,phone.y+60);await page.mouse.down();
@@ -44,7 +56,7 @@ try{
    await page.locator('[data-shell-fan="-1"]').click();
    const catalogPattern='**/api/v1/store/phone-models/**';
    await context.route(catalogPattern,route=>route.fulfill({status:503,contentType:'application/json',body:'{}'}));
-   await page.reload();await page.locator('[data-action="home-photo"]').click();
+   await page.reload();await page.locator('.v35-entries [data-action="home-ai"]').click();
    await page.locator('#home-phone-model').click();
    assert.equal(await page.locator('[data-picker-model]').count(),0,'Failed catalog never falls back to static sale models');
    assert(await page.locator('[data-home-confirm]').isDisabled());
@@ -55,14 +67,14 @@ try{
    await page.keyboard.press('Escape');await page.locator('.v35-home-phone').waitFor({state:'detached'});
   }
 
-  await page.locator('[data-action="home-photo"]').click();
+  await page.locator('.v35-entries [data-action="home-ai"]').click();
   await page.locator('.v35-home-phone[open]').waitFor();
   assert(await page.locator('[data-home-confirm]').isDisabled(),'Model and style must be explicitly chosen');
   await page.keyboard.press('Escape');
   await page.locator('.v35-home-phone').waitFor({state:'detached'});
   assert.equal(await page.locator('.v35-home-phone').count(),0);
-  assert.equal(await page.evaluate(()=>document.activeElement.dataset.action),'home-photo');
-  await page.locator('[data-action="home-photo"]').click();
+  assert.equal(await page.evaluate(()=>document.activeElement.dataset.action),'home-ai');
+  await page.locator('.v35-entries [data-action="home-ai"]').click();
   await page.locator('#home-phone-model').click();
   await page.locator('.v35-model-dialog[open]').waitFor();
   const chooserBox=await page.locator('.v35-model-dialog').boundingBox();
@@ -93,10 +105,37 @@ try{
   assert.equal(await page.locator('[data-home-color]').count(),1,'Model RGB colors remain available without style image resources');
   await page.locator('[data-home-material="standard"]').click();
   const photoBytes=await page.evaluate(()=>{const canvas=document.createElement('canvas');canvas.width=64;canvas.height=128;const ctx=canvas.getContext('2d');ctx.fillStyle='#3951af';ctx.fillRect(0,0,64,128);return canvas.toDataURL().split(',')[1];});
-  const chooser=page.waitForEvent('filechooser');
   await page.locator('[data-home-confirm]').click();
-  await (await chooser).setFiles({name:'synthetic.png',mimeType:'image/png',buffer:Buffer.from(photoBytes,'base64')});
-  await page.locator('.v35-editor').waitFor();
+  await page.locator('.look-browser[open]').waitFor();
+  await page.keyboard.press('Escape');
+  await page.goto(origin+'/#home');
+  let photoChoosers=0;
+  const countChooser=()=>photoChoosers++;
+  page.on('filechooser',countChooser);
+  await page.locator('[data-action="home-photo"]').click();
+  await page.locator('.photo-start').waitFor();
+  assert.equal(new URL(page.url()).hash,'#choose?source=photo');
+  assert.equal(await page.locator('.v35-home-phone').count(),0,'Photo design goes directly to the editor');
+  assert.equal(photoChoosers,0,'Entering the editor does not open the album');
+  assert(await page.locator('#design-form button').isDisabled(),'An empty photo cannot be reviewed');
+  await page.locator('.empty-photo-case .phone-case').waitFor();
+  await page.screenshot({path:`test-results/v35-integration/${width}-photo-start.png`,fullPage:true});
+  const chooser=page.waitForEvent('filechooser');
+  await page.locator('.photo-start [data-source="photo"]').click();
+  await (await chooser).setFiles([]);
+  assert(await page.locator('.photo-start').isVisible(),'Cancel keeps the empty editor available');
+  const upload=page.waitForEvent('filechooser');
+  await page.locator('.photo-start [data-source="photo"]').click();
+  await (await upload).setFiles({name:'synthetic.png',mimeType:'image/png',buffer:Buffer.from(photoBytes,'base64')});
+  await page.locator('.large-preview[aria-busy="false"] .artwork-canvas').waitFor();
+  assert(await page.locator('#design-form button').isEnabled());
+  const uploaded=await page.locator('.artwork-canvas .case-art img').getAttribute('src');
+  await page.goto(origin+'/#home');
+  await page.locator('[data-action="home-photo"]').click();
+  await page.locator('.large-preview .artwork-canvas').waitFor();
+  assert.equal(await page.locator('.artwork-canvas .case-art img').getAttribute('src'),uploaded,'Re-entering preserves the photo draft');
+  assert.equal(photoChoosers,2,'Re-entering does not open another file chooser');
+  page.off('filechooser',countChooser);
   await page.locator('[data-case-material="standard"][aria-pressed="true"]').waitFor({state:'attached'});
   await page.locator('[data-phone-color="synthetic-blue"][aria-pressed="true"]').waitFor({state:'attached'});
   await page.goto(origin+'/#home');
@@ -220,7 +259,7 @@ try{
   await page.goto(origin+'/?device_id=101&shop_id=999#choose?design=bloom');
   await page.locator('.v35-editor').waitFor();
   await page.locator('.v35-header .v35-wordmark').click();
-  await page.locator('[data-action="home-photo"]').click();
+  await page.locator('.v35-entries [data-action="home-ai"]').click();
   await pickModel(page,model,'#home-phone-model');
   assert(await page.locator('[data-home-material="magnetic"]').isDisabled(),'Onboarding respects the scanned station inventory');
   await page.keyboard.press('Escape');

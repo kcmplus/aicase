@@ -25,10 +25,10 @@ import {orderRequest,savedOrder} from '../storefront/order-service.js';
 import {applyStockCatalog,stockSelection,stockedPhoneModels,stockCatalogStatus,loadStockCatalog} from '../storefront/stock-catalog.js';
 import {customerPage} from '../storefront/customer-account.js';
 
-test('V35 home prioritizes the real album handler and preserves gallery and AI editor destinations',()=>{
+test('V35 home prioritizes photo design without an automatic album picker',()=>{
  const html=homePresentation({gallery:'<section id="designs">CATALOG</section>'});
  assert.ok(html.indexOf('data-action="home-photo"')<html.indexOf('href="#designs"'));
- assert.match(html,/id="photo-file" data-home-upload type="file" accept="image\/jpeg,image\/png,image\/webp"/);
+ assert.doesNotMatch(html,/type="file"|data-home-upload/);
  assert.match(html,/href="#choose\?source=photo&studio=1"/);
  assert.match(html,/<section id="designs">CATALOG<\/section>/);
  assert.doesNotMatch(html,/sessionStorage|setTimeout|pay_status|data-action="advance-print"/);
