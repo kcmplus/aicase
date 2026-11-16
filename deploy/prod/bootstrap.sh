@@ -103,6 +103,7 @@ server {
 server {
     listen 443 ssl;
     server_name popomo.chunpat.cc;
+    root /opt/aicase-prod/current/frontend/storefront;
     ssl_certificate /etc/letsencrypt/live/popomo.chunpat.cc/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/popomo.chunpat.cc/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;

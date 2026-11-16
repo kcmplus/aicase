@@ -9,6 +9,12 @@ const template={id:'supplier-1-'+'a'.repeat(20),model:'iPhone 16 Pro',inventoryI
  mask:'/media/supplier-templates/'+'c'.repeat(64)+'-mask.png',sourceWidth:600,sourceHeight:1200,printWidth:600,printHeight:1200,previewOnly:true,dpi:null};
 const order=()=>({id:'order-1',mode:'airwallex_live',fulfillmentType:'pickup',status:'paid',pass:{version:2,source:'collection',designId:'bloom',model:template.model,
  effect:'original',zoom:100,x:50,y:50,intensity:65,phoneTemplateId:template.id}});
+test('direct simulation completion is never presented as physical delivery',()=>{
+ const value={...order(),mode:'free_test',fulfillment:{simulated:true,print_confirmed:true,cloud_status:{phase:'dispensed',phase_verified:false}}};
+ assert.deepEqual(fulfillmentView(value),{state:'simulation',phase:'dispensed'});
+ assert.equal(fulfillmentView({...value,refund:{status:'requested'}}).state,'refund');
+ assert.notEqual(fulfillmentView({...value,fulfillment:{...value.fulfillment,simulated:false}}).state,'delivered');
+});
 test('station identity leads with a name and location, escapes supplied text and makes missing location explicit',()=>{
  const html=stationIdentity({name:'Mall <East>',location:'Level 1 <script>alert(1)</script>',device_id:'401',number:'WM-401'},{lang:'zh-CN'});
  assert.ok(html.indexOf('Mall &lt;East&gt;')<html.indexOf('设备编号'));

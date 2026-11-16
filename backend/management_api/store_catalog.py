@@ -3,6 +3,7 @@ import hashlib
 from datetime import timedelta
 from django.core.files.storage import default_storage
 from django.db.models import F
+from django.conf import settings
 from django.utils import timezone
 from rest_framework import serializers
 from .models import Device, DeviceProduct, PhoneModel
@@ -21,6 +22,9 @@ def catalog_stocks():
 def available_stocks():
     # Sync writes a complete snapshot transactionally. A running/failed refresh
     # must not hide the last valid snapshot while it is still fresh.
+    if settings.DIRECT_DEBUG_ENABLED:
+        # The separate debug database replays its catalog; it is not live inventory.
+        return catalog_stocks().filter(device_id=settings.DIRECT_DEBUG_DEVICE_ID)
     return catalog_stocks().filter(observed_at__gte=timezone.now()-timedelta(minutes=15))
 
 
@@ -43,20 +47,44 @@ def resolve_stock_template(model, template_id):
     return None, None
 
 
+def available_colors(model, template):
+    """Optional body previews; invalid colors never remove a saleable base model."""
+    from .phone_colors import checked_resource, validate_rgb
+    result = []
+    for color in model.colors.filter(active=True).select_related('current_resource', 'phone_model').order_by('sort_order', 'pk'):
+        try:
+            validate_rgb(color.rgb)
+            resource = color.current_resource
+            if not resource or not resource.verified_at or resource.template_id != template['id']:
+                continue
+            resource = checked_resource(color)
+            if (resource.width, resource.height) != (template['sourceWidth'], template['sourceHeight']):
+                continue
+        except serializers.ValidationError:
+            continue
+        result.append({'code': color.code, 'name': color.name, 'rgb': color.rgb,
+                       'isDefault': color.is_default, 'resource': {
+                           'version': resource.version, 'templateId': resource.template_id,
+                           'width': resource.width, 'height': resource.height,
+                           'overlay': default_storage.url(resource.overlay),
+                           'mask': default_storage.url(resource.mask)}})
+    return result
+
+
 def model_record(model, sources, *, scoped):
-    record = {'name': model.name, 'code': model.code, 'brand': model.brand.name, 'styles': []}
+    record = {'name': model.name, 'code': model.code, 'brand': model.brand.name, 'styles': [], 'colors': []}
     templates = []
     for material in MATERIALS:
         stock = sources.get((model.pk, material))
-        style = {'caseMaterial': material, 'available': bool(stock) if scoped else True}
+        style = {'caseMaterial': material, 'available': bool(stock) if scoped else True, 'colors': []}
         if stock:
             template = stock_template(stock)
-            style.update(templateId=template['id'], inventoryItemId=stock.pk)
+            style.update(templateId=template['id'], inventoryItemId=stock.pk, colors=available_colors(model, template))
             if scoped:
                 style['quantity'] = stock.stock
             templates.append(template)
             if 'templateId' not in record:
-                record.update(templateId=template['id'], inventoryItemId=stock.pk)
+                record.update(templateId=template['id'], inventoryItemId=stock.pk, colors=style['colors'])
         record['styles'].append(style)
     return record, templates
 

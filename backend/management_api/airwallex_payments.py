@@ -26,7 +26,7 @@ from rest_framework.views import APIView
 from .ai_service import SuperuserOnly, encryption_ready, CredentialStorageUnavailable
 from .audit import audit
 from .models import AirwallexConfig, PrintOrder, AuditLog
-from .orders import StrictSerializer, StoreOrders, owner, order_data, Conflict
+from .orders import StrictSerializer, StoreOrders, owner, order_data, Conflict, require_single_print_payment
 from .stripe_payments import credentials, encrypt_credentials, ConfigUpdate as StripeConfigUpdate
 
 REQUIRED_KEYS = ('client_id', 'api_key', 'webhook_secret')
@@ -249,6 +249,7 @@ class AirwallexCheckout(StoreOrders):
         order = get_object_or_404(PrintOrder.objects.select_for_update(), reference=reference, owner_hash=owner(request))
         if order.mode not in ('airwallex_test', 'airwallex_live') or order.status != 'pending':
             raise Conflict('This order is not awaiting Airwallex payment. Refresh its status.')
+        require_single_print_payment(order)
         if order.airwallex_payment_intent:
             intent = api_request(order, 'GET', '/api/v1/pa/payment_intents/' + intent_id(order.airwallex_payment_intent))
         else:

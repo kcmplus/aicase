@@ -1,0 +1,52 @@
+/* V35 checkout.css / checkout-theme.css, adapted to server-backed order controls.
+   No fixed checkout footer: consent, channel errors and station controls stay in flow. */
+body:is([data-v35-route="checkout"],[data-v35-route="orders"],[data-v35-route="payment"],[data-v35-route="pass"]) {
+  --ink:#100519; --muted:#786785; --line:#dfcceb; background:#faf6ff; color:var(--ink);
+}
+.v35-checkout,.v35-orders {max-width:1050px;margin:auto;padding:32px 28px 72px;overflow-wrap:anywhere}
+.v35-checkout .ai-heading,.v35-orders .ai-heading {text-align:left;margin:24px 0 28px}
+.v35-checkout .ai-heading h1,.v35-orders .ai-heading h1 {font-size:clamp(28px,3vw,38px);font-weight:600;letter-spacing:-1px;line-height:1.2}
+.v35-checkout .ai-heading p,.v35-orders .ai-heading p {max-width:65ch;color:var(--muted);line-height:1.7}
+.v35-checkout .ai-order-layout {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px;align-items:start}
+.v35-checkout .checkout-preview,.v35-checkout .ai-order-card {min-width:0;border:1px solid var(--line);border-radius:13px;background:#fff;box-shadow:none;padding:24px}
+.v35-checkout .checkout-preview {padding:0 0 22px;overflow:hidden;text-align:left}
+.v35-checkout .checkout-preview>h2,.v35-checkout .checkout-preview>p {margin-left:22px;margin-right:22px}
+.v35-checkout .checkout-preview h2 {font-size:18px;font-weight:600}
+.v35-checkout .checkout-case {margin:0 0 22px;height:340px;padding:25px;background:#efe3fa;display:flex;align-items:center;justify-content:center}
+.v35-checkout .checkout-case .case {max-height:290px}
+.v35-checkout .device-fulfillment .checkout-case {height:auto;border-radius:10px;margin-top:16px}
+.v35-checkout .ai-order-card h2 {font-size:23px}
+.v35-checkout .print-quote {border:0;padding:0;background:transparent}
+.v35-checkout .print-quote dl>div,.v35-checkout .payment-receipt dl>div {display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.v35-checkout dd {margin:0;overflow-wrap:anywhere}
+.v35-checkout .quote-total {border-top:1px solid var(--line);padding-top:20px;font-size:20px}
+.v35-checkout :is(.field-note,.quote-note,.demo-note) {color:var(--muted);font-size:14px;line-height:1.7}
+.v35-checkout :is(.payment-environment,.delivery-notice,.device-fulfillment),.v35-order-notice {border:1px solid var(--line);border-radius:10px;background:#f0e4fc;padding:16px;line-height:1.7}
+.v35-checkout .payment-receipt {border-color:var(--line)}
+.v35-checkout .payment-receipt summary {min-height:44px;gap:12px;flex-wrap:wrap}
+.v35-checkout :is(input:not([type=checkbox]),select) {max-width:100%;min-height:46px;background:#fcf9ff;border:1px solid #d9c5e8;border-radius:8px;color:var(--ink);font-size:16px}
+.v35-checkout input[type=checkbox] {accent-color:#a234fd;flex-shrink:0}
+.v35-checkout .ai-consent {line-height:1.7;align-items:flex-start}
+:is(.v35-checkout,.v35-orders) .button {min-height:46px;border-radius:8px;padding:12px 20px;white-space:normal;text-align:center}
+:is(.v35-checkout,.v35-orders) .button.primary {background:#a234fd;color:white;border-color:#a234fd}
+:is(.v35-checkout,.v35-orders) .button.secondary {background:#100519;color:white;border-color:#100519}
+:is(.v35-checkout,.v35-orders) :is(button,a,input,select,summary):focus-visible {outline:2px solid #a234fd;outline-offset:3px}
+:is(.v35-checkout,.v35-orders) button:disabled {opacity:.55;cursor:wait}
+.v35-orders .order-list {display:grid;gap:16px;margin-top:24px}
+.v35-orders .order-row {display:flex;justify-content:space-between;gap:24px;padding:24px;background:white;border:1px solid var(--line);border-radius:13px}
+.v35-orders .order-row>div {min-width:0}
+.v35-orders .order-row>div:last-child {display:flex;flex-direction:column;justify-content:center;align-items:flex-end;gap:16px}
+.v35-orders .order-row h2 {font-size:20px;margin:12px 0}
+.v35-orders .order-row .eyebrow {display:inline-block;background:#f0e3fc;color:#7021b0;border-radius:6px;padding:6px 10px;line-height:1.5}
+.v35-orders .order-row p,.v35-orders .order-row small {color:var(--muted)}
+.v35-orders .pass-actions {display:flex;justify-content:space-between;gap:16px;margin:24px 0}
+@media(max-width:760px) {
+ .v35-checkout,.v35-orders {padding:24px 18px 48px}
+ .v35-checkout .ai-order-layout {grid-template-columns:minmax(0,1fr);gap:20px}
+ .v35-checkout .ai-order-card {padding:20px}
+ .v35-checkout .checkout-case {height:280px}
+ .v35-checkout .checkout-case .case {max-height:240px}
+ .v35-orders .order-row {flex-direction:column;padding:18px;gap:16px}
+ .v35-orders .order-row>div:last-child {align-items:stretch}
+ .v35-checkout .steps {max-width:100%;flex-wrap:wrap;gap:8px}
+}

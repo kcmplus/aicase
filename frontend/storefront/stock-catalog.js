@@ -1,4 +1,5 @@
 import {registerSupplierTemplates,registerDesignModels,selectSupplierTemplate} from './phone-templates.js';
+import {validPhoneColors} from './phone-colors.js';
 export const stockedPhoneModels=[];
 export let stockCatalogStatus='loading';
 let records=[];
@@ -24,7 +25,7 @@ export function applyStockCatalog(data){
  registerSupplierTemplates(data.templates,{select:true});
  for(const r of data.models)selectSupplierTemplate(r.name,r.templateId);
  registerDesignModels(data.models.map(r=>r.name));
- records=data.models.map(r=>({...r}));stockedPhoneModels.splice(0,stockedPhoneModels.length,...records.map(r=>r.name));stockCatalogStatus=data.availability==='updating'?'updating':'ready';
+ records=data.models.map(r=>({...r,colors:validPhoneColors(r.colors,data.templates.find(t=>t.id===r.templateId)),...(r.styles?{styles:r.styles.map(style=>({...style,colors:validPhoneColors(style.colors,data.templates.find(t=>t.id===style.templateId))}))}:{})}));stockedPhoneModels.splice(0,stockedPhoneModels.length,...records.map(r=>r.name));stockCatalogStatus=data.availability==='updating'?'updating':'ready';
 }
 export function unavailableStockCatalog(){
  records=[];stockedPhoneModels.splice(0);registerSupplierTemplates([],{select:true});stockCatalogStatus='unavailable';

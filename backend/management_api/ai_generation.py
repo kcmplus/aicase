@@ -148,7 +148,23 @@ class RenderInput(StrictSerializer):
 
 
 def build_prompt(style, model, template):
-    return ('Edit the supplied image into original phone-case artwork. Preserve the identity, '
+    # Text guidance, not a claim that the provider receives the actual cutout mask.
+    # Put composition constraints before every style, including custom styles.
+    return ('PHONE-CASE CAMERA CUTOUT SAFETY — APPLY BEFORE STYLE\n'
+            f'Target phone model: {model.name}. '
+            'This artwork will appear on a phone case with camera openings and cropped outer edges. '
+            'Keep faces, eyes, human and animal heads, other essential subject details, and any '
+            'requested text fully inside the visible area, away from camera openings and edges, '
+            'with generous breathing room. Recompose by moving or proportionally scaling the '
+            'subject; do not crop, distort, remove, or cover important features to make them fit. '
+            'Use only expendable background around the camera area. If exact cutout geometry '
+            'is not supplied, use a conservative layout: keep the main subject in the central '
+            'half and all important facial details below the upper quarter of the final case canvas. '
+            'Keep the background continuous and full bleed, including behind areas that will be '
+            'hidden by the case. Do not draw camera holes, lenses, a phone case, mask outlines, '
+            'guide marks, or blank patches into the artwork. These placement constraints take '
+            'priority over conflicting style or composition instructions below.\n\n'
+            'Edit the supplied image into original phone-case artwork. Preserve the identity, '
             'recognizable features and main subject of the uploaded photo. Apply the following style '
             'to this uploaded subject; do not substitute a stock example or invent a different person.\n\n'
             'STYLE\n'+style.prompt+'\n\nCOMPOSITION\n'+model.adaptation_prompt+

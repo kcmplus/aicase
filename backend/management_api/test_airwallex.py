@@ -54,6 +54,34 @@ class AirwallexTests(TestCase):
     def checkout(self, order):
         return self.client.post(f'/api/v1/store/orders/{order.reference}/checkout/', {}, format='json')
 
+    @patch('management_api.airwallex_payments.api_request')
+    def test_legacy_quantity_payment_guard_preserves_unknown_and_existing_sessions(self, api):
+        order = self.create()
+        for quantity in (3, 0, -1, True, '1', 1.0, None):
+            for provider_id in ('', 'int_existing'):
+                with self.subTest(quantity=quantity, provider_id=bool(provider_id)):
+                    order.snapshot = {**order.snapshot, 'quantity': quantity}
+                    order.amount = '30.00'
+                    order.airwallex_payment_intent = provider_id
+                    order.save()
+                    before = PrintOrder.objects.filter(pk=order.pk).values().get()
+                    response = self.checkout(order)
+                    self.assertEqual(response.status_code, 409, response.data)
+                    api.assert_not_called()
+                    self.assertEqual(PrintOrder.objects.filter(pk=order.pk).values().get(), before)
+
+    @patch('management_api.airwallex_payments.api_request')
+    def test_legacy_unpaid_multi_print_requires_review_before_payment(self, api):
+        order = self.create()
+        order.snapshot = {**order.snapshot, 'quantity': 3}
+        order.amount = '30.00'
+        order.save()
+        api.return_value = self.intent(order, amount=30)
+        response = self.checkout(order)
+        self.assertFalse(api.called,
+            f'Unreviewed legacy multi-print reached payment: HTTP {response.status_code}')
+        self.assertIn(response.status_code, (400, 409), response.data)
+
     def intent(self, order, **changes):
         return {'id': 'int_example', 'request_id': str(order.reference), 'merchant_order_id': str(order.reference),
                 'metadata': {'order_reference': str(order.reference)}, 'currency': 'USD', 'amount': 10,
@@ -63,6 +91,56 @@ class AirwallexTests(TestCase):
     def event(self, order, **changes):
         return {'id': 'evt_example', 'name': 'payment_intent.succeeded',
                 'data': {'object': self.intent(order, status='SUCCEEDED', **changes)}}
+
+    @patch('management_api.airwallex_payments.api_request')
+    def test_qa_missing_legacy_quantity_can_reuse_single_print_intent(self, api):
+        order = self.create()
+        order.snapshot.pop('quantity', None)
+        order.airwallex_payment_intent = 'int_example'
+        order.save()
+        snapshot = copy.deepcopy(order.snapshot)
+        api.return_value = self.intent(order)
+        self.assertEqual(self.checkout(order).status_code, 200)
+        self.assertEqual(api.call_count, 1)
+        self.assertEqual(api.call_args.args[1:3], ('GET', '/api/v1/pa/payment_intents/int_example'))
+        order.refresh_from_db()
+        self.assertEqual(order.snapshot, snapshot)
+        self.assertEqual(str(order.amount), '10.00')
+        self.assertEqual(order.status, 'pending')
+
+    @patch('management_api.airwallex_payments.api_request')
+    def test_qa_live_multi_print_never_reuses_payment_intent(self, api):
+        order = self.create()
+        order.mode = 'airwallex_live'
+        order.snapshot = {**order.snapshot, 'quantity': 2}
+        order.amount = '20.00'
+        order.airwallex_payment_intent = 'int_existing'
+        order.save()
+        before = PrintOrder.objects.values().get(pk=order.pk)
+        response = self.checkout(order)
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertNotIn('checkout', response.data)
+        api.assert_not_called()
+        self.assertEqual(PrintOrder.objects.values().get(pk=order.pk), before)
+
+    @patch('management_api.airwallex_payments.api_request')
+    def test_qa_delayed_legacy_multi_payment_preserves_frozen_snapshot(self, api):
+        order = self.create()
+        order.snapshot = {**order.snapshot, 'quantity': 3}
+        order.amount = '30.00'
+        order.airwallex_payment_intent = 'int_example'
+        order.save()
+        snapshot = copy.deepcopy(order.snapshot)
+        api.return_value = self.intent(order, amount=30, captured_amount=30, status='SUCCEEDED')
+        event = self.event(order, amount=30, captured_amount=30)
+        for _ in range(2):
+            self.assertEqual(self.deliver(event).status_code, 200)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'paid')
+        self.assertEqual(order.snapshot, snapshot)
+        self.assertEqual(str(order.amount), '30.00')
+        self.assertEqual(order.revision, 2)
+        self.assertEqual(AuditLog.objects.filter(actor_name='Airwallex', action='payment').count(), 1)
 
     def deliver(self, event, secret=VALUES['webhook_secret'], timestamp=None):
         payload = json.dumps(event)

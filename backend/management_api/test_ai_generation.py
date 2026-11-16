@@ -62,6 +62,8 @@ class LiveGenerationTests(TestCase):
     def test_accepted_upload_creates_private_snapshot_and_reserves_once(self):
         job=self.job()
         self.assertEqual(job.input_image,png());self.assertIn('Private English style prompt',job.prompt)
+        self.assertTrue(job.prompt.startswith('PHONE-CASE CAMERA CUTOUT SAFETY'))
+        self.assertIn('Target phone model: iPhone 17.', job.prompt)
         self.assertEqual(job.model_name,'gpt-image-1-mini');self.assertEqual(job.phone_template_id,'iphone-17-a-v1')
         self.assertEqual(AIAccount.objects.get().trial_used,1)
         response,dispatch=self.create();self.assertEqual(response.status_code,200);self.assertFalse(dispatch.called)
@@ -76,6 +78,8 @@ class LiveGenerationTests(TestCase):
             self.body.update(style_id=code, request_key=str(uuid.uuid4()))
             job = self.job()
             self.assertIn(AIStyle.objects.get(code=code).prompt, job.prompt)
+            self.assertTrue(job.prompt.startswith('PHONE-CASE CAMERA CUTOUT SAFETY'))
+            self.assertLess(job.prompt.index('Keep faces, eyes'), job.prompt.index('\n\nSTYLE\n'))
             restore_credit(job, 'cancelled')
         self.assertEqual(AIAccount.objects.get().trial_used, 0)
 
@@ -160,7 +164,8 @@ class LiveGenerationTests(TestCase):
             output,request_id=edit_image('test-not-a-real-api-key',job)
         request=opener.open.call_args.args[0]
         self.assertEqual(request.full_url,'https://api.openai.com/v1/images/edits')
-        for part in (png(),b'name="image[]"',b'gpt-image-1-mini',b'Private English style prompt',b'1024x1536'):
+        for part in (png(),b'name="image[]"',b'gpt-image-1-mini',b'Private English style prompt',
+                     b'PHONE-CASE CAMERA CUTOUT SAFETY',b'1024x1536'):
             self.assertIn(part,request.data)
         self.assertNotIn(b'input_fidelity',request.data)
         self.assertEqual(output,png());self.assertEqual(request_id,'request-123')

@@ -1,5 +1,6 @@
 """One active channel for new orders; existing orders retain their channel."""
 from django.shortcuts import get_object_or_404
+from django.conf import settings
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
@@ -41,6 +42,8 @@ def payment_config():
 def checkout_settings(provider, mode):
     from . import stripe_payments, airwallex_payments
     public = payment_config()
+    if settings.DIRECT_DEBUG_ENABLED and not public.get('zero_price_test'):
+        raise Conflict('Direct simulation only supports the zero-price test plan.')
     if provider != public['provider'] or mode != public['mode']:
         raise Conflict('Payment settings changed. Reload to review the payment method.')
     if public.get('zero_price_test'):
@@ -63,6 +66,8 @@ class PaymentCheckout(StoreOrders):
     http_method_names = ['post', 'options']
 
     def post(self, request, reference):
+        if settings.DIRECT_DEBUG_ENABLED:
+            raise Conflict('Online checkout is disabled in direct simulation.')
         from .stripe_payments import StripeCheckout
         from .airwallex_payments import AirwallexCheckout
         order = get_object_or_404(PrintOrder, reference=reference, owner_hash=owner(request))

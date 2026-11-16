@@ -18,6 +18,9 @@ http.createServer(async(req,res)=>{
   const file=path.resolve(root,'.'+(pathname==='/'?'/index.html':decodeURIComponent(pathname)));
   if(!file.startsWith(root))throw Error('outside root');
   let data=await readFile(file);
+  if((pathname==='/'||pathname==='/index.html')&&process.env.DIRECT_DEBUG==='1'){
+   data=data.toString().replace('</head>','<script src="/direct-debug-runtime.js"></script></head>');
+  }
   // Local kiosk previews can point phone scans at an existing public storefront.
   // Production static hosting uses the current origin or the host's own config.
   if(pathname==='/device.html'&&process.env.DEVICE_STOREFRONT_URL){
@@ -28,4 +31,4 @@ http.createServer(async(req,res)=>{
   }
   res.writeHead(200,{'Content-Type':({'.html':'text/html; charset=utf-8','.json':'application/json; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.webp':'image/webp'})[path.extname(file)]||'application/octet-stream','Cache-Control':'no-store'});res.end(data);
  }catch{res.writeHead(404);res.end('Not found');}
-}).listen(port,'127.0.0.1',()=>console.log(`AI CASE STUDIO: http://127.0.0.1:${port}`));
+}).listen(port,process.env.HOST||'127.0.0.1',()=>console.log(`AI CASE STUDIO: http://127.0.0.1:${port}`));

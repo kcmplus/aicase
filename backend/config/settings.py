@@ -6,6 +6,10 @@ from pathlib import Path
 from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+DIRECT_DEBUG_ENABLED = False  # Enabled only by the separate local settings module.
+DIRECT_DEBUG_DEVICE_ID = 0
+DIRECT_DEBUG_TOKEN = ''
+DIRECT_DEBUG_H5_ORIGIN = ''
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "")
 if not SECRET_KEY:
