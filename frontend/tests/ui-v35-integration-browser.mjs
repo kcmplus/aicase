@@ -142,6 +142,42 @@ try{
   assert.notEqual(await photoLayer.getAttribute('style'),photoBefore,'Photo composition can be moved on the main canvas');
   await page.locator('[data-action="undo-design"]').click();
   assert.equal(await photoLayer.getAttribute('style'),photoBefore);
+  await page.locator('.v35-crop-launch').click();
+  await page.locator('#photo-crop-x').evaluate(el=>{el.value='70';el.dispatchEvent(new Event('input',{bubbles:true}));});
+  assert.match(await photoLayer.getAttribute('style'),/object-position:70%/);
+  await page.locator('[data-action="undo-design"]').click();
+  assert.equal(await page.locator('#photo-crop-x').inputValue(),'50');
+  await page.locator('[data-photo-turn="90"]').click();assert.match(await photoLayer.getAttribute('style'),/rotate\(90deg\)/);
+  await page.locator('[data-photo-turn="-90"]').click();assert.match(await photoLayer.getAttribute('style'),/rotate\(0deg\)/);
+  await page.locator('#photo-size').evaluate(el=>{el.value='130';el.dispatchEvent(new Event('input',{bubbles:true}));});
+  assert.equal(await page.locator('output[for="photo-size"]').innerText(),'130%');
+  await page.locator('[data-action="undo-design"]').click();assert.equal(await page.locator('#photo-size').inputValue(),'100');
+  await page.locator('[data-photo-fit="contain"]').click();
+  assert.equal(await photoLayer.evaluate(el=>getComputedStyle(el).objectFit),'contain');
+  await page.reload();await page.locator('.large-preview .artwork-canvas').waitFor();
+  assert.equal(await page.locator('[data-photo-fit="contain"]').getAttribute('aria-pressed'),'true','Fit survives reload');
+  await page.locator('[data-photo-fit="blur"]').click();
+  assert.equal(await page.locator('.photo-blur-background').count(),1);
+  assert.equal(await photoLayer.evaluate(el=>getComputedStyle(el).objectFit),'contain');
+  const footerBox=await page.locator('.v35-design-bottom').boundingBox(),tabsBox=await page.locator('.v35-tool-tabs').boundingBox();
+  assert(footerBox.y>=tabsBox.y+tabsBox.height-1,'Review actions do not cover the editing tools');
+  await page.screenshot({path:`test-results/v35-integration/${width}-photo-controls.png`,fullPage:true});
+  if(width===390){
+   const pixels=await page.evaluate(async model=>{
+    const {exportCase}=await import('/print-export.js');const {phoneTemplate}=await import('/phone-templates.js');
+    const source=document.createElement('canvas');source.width=200;source.height=50;const sourceCtx=source.getContext('2d');sourceCtx.fillStyle='#ff0000';sourceCtx.fillRect(0,0,200,50);
+    const result={};for(const fit of ['cover','contain','blur']){
+     const exported=await exportCase({image:source.toDataURL(),background:'#fef4e8',art:'solid',zoom:100,layers:[],phoneTemplateId:phoneTemplate(model).id,photoPlacement:{x:50,y:50,scale:100,rotation:0,fit}},model,'supplier-print');
+     const img=await createImageBitmap(exported.blob),canvas=document.createElement('canvas');canvas.width=img.width;canvas.height=img.height;const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0);result[fit]=[...ctx.getImageData(160,100,1,1).data];img.close();
+    }return result;
+   },model);
+   assert.deepEqual(pixels.cover,[255,0,0,255]);assert.deepEqual(pixels.contain,[254,244,232,255]);
+   assert(pixels.blur[0]>240&&pixels.blur[1]<15&&pixels.blur[3]===255,'Blur background reaches the final print image');
+  }
+  await page.locator('[data-action="reset-photo-fit"]').click();
+  assert.equal(await page.locator('[data-photo-fit="cover"]').getAttribute('aria-pressed'),'true');
+  assert.equal(await page.locator('.photo-blur-background').count(),0);
+  assert.equal(await page.locator('#photo-size').inputValue(),'100');
   await page.locator('[data-editor-tool="stickers"]').click();
   assert(await page.locator('.graphic-library').isVisible());
   assert(!await page.locator('.text-editor').isVisible());

@@ -15,6 +15,14 @@ export function validatePlacement(value){
  if(!value||![value.x,value.y,value.scale,value.rotation].every(Number.isFinite)||value.x<0||value.x>100||value.y<0||value.y>100||value.scale<25||value.scale>200||value.rotation< -180||value.rotation>180)throw Error('This artwork placement is invalid.');
  return {x:value.x,y:value.y,scale:value.scale,rotation:value.rotation};
 }
+export function validatePhotoPlacement(value){
+ const placement=validatePlacement(value);
+ if(value.fit!==undefined){
+  if(!['cover','contain','blur'].includes(value.fit))throw Error('This photo fit is invalid.');
+  placement.fit=value.fit;
+ }
+ return placement;
+}
 export function validateText(value){
  if(typeof value.text!=='string'||value.text.length>80||!['sans','serif','mono','hand'].includes(value.font)||!/^#[0-9a-f]{6}$/i.test(value.color))throw Error('This text style is invalid.');
  return {text:value.text,font:value.font,color:value.color};
@@ -60,7 +68,7 @@ export function makePersonalDesign({source='collection',designId='bloom',photo='
   }
   if(source==='photo'&&collectionLayout){design.layers=makePersonalDesign({source:'collection',designId,...validateCollectionLayout(designId,collectionLayout)}).layers;}
   design.layers.push(...validateAddedArtwork(addedArtwork).map(a=>({...a,size:(a.type==='text'?75:45)*a.scale/100})));
-  if(source==='photo'&&photoPlacement){design.photoPlacement=validatePlacement(photoPlacement);design.zoom=100;}
+  if(source==='photo'&&photoPlacement){design.photoPlacement=validatePhotoPlacement(photoPlacement);design.zoom=100;}
   if(effect!=='original'&&!original)design=createBeautyPreview(design,{preset:effect,intensity:clamp(intensity,0,100,65)});
   if(phoneTemplateId)design.phoneTemplateId=phoneTemplateId;
   if(phoneColor)design.phoneColor=frozenPhoneColor(phoneColor);
@@ -73,7 +81,7 @@ export function validatePersonalPass(pass) {
   if(![pass.zoom,pass.x,pass.y].every(Number.isFinite)||pass.zoom<(pass.source==='collection'?50:100)||pass.zoom>180||pass.x<0||pass.x>100||pass.y<0||pass.y>100)throw Error('This photo crop is invalid.');
   const artworkEdits=pass.source==='collection'?validateCollectionLayout(pass.designId,pass).artworkEdits:{};
   const collectionLayout=pass.source==='photo'&&pass.collectionLayout!==undefined?validateCollectionLayout(pass.designId,pass.collectionLayout):undefined;
-  const addedArtwork=validateAddedArtwork(pass.addedArtwork),photoPlacement=pass.source==='photo'&&pass.photoPlacement?validatePlacement(pass.photoPlacement):undefined;
+  const addedArtwork=validateAddedArtwork(pass.addedArtwork),photoPlacement=pass.source==='photo'&&pass.photoPlacement?validatePhotoPlacement(pass.photoPlacement):undefined;
   if(pass.caseMaterial!==undefined&&!['standard','magnetic'].includes(pass.caseMaterial))throw Error('Choose your case style first.');
   if(pass.phoneTemplateId!==undefined)phoneTemplate(pass.model,pass.phoneTemplateId);
   const phoneColor=pass.phoneColor?frozenPhoneColor(pass.phoneColor):null;

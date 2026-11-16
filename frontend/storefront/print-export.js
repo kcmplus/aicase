@@ -10,6 +10,11 @@ export function coverRect(iw,ih,w,h,x=50,y=50){
  const scale=Math.max(w/iw,h/ih),width=iw*scale,height=ih*scale;
  return {x:(w-width)*x/100,y:(h-height)*y/100,width,height,scale};
 }
+export function photoRect(iw,ih,w,h,x=50,y=50,fit='cover'){
+ if(fit==='cover')return coverRect(iw,ih,w,h,x,y);
+ const scale=Math.min(w/iw,h/ih),width=iw*scale,height=ih*scale;
+ return {x:(w-width)*x/100,y:(h-height)*y/100,width,height,scale};
+}
 export function textLines(text,maxWidth,measure){
  const lines=[];
  for(const paragraph of String(text).replace(/\r\n?/g,'\n').split('\n')){
@@ -48,8 +53,8 @@ function filter(ctx,value){
  if(value!=='none'&&!('filter' in ctx))throw Error('This browser cannot export photo effects. Try Chrome.');
  ctx.filter=value;
 }
-function drawCover(ctx,img,w,h,x,y){
- const box=coverRect(img.naturalWidth,img.naturalHeight,w,h,x,y);
+function drawCover(ctx,img,w,h,x,y,fit='cover'){
+ const box=photoRect(img.naturalWidth,img.naturalHeight,w,h,x,y,fit);
  ctx.save();ctx.beginPath();ctx.rect(0,0,w,h);ctx.clip();ctx.drawImage(img,box.x,box.y,box.width,box.height);ctx.restore();
  return box.scale;
 }
@@ -60,9 +65,13 @@ async function drawArtwork(design,w,h){
  bg.fillStyle=design.background||'#fef4e8';bg.fillRect(0,0,w,h);
  if(design.image){
   const img=await loadImage(design.image),p=design.photoPlacement;
+  if(p?.fit==='blur'){
+   bg.save();filter(bg,`blur(${w*.04}px)`);bg.translate(-w*.06,-h*.06);
+   drawCover(bg,img,w*1.12,h*1.12,50,50);bg.restore();
+  }
   bg.save();
   if(p){bg.translate(w*p.x/100,h*p.y/100);bg.rotate(p.rotation*Math.PI/180);bg.scale(p.scale/100,p.scale/100);bg.translate(-w/2,-h/2);}
-  const factor=drawCover(bg,img,w,h,design.photoX??50,design.photoY??50);
+  const factor=drawCover(bg,img,w,h,design.photoX??50,design.photoY??50,p?.fit||'cover');
   effectiveDpi=300/(factor*(p?p.scale/100:1)*(design.zoom||100)/100);
   bg.restore();
  }else if(design.art&&design.art!=='solid'){

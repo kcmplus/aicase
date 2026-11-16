@@ -330,3 +330,18 @@ class StoreOrderTests(TestCase):
                         'snapshot': {**self.payload['snapshot'], 'code': 'POP-C-FEDCBA9876543210'}}
             self.assertEqual(self.client.patch(self.endpoint(order), revision, format='json').status_code, 409)
             self.assertEqual(list(PrintOrder.objects.values()), before)
+
+    def test_photo_fit_is_frozen_in_order_snapshot_and_unknown_modes_rejected(self):
+        stream=BytesIO(); Image.new('RGB',(40,20),'red').save(stream,format='PNG')
+        photo='data:image/png;base64,'+base64.b64encode(stream.getvalue()).decode()
+        self.payload['snapshot'].update(source='photo',photo=photo)
+        for fit in ('cover','contain','blur'):
+            self.payload['request_key']=str(uuid.uuid4())
+            self.payload['snapshot']['photoPlacement']={'x':50,'y':50,'scale':100,'rotation':0,'fit':fit}
+            order=self.create()
+            self.assertEqual(order['snapshot']['photoPlacement']['fit'],fit)
+            self.assertEqual(self.client.get(self.endpoint(order)).data['snapshot']['photoPlacement']['fit'],fit)
+        self.payload['request_key']=str(uuid.uuid4())
+        self.payload['snapshot']['photoPlacement']['fit']='remote-image'
+        self.assertEqual(self.client.post('/api/v1/store/orders/',self.payload,format='json').status_code,400)
+        self.assertEqual(PrintOrder.objects.count(),3)

@@ -31,7 +31,7 @@ import {designFor,stickers} from './catalog.js';
 import {phone, icon, esc} from './art.js';
 import {designs, stations, readPass, createPersonalPass} from './simple-core.js';
 
-import {effects, validateAddedArtwork, validatePlacement, isPhoto, makePersonalDesign, personalPassName} from './simple-personalize.js';
+import {effects, validateAddedArtwork, validatePlacement, validatePhotoPlacement, isPhoto, makePersonalDesign, personalPassName} from './simple-personalize.js';
 import {readDesign, writeDesign, updateDesign} from './simple-storage.js';
 import {stylePanel, aiPage} from './ai-view.js';
 import {setAIView,setAIComparison,mountAIStudio} from './ai-interactions.js';
@@ -41,7 +41,7 @@ import {createLiveRender,getAIAccount,changeAIAccount,submitLiveRender,refreshLi
 import {importPhoto} from './simple-upload.js';
 import {customerPage,sendEmailCode,verifyEmailCode,signOutCustomer,updateCustomerName,getCustomerCredits} from './customer-account.js';
 import {createDesignWorkspace,createDesignLibrary,designOwner} from './design-workspace.js';
-import {myDesignsPage,designReview,designSteps} from './v35-designs.js';
+import {myDesignsPage,designReview} from './v35-designs.js';
 import {showStorageStartupError} from './v35-startup.js';
 
 async function startStorefront(){
@@ -143,7 +143,7 @@ try {
     if(saved.artworkLayouts&&typeof saved.artworkLayouts==='object')for(const [id,layout] of Object.entries(saved.artworkLayouts)){
       try{const p=createPersonalPass({source:'collection',designId:id,model:phoneModels[0]||'iPhone 17',effect:'original',intensity:0,zoom:layout.zoom,x:layout.x,y:layout.y,artworkEdits:layout.artworkEdits,addedArtwork:layout.addedArtwork});state.artworkLayouts[id]={zoom:p.zoom,x:p.x,y:p.y,artworkEdits:p.artworkEdits||{},addedArtwork:p.addedArtwork||[]};}catch{}
     }
-    try{state.photoArtwork=validateAddedArtwork(saved.photoArtwork);if(saved.photoPlacement)state.photoPlacement=validatePlacement(saved.photoPlacement);}catch{}
+    try{state.photoArtwork=validateAddedArtwork(saved.photoArtwork);if(saved.photoPlacement)state.photoPlacement=validatePhotoPlacement(saved.photoPlacement);}catch{}
     if (saved.source==='photo')state.source='photo';
     state.keepCollection=saved.keepCollection===true;
     if(effects.some(e=>e.id===saved.effect))state.effect=saved.effect;
@@ -305,7 +305,7 @@ function personalizedPreview(selection,model,label,original=false){
 const passName=p=>p.version===2?personalPassName(p,designs):currentDesign(p.designId).name;
 const passPreview=p=>p.version===2?personalizedPreview(p,p.model,passName(p)):casePreview(p.designId,p.model);
 const effectCaption=p=>p.source==='photo'&&p.ai?`<span class="effect-caption">✦ ${esc(localized(aiStyles.find(s=>s.id===p.ai.styleId))||t('AI style'))} · ${p.ai.mode==='live'?'AI image':'Demo sample'}</span>`:p.version===2&&p.effect!=='original'&&p.intensity>0?`<span class="effect-caption">${icon('spark',13)} ${effects.find(e=>e.id===p.effect).name} · AI effect preview</span>`:'';
-function updatePreview(){finishInlineText();const note=document.querySelector('#model-preview-note');if(note)note.hidden=!state.model||Boolean(state.phoneTemplateId);const el=document.querySelector('.large-case');if(el&&!(state.source==='photo'&&!state.photo&&!state.keepCollection))el.innerHTML=personalizedPreview(state,state.model||phoneModels[0],state.source==='photo'?'Your photo':currentDesign(state.designId).name,comparing);fitCanvasEditor();highlightArtwork();}
+function updatePreview(){finishInlineText();const note=document.querySelector('#model-preview-note');if(note)note.hidden=!state.model||Boolean(state.phoneTemplateId);const el=document.querySelector('.large-case');if(el&&!(state.source==='photo'&&!state.photo&&!state.keepCollection))el.innerHTML=personalizedPreview(state,state.model||phoneModels[0],state.source==='photo'?'Your photo':currentDesign(state.designId).name,comparing);fitCanvasEditor();highlightArtwork();syncPhotoControls();}
 function highlightArtwork(){
  document.querySelector('.artwork-selection-actions')?.remove();
  const canvas=document.querySelector('.artwork-canvas');if(!canvas)return;
@@ -520,6 +520,22 @@ function syncEditorHistoryButtons(){
   const button=document.querySelector(`[data-action="${action}"]`);if(button)button.disabled=!enabled||photoBusy||passBusy||aiBusy;
  }
 }
+function syncPhotoControls(){
+ const panel=document.querySelector('.v35-photo-controls');if(!panel)return;
+ const p=photoTarget(),slider=panel.querySelector('#photo-size');slider.value=p.scale;
+ panel.querySelector('output[for="photo-size"]').textContent=Math.round(p.scale)+'%';
+ for(const button of panel.querySelectorAll('[data-photo-fit]'))button.setAttribute('aria-pressed',String(button.dataset.photoFit===(p.fit||'cover')));
+ for(const key of ['x','y']){const input=panel.querySelector(`[data-crop="${key}"]`);if(input)input.value=state[key];const label=panel.querySelector(`#${key}-value`);if(label)label.textContent=state[key]+'%';}
+}
+function photoControls(){
+ if(state.source!=='photo'||!state.photo)return '';
+ const zh=locale()==='zh-CN',p=photoTarget();
+ return `<section class="v35-photo-controls" aria-label="${zh?'照片编辑':'Photo editing'}">
+  <div class="v35-photo-transform"><button type="button" data-photo-turn="90" aria-label="${zh?'顺时针旋转照片':'Rotate photo clockwise'}">↻</button><button type="button" data-photo-turn="-90" aria-label="${zh?'逆时针旋转照片':'Rotate photo counterclockwise'}">↶</button><label for="photo-size">${zh?'尺寸':'Size'}</label><input id="photo-size" type="range" min="25" max="200" step="1" value="${p.scale}"><output for="photo-size">${Math.round(p.scale)}%</output></div>
+  <div class="v35-photo-fit"><button type="button" data-action="crop-photo" aria-expanded="${cropPanelOpen}" aria-controls="photo-crop-controls">${icon('crop',16)} ${zh?'裁剪':'Crop'}</button>${[['cover','Fill','填满'],['contain','Fit','完整显示'],['blur','Blur fill','模糊填充']].map(([fit,en,cn])=>`<button type="button" data-photo-fit="${fit}" aria-pressed="${(p.fit||'cover')===fit}">${zh?cn:en}</button>`).join('')}<button type="button" data-action="reset-photo-fit">${zh?'重置适配':'Reset fit'}</button></div>
+  <div id="photo-crop-controls" class="v35-crop-controls" ${cropPanelOpen?'':'hidden'}><p>${zh?'调整照片在壳内的裁剪位置；也可以直接拖动画布上的照片。':'Adjust the crop inside your case, or drag the photo on the canvas.'}</p>${[['x','Horizontal','水平位置'],['y','Vertical','垂直位置']].map(([key,en,cn])=>`<label for="photo-crop-${key}">${zh?cn:en}<input id="photo-crop-${key}" type="range" data-crop="${key}" min="0" max="100" value="${state[key]}"><output id="${key}-value" for="photo-crop-${key}">${state[key]}%</output></label>`).join('')}</div>
+ </section>`;
+}
 function choose() {
  const d=currentDesign(state.designId),own=state.source==='photo',hasPhoto=Boolean(state.photo),empty=own&&!hasPhoto&&!state.keepCollection,zh=locale()==='zh-CN';
  editorHistory.record(state,workspace.owner);
@@ -527,7 +543,7 @@ function choose() {
  <header class="v35-design-top"><h1>${zh?'设计':'Design'}</h1>${phonePicker()}</header>
  <div class="choose-layout">
   <div class="large-preview" ${own?'data-photo-drop':''} aria-busy="${photoBusy}">
-   <div class="v35-canvas-top"><p>${zh?'移动 · 缩放 · 旋转':'Move · Scale · Rotate'}</p><div class="v35-canvas-buttons">
+   <div class="v35-canvas-top">${own&&hasPhoto?`<button type="button" class="v35-crop-launch" data-action="crop-photo" aria-expanded="${cropPanelOpen}" aria-controls="photo-crop-controls">${icon('crop',18)}${zh?'裁剪照片':'Crop photo'}</button>`:`<p>${zh?'移动 · 缩放 · 旋转':'Move · Scale · Rotate'}</p>`}<div class="v35-canvas-buttons">
     <button type="button" data-action="undo-design" aria-label="${zh?'撤销':'Undo'}" ${!editorHistory.canUndo||photoBusy?'disabled':''}>↶</button>
     <button type="button" data-action="redo-design" aria-label="${zh?'重做':'Redo'}" ${!editorHistory.canRedo||photoBusy?'disabled':''}>↷</button>
     <button type="button" data-action="open-canvas" aria-label="${zh?'放大编辑':'Expand to edit'}" ${empty||photoBusy?'disabled':''}>${icon('scan',20)}</button>
@@ -535,6 +551,7 @@ function choose() {
    ${empty?`<div class="empty-photo-case" aria-hidden="true">${phone({art:'solid',background:'#f1def9',phoneTemplateId:state.phoneTemplateId,phoneColor:state.phoneColor},state.model||phoneModels[0])}</div><div class="photo-placeholder photo-start"><p>${zh?'从一张喜欢的照片开始':'Start with a photo you love'}</p><button type="button" class="button primary" data-source="photo" ${photoBusy?'disabled':''}>${icon('image',20)} ${zh?'上传照片':'Upload photo'}</button></div>`:`<div class="large-case artwork-canvas">${personalizedPreview(state,state.model||phoneModels[0],own?'Your photo':d.name,comparing)}</div>`}
   </div>
   <div class="choose-details" data-editor-tool-panel="${editorTool}">
+   ${editorTool==='base'?photoControls():''}
    <input class="file-input" type="file" id="photo-file" accept="image/jpeg,image/png,image/webp" aria-label="Upload your photo" ${photoBusy?'disabled':''}>
    <div id="editor-tool-content" class="v35-tool-content" ${!editorToolsOpen?'hidden':''}>
     <div class="v35-base-tools" ${editorTool!=='base'?'hidden':''}>
@@ -862,6 +879,7 @@ app.addEventListener('change',async event=>{
   }
 });
 app.addEventListener('input',event=>{
+  if(event.target.id==='photo-size'){if(photoBusy||passBusy||aiBusy||!state.photo)return;photoTarget().scale=Number(event.target.value);selectedArtwork=null;reviewPass=null;save();updatePreview();return;}
   if(event.target.matches('.look-wipe')){aiUi.lookCompare=setLookComparison(document.querySelector('.look-browser'),event.target.value);return;}
   if(event.target.id==='canvas-size'&&selectedArtwork){artworkTarget()[selectedArtwork==='all'?'zoom':'scale']=Number(event.target.value);save();updatePreview();return;}
  if(event.target.matches('[data-ai-compare]')){aiUi.compare=setAIComparison(app,event.target.value);return;}
@@ -916,7 +934,17 @@ app.addEventListener('submit',async event=>{
   if(event.target.id==='v35-work-search'){event.preventDefault();const fields=new FormData(event.target),params=new URLSearchParams({category:String(fields.get('category')||'all'),q:String(fields.get('q')||'').slice(0,100)});go('designs?'+params);}
 });
 app.addEventListener('click',async event=>{
-  const el=event.target.closest('[data-editor-tool],[data-case-material],[data-phone-color],[data-action],[data-design],[data-start-design],[data-source],[data-effect],[data-ai-action],[data-ai-look-example],[data-ai-look-step],[data-look-action],[data-look-mode],[data-ai-group],[data-ai-view],[data-artwork-item],[data-add-graphic],[data-quick-font],[data-quick-color]');if(!el||el.disabled||photoBusy||passBusy||aiBusy||sessionCheckBusy)return;
+  const el=event.target.closest('[data-photo-fit],[data-photo-turn],[data-editor-tool],[data-case-material],[data-phone-color],[data-action],[data-design],[data-start-design],[data-source],[data-effect],[data-ai-action],[data-ai-look-example],[data-ai-look-step],[data-look-action],[data-look-mode],[data-ai-group],[data-ai-view],[data-artwork-item],[data-add-graphic],[data-quick-font],[data-quick-color]');if(!el||el.disabled||photoBusy||passBusy||aiBusy||sessionCheckBusy)return;
+  if(el.dataset.photoFit||el.dataset.photoTurn||['crop-photo','reset-photo-fit'].includes(el.dataset.action)){
+   if(state.source!=='photo'||!state.photo)return;
+   finishInlineText();const p=photoTarget();selectedArtwork=null;editorTool='base';editorToolsOpen=true;
+   if(el.dataset.photoFit){if(!['cover','contain','blur'].includes(el.dataset.photoFit))return;if(el.dataset.photoFit==='cover')delete p.fit;else p.fit=el.dataset.photoFit;state.x=50;state.y=50;cropPanelOpen=false;}
+   if(el.dataset.photoTurn)p.rotation=((p.rotation+Number(el.dataset.photoTurn)+540)%360)-180;
+   if(el.dataset.action==='crop-photo'){cropPanelOpen=!cropPanelOpen;if(cropPanelOpen)delete p.fit;}
+   if(el.dataset.action==='reset-photo-fit'){state.photoPlacement={x:50,y:50,scale:100,rotation:0};state.zoom=100;state.x=50;state.y=50;cropPanelOpen=false;}
+   reviewPass=null;save();render(true);
+   if(el.dataset.action==='crop-photo'&&cropPanelOpen)document.querySelector('#photo-crop-x')?.focus({preventScroll:true});return;
+  }
   if(el.dataset.editorTool){
    if(!['base','stickers','text'].includes(el.dataset.editorTool))return;
    finishInlineText();editorTool=el.dataset.editorTool;editorToolsOpen=true;render(true);

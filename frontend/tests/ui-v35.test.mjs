@@ -17,7 +17,7 @@ import {createDesignWorkspace,createDesignLibrary,designOwner} from '../storefro
 import {myDesignsPage,designReview} from '../storefront/v35-designs.js';
 import {createPersonalPass,readPass} from '../storefront/simple-core.js';
 import {phoneTemplates,phoneTemplate} from '../storefront/phone-templates.js';
-import {makePersonalDesign,isPhoto,validateAddedArtwork,validatePlacement} from '../storefront/simple-personalize.js';
+import {makePersonalDesign,isPhoto,validateAddedArtwork,validatePlacement,validatePhotoPlacement} from '../storefront/simple-personalize.js';
 import {validatePhoneColor,validPhoneColors,frozenPhoneColor,reconcilePhoneColor,colorPicker,colorSelection,phoneColorName} from '../storefront/phone-colors.js';
 import {phone} from '../storefront/art.js';
 import {exportCase} from '../storefront/print-export.js';
@@ -565,7 +565,7 @@ async function startColorDraft(editor,response){
   freshMembership:()=>({jobs:{}}),freshOrders:()=>({orders:{}}),designs:[{id:'bloom'}],phoneModels:stockedPhoneModels,
   stations:[],aiStyles:[],aiExamples:[],effects:[],stockSelection,
   exampleFor:()=>({id:'portrait',results:{anime:'synthetic'}}),migrateRender:value=>value,
-  frozenPhoneColor,reconcilePhoneColor,isPhoto,validateAddedArtwork,validatePlacement,phoneBrands:()=>[],phoneBrand:()=> 'Synthetic',notify:message=>assert.fail(message),
+  frozenPhoneColor,reconcilePhoneColor,isPhoto,validateAddedArtwork,validatePlacement,validatePhotoPlacement,phoneBrands:()=>[],phoneBrand:()=> 'Synthetic',notify:message=>assert.fail(message),
  });
  Object.defineProperty(context,'stockCatalogStatus',{get:()=>stockCatalogStatus});
  const controller=await vm.runInContext(`(async()=>{${source.slice(start,end)}
@@ -942,4 +942,19 @@ test('opening editing controls does not add an undo step for lazily initialized 
  history.record(state,'guest');assert.equal(history.canUndo,false);
  state.photoArtwork.push({id:'sticker'});history.record(state,'guest');
  assert(history.undo(state,'guest'));assert.deepEqual(state.photoArtwork,[]);
+});
+
+test('photo fit survives save/restore and uses matching cover/contain geometry',async()=>{
+ const {photoRect}=await import('../storefront/print-export.js');
+ for(const fit of ['cover','contain','blur']){
+  const input={...syntheticPass(),photoPlacement:{x:50,y:50,scale:100,rotation:0,fit}};
+  const pass=readPass(input.code,input),design=makePersonalDesign(pass);
+  assert.equal(pass.photoPlacement.fit,fit);assert.equal(design.photoPlacement.fit,fit);
+  const html=phone(design,pass.model);
+  assert.match(html,new RegExp('object-fit:'+(fit==='cover'?'cover':'contain')));
+  assert.equal(html.includes('photo-blur-background'),fit==='blur');
+ }
+ assert.throws(()=>validatePhotoPlacement({x:50,y:50,scale:100,rotation:0,fit:'url(secret)'}),/fit/);
+ assert.deepEqual(photoRect(400,200,300,600,50,50,'contain'),{x:0,y:225,width:300,height:150,scale:.75});
+ assert.deepEqual(photoRect(400,200,300,600,50,50,'cover'),{x:-450,y:0,width:1200,height:600,scale:3});
 });

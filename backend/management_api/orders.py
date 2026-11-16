@@ -49,6 +49,9 @@ class Placement(StrictSerializer):
             raise serializers.ValidationError('Invalid artwork position.')
         return data
 
+class PhotoPlacement(Placement):
+    fit = serializers.ChoiceField(choices=['cover', 'contain', 'blur'], required=False)
+
 class Artwork(Placement):
     id = serializers.RegexField(r'^extra-[a-zA-Z0-9-]{1,60}$')
     type = serializers.ChoiceField(choices=['text', 'sticker'])
@@ -113,7 +116,7 @@ class Snapshot(Layout):
     effect = serializers.ChoiceField(choices=['original','fresh','warm','bold'])
     intensity = serializers.FloatField(min_value=0, max_value=100)
     addedArtwork = Artwork(many=True, required=False, max_length=20)
-    photoPlacement = Placement(required=False)
+    photoPlacement = PhotoPlacement(required=False)
     collectionLayout = Layout(required=False)
     ai = AIMetadata(required=False)
     phoneColor = ColorSelection(required=False)

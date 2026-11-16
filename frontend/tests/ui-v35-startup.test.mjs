@@ -7,7 +7,7 @@ import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
 import {createDesignWorkspace,createDesignLibrary} from '../storefront/design-workspace.js';
 import {storageStartupPage,showStorageStartupError} from '../storefront/v35-startup.js';
-import {isPhoto,validateAddedArtwork,validatePlacement} from '../storefront/simple-personalize.js';
+import {isPhoto,validateAddedArtwork,validatePlacement,validatePhotoPlacement} from '../storefront/simple-personalize.js';
 
 // Exercise the actual startup block with IndexedDB unavailable before first render.
 test('an unavailable design database shows a recoverable startup error', async () => {
@@ -85,7 +85,7 @@ test('a transient photo read failure preserves the scoped draft for a later star
    writeDesign:async(key,value)=>rows.set(key,value),updateDesign:async(key,transform,initial)=>transform(rows.get(key)??initial),
    freshMembership:()=>({jobs:{}}),freshOrders:()=>({orders:{}}),designs:[{id:'bloom'}],phoneModels:[],stations:[],aiStyles:[],aiExamples:[],effects:[],
    stockSelection:()=>null,exampleFor:()=>({id:'portrait',results:{anime:'synthetic'}}),migrateRender:value=>value,
-   isPhoto,validateAddedArtwork,validatePlacement});
+   isPhoto,validateAddedArtwork,validatePlacement,validatePhotoPlacement});
   const result=await vm.runInContext(`(async()=>{${source.slice(start,end)} return {photo:state.photo,source:state.source,zoom:state.zoom,x:state.x,y:state.y,placement:state.photoPlacement};} return await startStorefront();})()`,context);
   return {result,location};
  }
