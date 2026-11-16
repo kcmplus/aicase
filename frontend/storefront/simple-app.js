@@ -427,7 +427,7 @@ function assertCurrentColor(selection,available){
 }
 function selectPhoneModel(model){
  if(!phoneModels.includes(model))return;
- if(model!==state.model){state.model=model;state.caseMaterial='';state.phoneTemplateId=undefined;selectSupplierTemplate(model,undefined);syncDraftColor(true);reviewPass=null;save();}
+ if(model!==state.model||!state.caseMaterial){state.model=model;state.caseMaterial='standard';state.phoneTemplateId=stockSelection(model,'standard')?.templateId;selectSupplierTemplate(model,state.phoneTemplateId);syncDraftColor(true);reviewPass=null;save();}
  if(location.hash==='#choose?step=model')history.replaceState(null,'','#choose');
  render(true);document.querySelector('[data-action="choose-phone"]')?.focus({preventScroll:true});
 }
@@ -1177,8 +1177,8 @@ async function changeAIPhoneModel(model){
   if(stockCatalogStatus!=='ready'||!phoneModels.includes(model))throw Error('This phone model is unavailable. Please choose again.');
   // Preserve the request key, photo and style. Changing a draft must not submit a render.
   await rememberLiveJob({...aiJob,model});
-  Object.assign(state,{model,caseMaterial:'',phoneTemplateId:undefined,phoneColor:null});
-  selectSupplierTemplate(model,undefined);colorNotice=false;reviewPass=null;aiUi.accepted=false;save();
+  Object.assign(state,{model,caseMaterial:'standard',phoneTemplateId:stockSelection(model,'standard')?.templateId,phoneColor:null});
+  selectSupplierTemplate(model,state.phoneTemplateId);colorNotice=false;reviewPass=null;aiUi.accepted=false;save();
  }catch(error){aiUi.error=error.message;notify(error.message);}
  finally{aiBusy=false;render(true);document.querySelector('#ai-phone-model')?.focus({preventScroll:true});}
 }

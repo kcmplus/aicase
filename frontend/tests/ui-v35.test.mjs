@@ -832,7 +832,7 @@ async function aiPhoneChangeHarness(){
   state:{model:'iPhone 17',caseMaterial:'standard',phoneColor:{code:'old'},phoneTemplateId:'old-template'},
   phoneModels:['iPhone 17','iPhone 13 Pro'],stockCatalogStatus:'ready',colorNotice:true,reviewPass:{old:true},
   membership:{authenticated:true},workspace:{check(){}},syncAIAccount:async()=>{},refreshStockChoices:async()=>{},
-  render:()=>{},notify:()=>{},save:()=>{},selectSupplierTemplate:()=>{},document:{querySelector:()=>null},location:{hash:'#ai'},
+  render:()=>{},notify:()=>{},save:()=>{},selectSupplierTemplate:()=>{},stockSelection:()=>({templateId:'new-standard-template'}),document:{querySelector:()=>null},location:{hash:'#ai'},
   rememberLiveJob:async value=>{writes.push(structuredClone(value));context.aiJob=value;},
   submitLiveRender:async value=>{sent.push(structuredClone(value));return {...value,status:'queued',remoteId:'server-id'};}};
  vm.createContext(context);vm.runInContext(appFunction(source,'changeAIPhoneModel')+'\n'+appFunction(source,'confirmAI'),context);
@@ -843,7 +843,7 @@ test('changing the AI model preserves photo/style/request identity and submits t
  await context.changeAIPhoneModel('iPhone 13 Pro');
  assert.equal(context.aiJob.model,'iPhone 13 Pro');assert.equal(context.aiJob.id,'AI-same-request');
  assert.equal(context.aiJob.photo,'private synthetic photo');assert.equal(context.aiJob.styleId,'anime');
- assert.equal(context.state.model,'iPhone 13 Pro');assert.equal(context.state.caseMaterial,'');assert.equal(context.state.phoneColor,null);
+ assert.equal(context.state.model,'iPhone 13 Pro');assert.equal(context.state.caseMaterial,'standard');assert.equal(context.state.phoneTemplateId,'new-standard-template');assert.equal(context.state.phoneColor,null);
  assert.equal(context.aiUi.accepted,false);assert.equal(context.aiUi.error,'');assert.equal(sent.length,0);
  await context.confirmAI(true,true);
  assert.equal(sent.length,1);assert.equal(sent[0].model,'iPhone 13 Pro');assert.equal(sent[0].submissionAttempted,true);

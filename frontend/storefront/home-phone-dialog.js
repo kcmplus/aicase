@@ -9,7 +9,7 @@ export function openHomePhoneDialog({root,initial={},catalog,refresh,lang='en-US
  const say=(en,zh)=>lang==='zh-CN'?zh:en;
  const opener=document.activeElement,dialog=document.createElement('dialog');
  dialog.className='v35-home-phone';dialog.setAttribute('aria-labelledby','home-phone-title');
- let draft={model:initial.model||'',caseMaterial:initial.caseMaterial||'',phoneColor:initial.phoneColor||null};
+ let draft={model:initial.model||'',caseMaterial:initial.caseMaterial||'standard',phoneColor:initial.phoneColor||null};
  let brand=catalog().selection(draft.model||catalog().models[0])?.brand||phoneBrand(draft.model||catalog().models[0]),closed=false,refreshing=false,closeModels=()=>{};
  function selection(){
   const {models,status,selection}=catalog();
@@ -37,7 +37,7 @@ export function openHomePhoneDialog({root,initial={},catalog,refresh,lang='en-US
   if(el.hasAttribute('data-home-close'))return dispose();
   if(refreshing)return;
   if(el.hasAttribute('data-home-model-open')){
-   closeModels=openPhoneModelDialog({root,selected:draft.model,catalog,refresh,lang,onSelect:model=>{brand=catalog().selection(model)?.brand||phoneBrand(model);if(model!==draft.model)draft={model,caseMaterial:'',phoneColor:null};draw('#home-phone-model');}});return;
+   closeModels=openPhoneModelDialog({root,selected:draft.model,catalog,refresh,lang,onSelect:model=>{brand=catalog().selection(model)?.brand||phoneBrand(model);if(model!==draft.model)draft={model,caseMaterial:'standard',phoneColor:null};draw('#home-phone-model');}});return;
   }
   if(el.hasAttribute('data-home-retry')){
    refreshing=true;draw();

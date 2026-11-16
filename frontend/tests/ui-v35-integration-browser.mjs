@@ -80,8 +80,8 @@ try{
   if(await page.locator('[data-picker-model]').count()>5)assert(await body.evaluate(el=>el.scrollTop>0),'Long lists scroll within the sheet');
   await page.keyboard.press('Escape');await page.locator('.v35-model-dialog').waitFor({state:'detached'});
   await pickModel(page,model,'#home-phone-model');
-  assert(await page.locator('[data-home-confirm]').isDisabled(),'Selecting a model alone does not select a case style');
-  await page.locator('[data-home-material="standard"]').click();
+  assert(await page.locator('[data-home-confirm]').isEnabled(),'Choosing a model defaults to standard when available');
+  assert.equal(await page.locator('[data-home-material="standard"]').getAttribute('aria-pressed'),'true');
   await page.locator('[data-home-color="synthetic-blue"][aria-pressed="true"]').waitFor();
   await page.screenshot({path:`test-results/v35-integration/${width}-home-picker.png`});
   const modal=await page.locator('.v35-home-phone').boundingBox();
