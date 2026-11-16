@@ -1,3 +1,4 @@
+import {chosenStation,stationChoicePanel} from '../storefront/station-picker.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {distanceKm,locateUser,loadPrintStations,createStationFinder,stationFinderPanel} from '../storefront/pickup-stations.js';
@@ -61,4 +62,25 @@ test('compact list omits stations without valid WGS84 positions even in cached r
  const empty=stationFinderPanel({rows:[{...station,coordinates:null}],loadedAt:now},{now,lang:'zh-CN'});
  assert.ok(empty.includes('暂未找到已配置位置'));
  assert.ok(!empty.includes('暂无距离信息'));
+});
+
+test('prototype station entry collapses to an escaped summary without binding or printing',()=>{
+ const state={rows:[{...station,name:'<Synthetic>',location:'Test & address'}],loadedAt:now};
+ const start=stationChoicePanel(state,{now});
+ assert.match(start,/Find a nearby printer/);assert.doesNotMatch(start,/pickup-station-row|station-navigation/);
+ const selected=stationChoicePanel(state,{now,selectedKey:'146:401'});
+ assert.match(selected,/&lt;Synthetic&gt;/);assert.match(selected,/Test &amp; address/);assert.match(selected,/Change station/);assert.match(selected,/Scan the station QR code/);
+ assert.doesNotMatch(selected,/confirm-print|pay-provider|data-action="scan-station"/);
+ assert.equal(chosenStation({...state,rows:[{...station,availability:'out_of_stock'}]},'146:401'),undefined);
+ assert.doesNotMatch(stationChoicePanel({...state,loadedAt:now-61000},{now,selectedKey:'146:401'}),/station-navigation/);
+ const bound=stationChoicePanel({...state,bound:true},{now});assert.match(bound,/View station/);assert.match(bound,/already assigned/);
+ const emptyBound=stationChoicePanel({...state,bound:true,rows:[{...station,availability:'out_of_stock',quantity:0}]},{now});assert.match(emptyBound,/View station/);assert.doesNotMatch(emptyBound,/Find a nearby printer|station-navigation/);
+});
+test('picker selection respects fresh stock, coordinates and search matches',()=>{
+ const state={rows:[station],loadedAt:now};
+ const available=stationFinderPanel(state,{now,selectable:true,search:station.name});
+ assert.match(available,/data-action="select-station"/);assert.doesNotMatch(available,/data-station-key="146:401" disabled/);
+ for(const changes of [{error:true},{busy:true},{loadedAt:now-61000},{rows:[{...station,availability:'out_of_stock',quantity:0}]}])assert.match(stationFinderPanel({...state,...changes},{now,selectable:true}),/data-station-key="146:401" disabled/);
+ assert.doesNotMatch(stationFinderPanel(state,{now,selectable:true,search:'no-such-station'}),/data-action="select-station"/);
+ assert.doesNotMatch(stationFinderPanel({...state,rows:[{...station,coordinates:null}]},{now,selectable:true}),/data-action="select-station"/);
 });

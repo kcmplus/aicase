@@ -5,6 +5,7 @@ import {worksPage,workDetailPage,tutorialPage,aboutPage,locationsPage,membership
 import {shellHeader,shellFooter,homePresentation,mountShell} from './v35-shell.js';
 import {caseStylePicker,caseMaterialLabel} from './case-styles.js';
 import {createStationFinder,stationFinderPanel,locateUser} from './pickup-stations.js';
+import {stationChoicePanel,openStationPicker,chosenStation} from './station-picker.js';
 import {progressPanel,progressPaymentText} from './order-progress.js';
 import {startVisiblePolling} from './visible-polling.js';
 import {providerOrderRoute,requireDisplayedOrder,mergeOrderProgress} from './order-service.js';
@@ -93,7 +94,8 @@ let orderLoading=false;
 let orderRows=[],orderPage=1,orderHasMore=false,orderError='',entryOrders=null,entryOrderError='';
 let paymentConfig=null,paymentError='',orderActionError='',paymentOrder=null,stopPaymentPolling=()=>{},paymentPollCount=0,paymentLoading=false,navigationId=0;
 let userPosition=null,locatingStations=false,stationLocationError='';
-const openStationMaps=new Set();
+const openStationMaps=new Set(),stationChoices=new Map();
+let stationPicker=null;
 const stationFinder=createStationFinder({onChange:renderStationFinder});
 function pickupContext(){
  const route=location.hash.split('?')[0];
@@ -106,20 +108,48 @@ function syncStationFinder(){stationFinder.setContext(pickupContext());}
 function pickupStationPanel(){
  const context=pickupContext();if(!context)return '';
  const finder=stationFinder.state.key===context.key?stationFinder.state:{rows:[],busy:true};
- return stationFinderPanel(finder,{model:context.model+' · '+caseMaterialLabel(context.caseMaterial,locale()),lang:locale(),position:userPosition,locating:locatingStations,locationError:stationLocationError,openMaps:openStationMaps});
+ return stationChoicePanel(finder,{selectedKey:stationChoices.get(context.key),lang:locale()});
+}
+function stationPickerContents(search=''){
+ const context=pickupContext();if(!context)return '';
+ const finder=stationFinder.state.key===context.key?stationFinder.state:{rows:[],busy:true};
+ return stationFinderPanel(finder,{selectable:true,selectedKey:stationChoices.get(context.key),search,model:context.model+' · '+caseMaterialLabel(context.caseMaterial,locale()),lang:locale(),position:userPosition,locating:locatingStations,locationError:stationLocationError,openMaps:openStationMaps});
+}
+function showStationPicker(){
+ if(stationPicker||passBusy)return;
+ const context=pickupContext();if(!context)return;
+ syncStationFinder();
+ stationPicker=openStationPicker({lang:locale(),content:stationPickerContents,onClose:()=>{stationPicker=null;document.querySelector('[data-action="open-station-picker"]')?.focus({preventScroll:true});},
+  onNavigate:()=>{if(stationFinder.state.error||Date.now()-stationFinder.state.loadedAt>60000){void stationFinder.refresh();return false;}return true;},
+  onToggle:(key,open)=>{if(key){if(open)openStationMaps.add(key);else openStationMaps.delete(key);}},
+  onAction:async(action,key)=>{
+   if(pickupContext()?.key!==context.key){stationPicker?.close();return;}
+   if(action==='locate-stations'){await requestStationLocation({force:true});return;}
+   if(['refresh-stations','more-stations'].includes(action)){await stationFinder.refresh(action==='more-stations');return;}
+   if(action==='select-station'){
+    const finder=stationFinder.state;
+    if(finder.key!==context.key||finder.busy||finder.error||Date.now()-finder.loadedAt>60000||!chosenStation(finder,key)){void stationFinder.refresh();return;}
+    stationChoices.set(context.key,key);stationPicker?.close();renderStationFinder();document.querySelector('[data-action="open-station-picker"]')?.focus({preventScroll:true});
+   }
+  }});
+ void requestStationLocation();
+ if(Date.now()-stationFinder.state.loadedAt>60000)void stationFinder.refresh();
 }
 function pickupCheckoutReady(){const c=pickupContext(),v=stationFinder.state;return c&&v.key===c.key&&!v.error&&!v.busy&&Date.now()-v.loadedAt<=60000&&v.rows.some(s=>s.availability==='available');}
 async function requestStationLocation({force=false}={}){
  if(locatingStations||passBusy||(!force&&userPosition&&Date.now()-userPosition.acquiredAt<300000))return;
  locatingStations=true;stationLocationError='';
- // Start on the radio/button gesture, before storage writes or other awaits.
+ // Start only on an explicit finder/location button gesture.
  const request=locateUser();renderStationFinder();
  try{userPosition=await request;}catch(error){stationLocationError=error.message;userPosition=null;}
  finally{locatingStations=false;renderStationFinder();}
 }
 function renderStationFinder(){
- const panel=document.querySelector('#pickup-station-panel');if(panel)panel.innerHTML=pickupStationPanel();
- const button=document.querySelector('#print-checkout-form button');if(button&&!checkoutDraft?.editId)button.disabled=passBusy||!pickupCheckoutReady();
+ const panel=document.querySelector('#pickup-station-panel'),restoreFocus=panel?.contains(document.activeElement)&&document.activeElement?.dataset.action==='open-station-picker';
+ if(panel)panel.innerHTML=pickupStationPanel();
+ if(restoreFocus)panel.querySelector('[data-action="open-station-picker"]')?.focus({preventScroll:true});
+ stationPicker?.update();
+ const button=document.querySelector('#print-checkout-form button');if(button&&!checkoutDraft?.editId&&(checkoutDraft?.fulfillmentType||'pickup')==='pickup')button.disabled=passBusy||!pickupCheckoutReady();
 }
 
 try {
@@ -746,6 +776,7 @@ function checkoutPage(){
  ${canConfirm?'':checkoutDock({price:displayPrice,label:actionLabel,disabled:true})}</section>`;
 }
 function render(preserveScroll=false) {
+  stationPicker?.close();
   finishInlineText();
   cleanupAIStudio();
   cleanupShell();
@@ -873,15 +904,13 @@ app.addEventListener('keydown',event=>{
  const selector=handle?'.'+[...handle.classList].find(c=>c!=='artwork-handle'):(selectedArtwork==='photo'?'[data-photo-layer]':`[data-layer-id="${selectedArtwork}"]`);save();updatePreview();canvas.querySelector(selector)?.focus({preventScroll:true});
 });
 app.addEventListener('toggle',event=>{const el=event.target;if(!el.isConnected||!el.matches('.pickup-stations .station-navigation'))return;const key=el.closest('[data-station-key]')?.dataset.stationKey;if(key){if(el.open)openStationMaps.add(key);else openStationMaps.delete(key);}},true);
-app.addEventListener('click',event=>{if(event.target.closest('.pickup-stations a')&&(stationFinder.state.error||Date.now()-stationFinder.state.loadedAt>60000)){event.preventDefault();void stationFinder.refresh();}},true);
-app.addEventListener('click',event=>{if(event.target.matches('input[name=fulfillment_type][value=pickup]')&&checkoutDraft&&!checkoutDraft.editId&&(checkoutDraft.fulfillmentType||'pickup')==='pickup')void requestStationLocation();});
+app.addEventListener('click',event=>{if(event.target.closest('.pickup-stations a,.pickup-choice a')&&(stationFinder.state.error||Date.now()-stationFinder.state.loadedAt>60000)){event.preventDefault();void stationFinder.refresh();}},true);
 app.addEventListener('change',async event=>{
   if(event.target.matches('#ai-credit-form [name=accepted]'))aiUi.accepted=event.target.checked;
   if(event.target.name==='fulfillment_type'&&checkoutDraft&&!checkoutDraft.editId){
     if(passBusy)return;
     if(!['pickup','courier'].includes(event.target.value))return;
     checkoutDraft.fulfillmentType=event.target.value;checkoutDraft.requestKey=crypto.randomUUID();
-    if(event.target.value==='pickup')void requestStationLocation();
     paymentConfig=null;paymentLoading=true;await privateWrite('checkout-draft',checkoutDraft);syncStationFinder();render(true);await navigate();return;
   }
   if(event.target.id==='language'){
@@ -1099,6 +1128,7 @@ app.addEventListener('click',async event=>{
   if(el.dataset.effect){state.effect=el.dataset.effect;comparing=false;effectPanelOpen=true;save();render(true);document.querySelector(`[data-effect="${state.effect}"]`)?.focus({preventScroll:true});return;}
   try {
     if(['refresh-stations','more-stations'].includes(el.dataset.action)){syncStationFinder();await stationFinder.refresh(el.dataset.action==='more-stations');return;}
+    if(el.dataset.action==='open-station-picker'){showStationPicker();return;}
     if(el.dataset.action==='locate-stations'){await requestStationLocation({force:true});return;}
     if(el.dataset.action==='scan-station'){
       openStationScanner({lang:locale(),onScan:async (destination,{signal})=>{

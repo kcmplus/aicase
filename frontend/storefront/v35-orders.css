@@ -109,3 +109,31 @@ body:is([data-v35-route="checkout"],[data-v35-route="orders"],[data-v35-route="p
 .v35-checkout .address-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .v35-checkout .checkout-address .button{justify-self:start;white-space:normal}
 @media(max-width:420px){.v35-checkout .address-pair{grid-template-columns:1fr}}
+/* Prototype-style station chooser; the chosen address never binds an order. */
+.pickup-choice{margin-top:18px;padding-top:22px;border-top:1px solid #dfcceb;font-size:15px;line-height:1.65}
+.pickup-choice p{margin:0 0 18px}.pickup-choice-name{display:block;font-size:18px;margin-bottom:6px}
+.pickup-choice>.button{margin-top:4px;background:#100519;color:#fff;border-color:#100519;border-radius:9px;white-space:normal;text-align:center}
+.pickup-choice>small{display:block;margin-top:14px;color:#786785;font-size:12px}
+.pickup-choice .station-navigation{margin:0 0 12px}
+body.station-picker-open{overflow:hidden}
+.v35-station-picker{padding:0;border:1px solid #dfcceb;border-radius:24px;width:min(680px,calc(100% - 24px));max-width:680px;max-height:calc(100dvh - 32px);background:#fcf9ff;color:#100519;box-shadow:0 18px 65px #18052933;overflow:hidden}
+.v35-station-picker[open]{display:flex;flex-direction:column}
+.v35-station-picker::backdrop{background:#180b2b70;backdrop-filter:blur(3px)}
+.v35-station-picker>header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:22px 24px;border-bottom:1px solid #dfcceb;background:#f3e7ff;flex:none}
+.v35-station-picker header p{margin:0 0 6px;font-size:11px;letter-spacing:.12em;color:#786785}
+.v35-station-picker h2{margin:0;font-size:24px;line-height:1.2}
+.v35-station-picker [data-close]{width:44px;height:44px;flex:none;border:0;border-radius:50%;background:#ffffff88;font-size:30px;color:#100519;cursor:pointer}
+.station-picker-content{padding:20px 24px;overflow:auto;overscroll-behavior:contain;min-height:0;scrollbar-color:#c99de6 transparent}
+.station-picker-search{display:grid;gap:9px;font-size:14px;font-weight:600}
+.station-picker-search input{width:100%;min-width:0;padding:12px;border:1px solid #dfcceb;border-radius:12px;background:#fff;font:inherit;font-size:16px;color:#100519;box-sizing:border-box}
+.v35-station-picker :focus-visible{outline:2px solid #a234fd;outline-offset:3px}
+.v35-station-picker .pickup-stations{padding:0;margin:20px 0 0;border:0;border-radius:0;background:none}
+.v35-station-picker .pickup-stations>h3{font-size:17px}.v35-station-picker .pickup-stations>p{font-size:13px;line-height:1.6}
+.v35-station-picker .pickup-station-row{margin:12px 0;padding:18px;border:1px solid #dfcceb;border-radius:16px;background:white}
+.v35-station-picker .pickup-station-row:has(.station-select:focus-visible){border-color:#a234fd}
+.v35-station-picker .pickup-row-heading strong{font-size:17px}.v35-station-picker .pickup-row-address{margin:10px 0;font-size:14px}
+.v35-station-picker .pickup-distance,.v35-station-picker .pickup-stock{color:#7940a0}
+.v35-station-picker .station-select{min-height:44px;padding:9px 14px;background:#a234fd;border:1px solid #a234fd;color:white;font-size:14px;white-space:normal}
+.v35-station-picker button:disabled{opacity:.45;cursor:not-allowed}
+.v35-station-picker .text-button{color:#7926bc}.v35-station-picker .station-map-links a{color:#7926bc;border-color:#dfcceb}
+@media(max-width:480px){.v35-station-picker{width:calc(100% - 16px);max-height:calc(100dvh - 20px);border-radius:20px}.v35-station-picker>header{padding:18px}.v35-station-picker h2{font-size:22px}.station-picker-content{padding:18px}.v35-station-picker .pickup-station-row{padding:14px}}
