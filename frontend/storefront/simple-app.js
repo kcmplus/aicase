@@ -40,7 +40,7 @@ import {createLiveRender,getAIAccount,changeAIAccount,submitLiveRender,refreshLi
 import {importPhoto} from './simple-upload.js';
 import {customerPage,sendEmailCode,verifyEmailCode,signOutCustomer,updateCustomerName,getCustomerCredits} from './customer-account.js';
 import {createDesignWorkspace,createDesignLibrary,designOwner} from './design-workspace.js';
-import {myDesignsPage,designReview} from './v35-designs.js';
+import {myDesignsPage,designReview,designSteps} from './v35-designs.js';
 import {showStorageStartupError} from './v35-startup.js';
 
 async function startStorefront(){
@@ -522,7 +522,7 @@ app.addEventListener('drop',async event=>{
 });
 function choose() {
  const d=currentDesign(state.designId),own=state.source==='photo',hasPhoto=Boolean(state.photo);
- return `<section class="flow wrap editor-flow v35-editor">${stationContext()}<div class="v35-editor-heading"><div><p class="v35-kicker">A LITTLE MORE YOU.</p><h1>${locale()==='zh-CN'?'让灵感，成为你的设计。':'Make it yours.'}</h1></div><a class="text-button" href="#my-designs">${locale()==='zh-CN'?'本机保存的设计 →':'Saved on this browser →'}</a></div>${phonePicker()}<div id="case-style-panel">${caseStylePicker(stockSelection(state.model),state.caseMaterial,{lang:locale(),scoped:Boolean(stockScope)})}</div><div id="phone-color-picker">${colorPicker(stockSelection(state.model,state.caseMaterial)?.colors||[],state.phoneColor,locale(),colorNotice)}</div>
+ return `${designSteps(state.model?1:0,locale())}<section class="flow wrap editor-flow v35-editor">${stationContext()}<div class="v35-editor-heading"><div><p class="v35-kicker">A LITTLE MORE YOU.</p><h1>${locale()==='zh-CN'?'让灵感，成为你的设计。':'Make it yours.'}</h1></div><a class="text-button" href="#my-designs">${locale()==='zh-CN'?'本机保存的设计 →':'Saved on this browser →'}</a></div>${phonePicker()}<div id="case-style-panel">${caseStylePicker(stockSelection(state.model),state.caseMaterial,{lang:locale(),scoped:Boolean(stockScope)})}</div><div id="phone-color-picker">${colorPicker(stockSelection(state.model,state.caseMaterial)?.colors||[],state.phoneColor,locale(),colorNotice)}</div>
  <div class="choose-layout">
   <div class="source-switch editor-sources" role="group" aria-label="Design source"><button type="button" data-source="collection" aria-pressed="${!own}" ${photoBusy?'disabled':''}>The collection</button><button type="button" data-source="photo" aria-pressed="${own}" aria-busy="${photoBusy}" ${photoBusy?'disabled':''}>${photoBusy?'<i class="studio-spinner"></i> Reading your photo…':icon('upload',15)+' Your photo'}</button></div>
   <div class="large-preview" ${own?'data-photo-drop':''} aria-busy="${photoBusy}" style="--card:${own?'#eeece7':d.color}">
@@ -534,7 +534,7 @@ function choose() {
    ${own?'':`<details class="editor-panel" data-editor-panel="collection" ${editorPanels.collection?'open':''}><summary><span class="editor-tool-icon" aria-hidden="true">${icon('image',18)}</span><span>Collection</span><small>${esc(d.name)}</small><span class="editor-chevron" aria-hidden="true">⌄</span></summary><div class="editor-panel-body"><fieldset class="design-choices visual-design-choices"><legend class="sr-only">Pick a design</legend>${designs.map(item=>`<button type="button" data-design="${item.id}" class="design-thumbnail ${d.id===item.id?'selected':''}" aria-label="${item.name}" aria-pressed="${d.id===item.id}" style="--swatch:${designFor(item.id).background}"><span class="design-thumbnail-case">${casePreview(item.id,state.model||phoneModels[0])}</span><span class="design-thumbnail-check" aria-hidden="true">${d.id===item.id?'✓':''}</span></button>`).join('')}</fieldset></div></details>`}
    ${stylePanel(state,aiJob,effectPanelOpen,membership,aiUi)}${creativeLibrary()}
    ${own&&state.ai?'<p class="effect-selection">✓ AI image applied · You can adjust the crop or replace the photo above.</p>':''}
-   <div class="editor-next"><form id="design-form"><button class="button primary full" type="submit" ${photoBusy||passBusy||own&&!hasPhoto?'disabled':''}>${passBusy?'Saving your design…':'Preview your design'} ${arrow()}</button></form><p class="v35-page-note">${locale()==='zh-CN'?'预览后可保存本机副本，再确认订单。':'Preview and save a local copy before reviewing your order.'}</p></div>
+   <div class="editor-next"><form id="design-form"><button class="button primary full" type="submit" ${photoBusy||passBusy||own&&!hasPhoto?'disabled':''}>${passBusy?(locale()==='zh-CN'?'正在检查设计…':'Checking your design…'):(locale()==='zh-CN'?'预览确认':'Review')} ${arrow()}</button></form><p class="v35-page-note">${locale()==='zh-CN'?'下一步确认机型和设计。':'Next, check your phone model and design.'}</p></div>
   </div>
  </div>${canvasEditor()}</section>`;
 }
@@ -567,7 +567,19 @@ async function restoreLocalDesign(pass){
  if(templateChanged)notify(locale()==='zh-CN'?'机型模板已变化，请重新确认预览。':'The phone template changed. Please preview your design again.');
  if(!state.model)notify('This phone model is out of stock or unavailable. Please choose again.');
 }
-function closeDesignReview(){reviewPass=null;reviewSaved=false;document.querySelector('.v35-design-review')?.close();render(true);document.querySelector('#design-form button')?.focus({preventScroll:true});}
+async function prepareDesignReview(submitted){
+ if(!phoneModels.includes(submitted.model))throw Error('Choose your phone model first.');
+ if(submitted.source==='photo'&&!isPhoto(submitted.photo))throw Error('Choose a photo first.');
+ await refreshStockChoices();
+ if(!submitted.caseMaterial)throw Error('Choose your case style first.');
+ const available=stockSelection(submitted.model,submitted.caseMaterial);
+ if(!available)throw Error(stockScope?'This phone model is out of stock or unavailable. Please choose again.':'This phone model is unavailable. Please choose again.');
+ if(submitted.phoneTemplateId&&submitted.phoneTemplateId!==available.templateId){state.phoneTemplateId=available.templateId;throw Error('The phone template changed. Please review your design again.');}
+ assertCurrentColor(submitted,available);
+ const pass=createPersonalPass({...layoutSelection(submitted),phoneTemplateId:available.templateId});
+ return pass;
+}
+function closeDesignReview(){reviewPass=null;reviewSaved=false;go('choose');}
 function passPage() {
  const pass=state.pass,zh=locale()==='zh-CN',say=(en,cn)=>zh?cn:en;
  if(!pass)return `<section class="empty wrap"><h1>${say('Choose your photo first.','先选择你的照片。')}</h1><a class="button primary" href="#choose">${say('Create a design','开始设计')}</a></section>`;
@@ -684,20 +696,20 @@ function render(preserveScroll=false) {
   cleanupHomePhone();
   const oldY=window.scrollY;
   const [route='home',query='']=location.hash.slice(1).split('?');
-  if(route!=='choose'){reviewPass=null;reviewSaved=false;}
+  if(!['choose','review'].includes(route)){reviewPass=null;reviewSaved=false;}
   canvasObserver?.disconnect();canvasObserver=null;canvasHome=null;
   if(route!=='choose')canvasExpanded=false;
   if(route!=='choose')effectPanelOpen=false;
   document.body.classList.toggle('canvas-editor-open',canvasExpanded);
-  const pages={account:()=>customerPage(membership,customerUI),'my-designs':()=>myDesignsPage({rows:localDesigns,lang:locale(),preview:passPreview,error:localDesignError,busy:localDesignBusy,guest:workspace.owner==='guest'}),choose,pass:passPage,kiosk:()=>publicStationPage(true),designs:()=>worksPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),work:()=>workDetailPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),'how-it-works':()=>tutorialPage({lang:locale()}),about:()=>aboutPage({lang:locale()}),locations:publicStationPage,printers:publicStationPage,ai:()=>aiPage(aiJob,membership,aiBusy,{...aiUi,phoneModels,stockCatalogStatus}),membership:()=>membershipInfoPage({account:membership,lang:locale()}),checkout:checkoutPage,orders:ordersPage,payment:paymentPage};
+  const pages={review:()=>designReview({pass:reviewPass,preview:passPreview,lang:locale(),busy:passBusy,saved:reviewSaved}),account:()=>customerPage(membership,customerUI),'my-designs':()=>myDesignsPage({rows:localDesigns,lang:locale(),preview:passPreview,error:localDesignError,busy:localDesignBusy,guest:workspace.owner==='guest'}),choose,pass:passPage,kiosk:()=>publicStationPage(true),designs:()=>worksPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),work:()=>workDetailPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),'how-it-works':()=>tutorialPage({lang:locale()}),about:()=>aboutPage({lang:locale()}),locations:publicStationPage,printers:publicStationPage,ai:()=>aiPage(aiJob,membership,aiBusy,{...aiUi,phoneModels,stockCatalogStatus}),membership:()=>membershipInfoPage({account:membership,lang:locale()}),checkout:checkoutPage,orders:ordersPage,payment:paymentPage};
   app.classList.toggle('is-ai-studio',route==='ai'&&aiJob?.mode==='live');
   app.classList.toggle('is-editor',route==='choose');
   document.body.classList.toggle('v35-home-page',!Object.hasOwn(pages,route));
-  const privateRoute=['choose','pass','ai','membership','my-designs','checkout','orders','payment'].includes(route);
+  const privateRoute=['choose','review','pass','ai','membership','my-designs','checkout','orders','payment'].includes(route);
   document.body.dataset.v35Route=route;
-  app.innerHTML=header()+`<main id="main" tabindex="-1">${catalogStatus==='unavailable'?'<div class="catalog-warning" role="status">Prices and AI previews could not be loaded. Your saved designs are still available. <button class="text-button" data-action="reload-catalog">Try again</button></div>':''}${!workspace.active&&privateRoute?privateWorkspaceNotice():(Object.hasOwn(pages,route)?pages[route]:home)()}${route==='choose'&&workspace.active?designReview({pass:reviewPass,preview:passPreview,lang:locale(),busy:passBusy,saved:reviewSaved}):''}</main>`+footer();
+  app.innerHTML=header()+`<main id="main" tabindex="-1">${catalogStatus==='unavailable'?'<div class="catalog-warning" role="status">Prices and AI previews could not be loaded. Your saved designs are still available. <button class="text-button" data-action="reload-catalog">Try again</button></div>':''}${!workspace.active&&privateRoute?privateWorkspaceNotice():(Object.hasOwn(pages,route)?pages[route]:home)()}</main>`+footer();
   if(aiBusy)document.querySelectorAll('[data-ai-action],#ai-credit-form button,#ai-subscription-form button').forEach(el=>el.disabled=true);
-  const title=({account:'My account','my-designs':'My designs',choose:'Choose your case',pass:'Your design pass',kiosk:'Print locations',designs:'Works center',work:'Design details','how-it-works':'How to use',about:'About POPOMO',locations:'Print locations',printers:'Print locations',ai:'Your AI render',membership:'AI membership',checkout:'Review print order',orders:'My orders',payment:'Payment status'})[route];
+  const title=({review:locale()==='zh-CN'?'预览确认':'Review & confirm',account:'My account','my-designs':'My designs',choose:'Choose your case',pass:'Your design pass',kiosk:'Print locations',designs:'Works center',work:'Design details','how-it-works':'How to use',about:'About POPOMO',locations:'Print locations',printers:'Print locations',ai:'Your AI render',membership:'AI membership',checkout:'Review print order',orders:'My orders',payment:'Payment status'})[route];
   document.title=title?`${t(title)} · POPOMO`:t('POPOMO — A little more you.');
   localize(app);document.querySelector('.skip-link').textContent=t('Skip to content');
   cleanupAIStudio=mountAIStudio(app,aiJob,aiUi);
@@ -706,8 +718,6 @@ function render(preserveScroll=false) {
   document.querySelectorAll('[data-editor-panel]').forEach(bindEditorPanel);
   document.querySelector('.canvas-editor')?.addEventListener('cancel',event=>{event.preventDefault();closeCanvasEditor();});
   document.querySelector('.look-browser')?.addEventListener('cancel',event=>{event.preventDefault();closeAIStudio();});
-  const review=document.querySelector('.v35-design-review');
-  if(review){review.addEventListener('cancel',event=>{event.preventDefault();closeDesignReview();});review.showModal();}
   observeCanvasPreview();
   if(canvasExpanded)openCanvasEditor();
   else if(effectPanelOpen)openAIStudio();
@@ -874,16 +884,11 @@ app.addEventListener('submit',async event=>{
   if(event.target.id==='design-form'){
     event.preventDefault();if(passBusy||photoBusy)return;
     if(!phoneModels.includes(state.model)){const panel=document.querySelector('.model-first');panel.open=true;panel.scrollIntoView({block:'start',behavior:'smooth'});panel.querySelector('#model-search')?.focus({preventScroll:true});notify('Choose your phone model first.');return;}
-    const submitted={...state};passBusy=true;render(true);
+    const submitted={...state},submittedHash=location.hash;passBusy=true;render(true);
     try{
-      await refreshStockChoices();
-      if(!submitted.caseMaterial)throw Error('Choose your case style first.');
-      const available=stockSelection(submitted.model,submitted.caseMaterial);
-      if(!available)throw Error(stockScope?'This phone model is out of stock or unavailable. Please choose again.':'This phone model is unavailable. Please choose again.');
-      if(submitted.phoneTemplateId&&submitted.phoneTemplateId!==available.templateId){state.phoneTemplateId=available.templateId;throw Error('The phone template changed. Please review your design again.');}
-      assertCurrentColor(submitted,available);
-      const pass=createPersonalPass({...layoutSelection(submitted),phoneTemplateId:available.templateId});
-      reviewPass=pass;reviewSaved=false;comparing=false;
+      const pass=await prepareDesignReview(submitted);
+      if(location.hash!==submittedHash)return;
+      reviewPass=pass;reviewSaved=false;comparing=false;go('review');
     }catch(error){notify(error.message||'The design could not be saved. Please try again.');}
     finally{passBusy=false;if(location.hash.startsWith('#choose'))render(true);}
   }
@@ -1074,12 +1079,13 @@ setInterval(async()=>{if(document.hidden||passBusy||photoBusy||aiBusy||canvasExp
 async function navigate(){
  const currentNavigation=++navigationId;
  const [route,query='']=location.hash.slice(1).split('?');const params=new URLSearchParams(query);
- if(['choose','ai','my-designs','pass','orders','payment'].includes(route))try{await syncAIAccount();}catch(error){if(currentNavigation!==navigationId)return;customerUI.error=error.message;}
+ if(['choose','review','ai','my-designs','pass','orders','payment'].includes(route))try{await syncAIAccount();}catch(error){if(currentNavigation!==navigationId)return;customerUI.error=error.message;}
  // Identity reads may finish after a newer navigation has already rendered.
  // Retire the old route before it can restart loading or consume entry data.
  if(currentNavigation!==navigationId)return;
  if(!workspace.active&&route!=='account'){render();return;}
- if(route==='choose')await refreshStockChoices();
+ if(route==='choose'){reviewPass=null;reviewSaved=false;await refreshStockChoices();}
+ if(route==='review'&&!reviewPass){try{const prepared=await prepareDesignReview({...state});if(currentNavigation!==navigationId)return;reviewPass=prepared;reviewSaved=false;}catch(error){if(currentNavigation!==navigationId)return;notify(error.message);go('choose');return;}}
  if(route==='my-designs'){localDesigns=[];localDesignBusy=true;render(true);await loadLocalDesigns();}
  if(route==='account'||route==='membership')try{await syncAIAccount();if(route==='account'&&membership.authenticated)await loadCustomerCredits(true);}catch(error){customerUI.error=error.message;}
  stopPaymentPolling();paymentPollCount=0;
@@ -1120,6 +1126,7 @@ async function navigate(){
  if(currentNavigation!==navigationId)return;
  syncStationFinder();render();document.querySelector('#main')?.focus({preventScroll:true});
  if(route==='choose'&&params.get('studio')==='1')openAIStudio();
+ if(route==='choose'&&params.get('step')==='model'){const panel=document.querySelector('.model-first');if(panel){panel.open=true;panel.scrollIntoView({block:'start'});panel.querySelector('summary')?.focus({preventScroll:true});}}
 }
 const entryHash=location.hash;
 const entry=await stationEntry({scope:stockScope,hash:entryHash,station:scannedStation});

@@ -9,6 +9,7 @@ const browser=await chromium.launch({headless:true,...(process.env.CHROMIUM_PATH
 await mkdir('test-results/v35-integration',{recursive:true});
 try{
  for(const [width,height] of [[320,568],[390,844],[768,1024],[1440,900]]){
+  if(process.env.TEST_VIEWPORT_WIDTH&&width!==Number(process.env.TEST_VIEWPORT_WIDTH))continue;
   const context=await browser.newContext({viewport:{width,height},serviceWorkers:'block'}),errors=[],writes=[];
   // Both frontend and backend have independent outbound guards. This browser may
   // read only its fixture origin; payment/dispatch/print writes are forbidden.
@@ -89,6 +90,34 @@ try{
   await page.locator('[data-case-material="standard"]').click();
   await page.locator('#design-form button').click();
   await page.locator('[data-action="save-local-design"]').waitFor();
+  assert.equal(new URL(page.url()).hash,'#review');
+  assert.equal(await page.locator('dialog.v35-design-review').count(),0,'Review is a page, not an extra dialog');
+  await page.reload();
+  await page.locator('.v35-review-summary').waitFor().catch(async error=>{console.error({width,url:page.url(),errors,text:await page.locator('body').innerText()});throw error;});
+  assert.match(await page.locator('.v35-review-summary').innerText(),/1 case/);
+  assert.match(await page.locator('.v35-review-summary').innerText(),/Standard/);
+  assert.match(await page.locator('.v35-review-summary').innerText(),/Synthetic blue/);
+  const reviewGeometry=await page.locator('.v35-review-case').evaluate(stage=>({stage:stage.getBoundingClientRect().toJSON(),phone:stage.querySelector('.phone-case').getBoundingClientRect().toJSON()}));
+  assert(reviewGeometry.phone.height>=200&&reviewGeometry.stage.height<=500,'Review phone has a readable, bounded size');
+  assert.equal(await page.locator('.v35-design-steps ol').evaluate(el=>getComputedStyle(el).display),'flex','Journey steps appear in a horizontal row');
+  assert(reviewGeometry.phone.top>=reviewGeometry.stage.top&&reviewGeometry.phone.bottom<=reviewGeometry.stage.bottom,'Review phone fits vertically');
+  assert(reviewGeometry.phone.left>=reviewGeometry.stage.left&&reviewGeometry.phone.right<=reviewGeometry.stage.right,'Review phone fits horizontally');
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Review never scrolls horizontally');
+  await page.evaluate(()=>{document.activeElement?.blur();window.scrollTo(0,document.body.scrollHeight);});
+  await page.screenshot({path:`test-results/v35-integration/${width}-review.png`,fullPage:true});
+  await page.goBack();
+  await page.locator('.v35-editor').waitFor();
+  await page.goForward();
+  await page.locator('.v35-review-summary').waitFor().catch(async error=>{console.error({width,url:page.url(),errors,text:await page.locator('body').innerText()});throw error;});
+  assert.match(await page.locator('.v35-review-summary').innerText(),/Synthetic blue/);
+  if(width===390){
+   await page.locator('.v35-design-steps a[href="#choose?step=model"]').click();
+   await page.locator('.model-first[open]').waitFor();
+   await page.locator('.model-first summary').click();
+   await page.locator('#design-form button').click();
+   await page.locator('.v35-review-summary').waitFor().catch(async error=>{console.error({width,url:page.url(),errors,text:await page.locator('body').innerText()});throw error;});
+  }
+
   await page.locator('[data-action="save-local-design"]').click();
   await page.locator('[data-action="close-design-review"]').first().click();
   await page.reload();
@@ -153,11 +182,11 @@ try{
    return {id:job.id,photo:job.photo,model:catalog.models.find(item=>item.name!==model).name};
   },model);
   await page.goto(origin+'/#ai');
-  await page.locator('#ai-phone-model').waitFor();
+  await page.locator('#ai-phone-model').waitFor().catch(async error=>{console.error({width,url:page.url(),errors,text:await page.locator('body').innerText()});throw error;});
   await page.locator('#ai-phone-model').selectOption(aiFixture.model);
   await page.waitForFunction(model=>!document.querySelector('#ai-phone-model')?.disabled&&JSON.parse(localStorage.getItem('v35:guest:editor')||'{}').model===model,aiFixture.model);
   await page.reload();
-  await page.locator('#ai-phone-model').waitFor();
+  await page.locator('#ai-phone-model').waitFor().catch(async error=>{console.error({width,url:page.url(),errors,text:await page.locator('body').innerText()});throw error;});
   assert.equal(await page.locator('#ai-phone-model').inputValue(),aiFixture.model);
   const savedAI=await page.evaluate(async()=>{const {readDesign}=await import('/simple-storage.js');const editor=JSON.parse(localStorage.getItem('v35:guest:editor'));return (await readDesign('v35:guest:ai-membership-v1')).jobs[editor.aiJobId];});
   assert.equal(savedAI.id,aiFixture.id);assert.equal(savedAI.photo,aiFixture.photo);assert.equal(savedAI.styleId,'anime');assert.equal(savedAI.model,aiFixture.model);
