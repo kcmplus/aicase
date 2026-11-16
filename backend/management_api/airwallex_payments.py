@@ -249,6 +249,8 @@ class AirwallexCheckout(StoreOrders):
         order = get_object_or_404(PrintOrder.objects.select_for_update(), reference=reference, owner_hash=owner(request))
         if order.mode not in ('airwallex_test', 'airwallex_live') or order.status != 'pending':
             raise Conflict('This order is not awaiting Airwallex payment. Refresh its status.')
+        from .fulfillment import require_checkout
+        require_checkout(order)
         require_single_print_payment(order)
         if order.airwallex_payment_intent:
             intent = api_request(order, 'GET', '/api/v1/pa/payment_intents/' + intent_id(order.airwallex_payment_intent))

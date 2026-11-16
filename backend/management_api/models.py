@@ -264,7 +264,7 @@ class AIExampleResult(models.Model):
         constraints = [models.UniqueConstraint(fields=["example", "style"], name="unique_example_style")]
 
 class PricingPlan(CatalogItem):
-    kind = models.CharField(max_length=20, choices=[("print", "单次打印"), ("ai_monthly", "AI 月度订阅")])
+    kind = models.CharField(max_length=20, choices=[("print", "单次打印"), ("ai_monthly", "AI 月度订阅"), ("courier_shipping", "每单快递运费")])
     price = models.DecimalField(max_digits=8, decimal_places=2, validators=[MinValueValidator(0)])
     currency = models.CharField(max_length=3, default="USD", choices=[("USD", "USD")])
     monthly_credits = models.PositiveIntegerField(default=0)
@@ -283,6 +283,8 @@ class PrintOrder(Timestamped):
     # On-site pickup is the default; device binding and print authorization remain separate.
     fulfillment_type = models.CharField(max_length=20, choices=Fulfillment.choices,
                                         default=Fulfillment.PICKUP)
+    delivery_address = models.JSONField(default=dict, blank=True, editable=False)
+    shipping_quote = models.JSONField(default=dict, blank=True, editable=False)
     reference = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     owner_hash = models.CharField(max_length=64, blank=True, db_index=True, editable=False)
     request_key = models.UUIDField(null=True, unique=True, editable=False)

@@ -28,21 +28,27 @@ def disable_other(request, config):
         audit(request, 'update', config._meta.label_lower, config, '切换支付渠道，停止此渠道接收新订单')
 
 
-def payment_config():
+def payment_config(fulfillment_type="pickup"):
     from . import stripe_payments, airwallex_payments
     # A zero-priced print plan is an explicit no-charge workflow test, never a live receipt.
-    if PricingPlan.objects.filter(kind='print', active=True, price=0).exists():
+    if fulfillment_type == 'pickup' and PricingPlan.objects.filter(kind='print', active=True, price=0).exists():
         return {'provider': 'free', 'mode': 'test', 'available': True, 'zero_price_test': True}
+    if fulfillment_type == 'courier':
+        from .courier import courier_quote
+        if courier_quote()['total_amount'] == '0.00':
+            return {'provider': 'free', 'mode': 'test', 'available': True, 'zero_price_test': True}
     config = airwallex_payments.current_config()
     if config.enabled:
         return airwallex_payments.payment_config(config)
     return stripe_payments.payment_config()
 
 
-def checkout_settings(provider, mode):
+def checkout_settings(provider, mode, fulfillment_type="pickup"):
     from . import stripe_payments, airwallex_payments
-    public = payment_config()
-    if settings.DIRECT_DEBUG_ENABLED and not public.get('zero_price_test'):
+    public = payment_config(fulfillment_type)
+    if fulfillment_type == "courier" and not public.get("zero_price_test") and (provider not in ("stripe", "airwallex") or not public["available"]):
+        raise Conflict("Configure an online payment channel before accepting courier orders.")
+    if settings.DIRECT_DEBUG_ENABLED and (fulfillment_type == 'courier' or not public.get('zero_price_test')):
         raise Conflict('Direct simulation only supports the zero-price test plan.')
     if provider != public['provider'] or mode != public['mode']:
         raise Conflict('Payment settings changed. Reload to review the payment method.')
@@ -59,7 +65,15 @@ class PublicPaymentConfig(APIView):
     authentication_classes = []
 
     def get(self, request):
-        return Response(payment_config())
+        method = request.query_params.get('fulfillment_type', 'pickup')
+        if method not in ('pickup', 'courier'):
+            raise Conflict('Choose nearby printing or courier delivery.')
+        config = payment_config(method)
+        if method == 'courier':
+            from .courier import courier_quote
+            config = {**config, 'fulfillment_type': 'courier', 'quote': courier_quote()}
+            config['available'] = config['available'] and (config.get('zero_price_test') or config['provider'] in ('stripe', 'airwallex')) and not settings.DIRECT_DEBUG_ENABLED
+        return Response(config)
 
 
 class PaymentCheckout(StoreOrders):

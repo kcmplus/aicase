@@ -217,6 +217,8 @@ class StripeCheckout(StoreOrders):
         order = get_object_or_404(PrintOrder.objects.select_for_update(), reference=reference, owner_hash=owner(request))
         if order.mode not in ('stripe_test', 'stripe_live') or order.status != 'pending':
             raise Conflict('This order is not awaiting Stripe payment. Refresh its status.')
+        from .fulfillment import require_checkout
+        require_checkout(order)
         require_single_print_payment(order)
         if expiry(order) <= timezone.now().timestamp():
             raise Conflict('This checkout expired. Create a new order to pay.')

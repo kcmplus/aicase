@@ -216,9 +216,13 @@ class SinglePrintQuantity(serializers.Field):
         return value
 
 
+from .courier import DeliveryAddress
+
+
 class Checkout(StrictSerializer):
     quantity = SinglePrintQuantity(default=1)
     fulfillment_type = serializers.ChoiceField(choices=['pickup', 'courier', 'air'], default='pickup')
+    delivery_address = DeliveryAddress(required=False)
     payment_mode = serializers.ChoiceField(choices=['demo', 'test', 'live'], default='demo')
     payment_provider = serializers.ChoiceField(choices=['demo', 'stripe', 'airwallex', 'free'], default='demo')
     request_key = serializers.UUIDField()
@@ -280,6 +284,8 @@ def order_data(order, detail=True):
     result['progress'] = order_progress(order)
     result['code'] = order.snapshot.get('code', '')
     if detail:
+        result['delivery_address'] = order.delivery_address
+        result['shipping_quote'] = order.shipping_quote
         result['snapshot'] = order.snapshot
         if order.snapshot.get('_template'):
             result['phone_template'] = order.snapshot['_template']
@@ -337,6 +343,11 @@ class StoreOrders(APIView):
                 raise Conflict('This checkout key has already been used.')
             if request.data.get('fulfillment_type', 'pickup') != existing.fulfillment_type:
                 raise Conflict('This order uses a different delivery method. Open it from My orders to review it.')
+            if existing.fulfillment_type == 'courier':
+                address = DeliveryAddress(data=request.data.get('delivery_address'))
+                address.is_valid(raise_exception=True)
+                if address.validated_data != existing.delivery_address:
+                    raise Conflict('This order already has a saved delivery address. Open it from My orders to review it.')
             if existing.status == 'pending' and existing.mode.startswith(('stripe_', 'airwallex_')):
                 expected_provider = existing.mode.rsplit('_', 1)[0]
                 expected_mode = expected_provider + '_' + str(request.data.get('payment_mode', ''))
@@ -348,21 +359,29 @@ class StoreOrders(APIView):
         serializer = Checkout(data=payload)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        if data['fulfillment_type'] != PrintOrder.Fulfillment.PICKUP:
+        courier = data['fulfillment_type'] == PrintOrder.Fulfillment.COURIER
+        if data['fulfillment_type'] not in ('pickup', 'courier'):
             from .fulfillment import SHIPPING_UNAVAILABLE
             raise Conflict(SHIPPING_UNAVAILABLE)
+        if courier and not data.get('delivery_address'):
+            raise serializers.ValidationError({'delivery_address': 'Complete your delivery address.'})
+        if not courier and data.get('delivery_address'):
+            raise serializers.ValidationError({'delivery_address': 'Recipient details are only used for courier delivery.'})
         if 'customer_id' in data and data['customer_id'] != (customer.pk if customer else None):
             raise Conflict('Your sign-in changed. Reload checkout to review your email.')
         if not plan:
             raise Conflict('Printing is unavailable. Please try again later.')
-        if data['expected_amount'] != plan.price:
-            raise Conflict(f'The print price changed to {plan.currency} {plan.price}. Reload to review the new price.')
+        from .courier import courier_quote
+        quote = courier_quote(plan, lock=True) if courier else {}
+        total = Decimal(quote['total_amount']) if courier else plan.price
+        if data['expected_amount'] != total:
+            raise Conflict(f'The order price changed to {plan.currency} {total}. Reload to review the new price.')
         from .payments import checkout_settings
-        payment = checkout_settings(data['payment_provider'], data['payment_mode'])
-        if payment['mode'].startswith(('stripe_', 'airwallex_')) and plan.price < Decimal('0.50'):
+        payment = checkout_settings(data['payment_provider'], data['payment_mode'], fulfillment_type=data['fulfillment_type'])
+        if payment['mode'].startswith(('stripe_', 'airwallex_')) and total < Decimal('0.50'):
             raise Conflict('Online payment requires a print price of at least USD 0.50.')
         order = PrintOrder.objects.create(owner_hash=owner_hash, request_key=data['request_key'],
-            fulfillment_type=data['fulfillment_type'], **payment, model_name=data['snapshot']['model'], case_material=data['snapshot'].get('caseMaterial', ''), amount=plan.price, currency=plan.currency, customer=customer, customer_email=data['customer_email'], snapshot=data['snapshot'])
+            fulfillment_type=data['fulfillment_type'], **payment, model_name=data['snapshot']['model'], case_material=data['snapshot'].get('caseMaterial', ''), amount=total, shipping_quote=quote, delivery_address=data.get('delivery_address', {}), currency=plan.currency, customer=customer, customer_email=data['customer_email'], snapshot=data['snapshot'])
         log(order, 'create')
         return Response(order_data(order), status=201)
 

@@ -191,3 +191,25 @@ test('missing or stale active order cannot silently no-op or submit a different 
   assert.throws(()=>requireDisplayedOrder(active,displayed,hash),/Open this order again/);
  }
 });
+
+test('courier checkout transmits its saved address and preserves the frozen server quote',()=>{
+ const deliveryAddress={recipient:'Test Recipient',phone:'1234567',region:'US / NY / New York',street:'123 Synthetic Street',postal:''};
+ const draft={requestKey:crypto.randomUUID(),pass:pass(),fulfillmentType:'courier',deliveryAddress};
+ const body=checkoutBody(draft,{accepted:true,amount:'14.00',provider:'stripe',mode:'test'});
+ assert.deepEqual(body.delivery_address,deliveryAddress);assert.equal(body.expected_amount,'14.00');assert.equal(body.fulfillment_type,'courier');
+ assert.equal('delivery_address' in checkoutBody({...draft,fulfillmentType:'pickup'},{accepted:true,amount:'10.00'}),false);
+ const shippingQuote={version:1,currency:'USD',print_amount:'10.00',shipping_amount:'4.00',total_amount:'14.00'};
+ const saved=savedOrder({reference:'courier',snapshot:draft.pass,amount:'14.00',fulfillment_type:'courier',delivery_address:deliveryAddress,shipping_quote:shippingQuote});
+ assert.deepEqual(saved.deliveryAddress,deliveryAddress);assert.deepEqual(saved.shippingQuote,shippingQuote);assert.equal(saved.priceCents,1400);
+});
+test('courier config requests and validates the full server quote separately from free pickup',async()=>{
+ const quote={version:1,currency:'USD',print_amount:'0.00',shipping_amount:'4.00',total_amount:'4.00'};
+ let called='';const fetcher=async url=>{called=url;return {ok:true,json:async()=>({provider:'stripe',mode:'test',available:true,fulfillment_type:'courier',quote})};};
+ assert.equal((await getPaymentConfig(fetcher,undefined,'courier')).quote.total_amount,'4.00');assert.match(called,/fulfillment_type=courier/);
+ for(const bad of [{...quote,total_amount:'0.00'},{...quote,currency:'EUR'},{...quote,shipping_amount:'NaN'}])await assert.rejects(getPaymentConfig(async()=>({ok:true,json:async()=>({provider:'stripe',mode:'test',available:true,fulfillment_type:'courier',quote:bad})}),undefined,'courier'),/pricing could not be verified/);
+});
+
+test('free courier receipt never instructs the customer to scan or print at a station',()=>{
+ const view=paymentState({mode:'free_test',status:'paid',fulfillmentType:'courier'});
+ assert.match(view.message,/No payment was collected/);assert.doesNotMatch(view.message,/station|scan|print/i);assert.equal(view.canPay,false);
+});

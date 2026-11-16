@@ -27,7 +27,7 @@ export async function orderRequest(path='',{method='GET',body,fetcher=fetch,key=
 export function savedOrder(data,previous){
  if(data.phone_template)registerSupplierTemplates([data.phone_template]);
  const pass=readPass(data.snapshot.code,{...data.snapshot,...(data.case_material?{caseMaterial:data.case_material}:{})});
- return {id:data.reference,...(data.phone_template?{phoneTemplate:data.phone_template}:{}),server:true,progress:data.progress||null,fulfillmentType:data.fulfillment_type||'unspecified',fulfillment:data.fulfillment||null,refund:data.refund||null,mode:data.mode,status:data.status==='completed'?'collected':data.status,priceCents:Math.round(Number(data.amount)*100),currency:data.currency,revision:data.revision,stationId:data.station_id,customerEmail:data.customer_email,pass,oldCodes:[...new Set([...(previous?.oldCodes||[]),...(previous&&previous.pass.code!==pass.code?[previous.pass.code]:[])])],createdAt:Date.parse(data.created_at),updatedAt:Date.parse(data.updated_at)};
+ return {id:data.reference,...(data.phone_template?{phoneTemplate:data.phone_template}:{}),server:true,progress:data.progress||null,fulfillmentType:data.fulfillment_type||'unspecified',deliveryAddress:data.delivery_address||{},shippingQuote:data.shipping_quote||{},fulfillment:data.fulfillment||null,refund:data.refund||null,mode:data.mode,status:data.status==='completed'?'collected':data.status,priceCents:Math.round(Number(data.amount)*100),currency:data.currency,revision:data.revision,stationId:data.station_id,customerEmail:data.customer_email,pass,oldCodes:[...new Set([...(previous?.oldCodes||[]),...(previous&&previous.pass.code!==pass.code?[previous.pass.code]:[])])],createdAt:Date.parse(data.created_at),updatedAt:Date.parse(data.updated_at)};
 }
 // Only local, unsubmitted drafts are normalized. Never rewrite a server order
 // or rotate its request key: an interrupted write may already have succeeded.
@@ -44,6 +44,7 @@ export function checkoutBody(draft,{accepted,email='',account,amount,provider='d
  const customer=account?.authenticated?account.customer:null;
  if(draft.quantity!==undefined&&draft.quantity!==1)throw Error('Review your single-print draft before checkout.');
  return {quantity:1,request_key:draft.requestKey,fulfillment_type:draft.fulfillmentType||'pickup',payment_provider:provider,payment_mode:mode,accepted,
+  ...(draft.fulfillmentType==='courier'?{delivery_address:draft.deliveryAddress}:{}),
   customer_id:customer?.id||null,...(customer?{}:{customer_email:email}),expected_amount:amount,snapshot:draft.pass};
 }
 export function checkoutEmailField(account){
@@ -51,12 +52,13 @@ export function checkoutEmailField(account){
  return '<label class="order-email">Email (optional)<input name="email" type="email" maxlength="254" autocomplete="email" placeholder="you@example.com"><small>Saved with your order for support and payment receipts.</small></label>';
 }
 
-export async function getPaymentConfig(fetcher=fetch,retryOptions){
- const response=await retryUnavailableRead(()=>fetcher('/api/v1/store/payment-config/',{credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(10000)}),retryOptions);
+export async function getPaymentConfig(fetcher=fetch,retryOptions,fulfillmentType='pickup'){
+ const response=await retryUnavailableRead(()=>fetcher('/api/v1/store/payment-config/'+(fulfillmentType==='courier'?'?fulfillment_type=courier':''),{credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(10000)}),retryOptions);
  if(response.status===503)throw Error('Checkout is temporarily unavailable after 3 retries. Your design is saved. Please try again later.');
  if(!response.ok)throw Error('Payment settings could not be loaded. Please reload and try again.');
  const data=await response.json();
  if(!['demo','stripe','airwallex','free'].includes(data.provider)||!['demo','test','live'].includes(data.mode)||typeof data.available!=='boolean')throw Error('Invalid payment settings.');
+ if(fulfillmentType==='courier'&&(data.fulfillment_type!=='courier'||!data.quote||data.quote.currency!=='USD'||![data.quote.print_amount,data.quote.shipping_amount,data.quote.total_amount].every(value=>/^\d+\.\d{2}$/.test(value))||Math.round(Number(data.quote.print_amount)*100)+Math.round(Number(data.quote.shipping_amount)*100)!==Math.round(Number(data.quote.total_amount)*100)))throw Error('Courier pricing could not be verified.');
  if(data.provider==='free'&&(data.mode!=='test'||data.zero_price_test!==true))throw Error('Invalid payment settings.');
  return data;
 }

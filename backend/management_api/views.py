@@ -309,7 +309,7 @@ def public_catalog(request):
              "results": [{"style_code": result.style.code, "image_path": result.image_path} for result in example.results.all() if result.style.active]}
             for example in m.AIExample.objects.filter(active=True, results__style__active=True).distinct().prefetch_related("results__style")
         ],
-        "plans": s.PricingPlanSerializer(m.PricingPlan.objects.filter(active=True), many=True).data,
+        "plans": s.PricingPlanSerializer(m.PricingPlan.objects.filter(active=True, kind__in=["print", "ai_monthly"]), many=True).data,
     }
     paths = [style["image_path"] for style in data["ai_styles"]]
     for example in data["ai_examples"]:

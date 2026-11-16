@@ -161,7 +161,7 @@ class PricingPlanSerializer(CatalogSerializer):
         trial = attrs.get("trial_credits", self.instance.trial_credits if self.instance else 0)
         if kind == "ai_monthly" and credits < 1:
             raise serializers.ValidationError({"monthly_credits": "AI 月度套餐至少包含 1 次额度。"})
-        if kind == "print" and (credits or trial):
+        if kind in ("print", "courier_shipping") and (credits or trial):
             raise serializers.ValidationError({"monthly_credits": "打印套餐不包含 AI 次数。"})
         return attrs
 
@@ -203,8 +203,8 @@ class PrintOrderDetailSerializer(PrintOrderSerializer):
         return bool(request and request.user.is_superuser and eligible(order) and not hasattr(order, 'refund'))
 
     class Meta(PrintOrderSerializer.Meta):
-        fields = PrintOrderSerializer.Meta.fields + ["snapshot", "stripe_session_id", "stripe_payment_intent", "airwallex_payment_intent", "paid_at", "refund", "can_refund", "fulfillment"]
-        read_only_fields = PrintOrderSerializer.Meta.read_only_fields + ["snapshot", "stripe_session_id", "stripe_payment_intent", "airwallex_payment_intent", "paid_at", "refund", "can_refund", "fulfillment"]
+        fields = PrintOrderSerializer.Meta.fields + ["delivery_address", "shipping_quote", "snapshot", "stripe_session_id", "stripe_payment_intent", "airwallex_payment_intent", "paid_at", "refund", "can_refund", "fulfillment"]
+        read_only_fields = PrintOrderSerializer.Meta.read_only_fields + ["delivery_address", "shipping_quote", "snapshot", "stripe_session_id", "stripe_payment_intent", "airwallex_payment_intent", "paid_at", "refund", "can_refund", "fulfillment"]
 
 class AuditLogSerializer(serializers.ModelSerializer):
     class Meta:

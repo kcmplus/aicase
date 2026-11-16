@@ -976,12 +976,20 @@ test('prototype checkout dock preserves consent, loading, fulfillment and availa
   quoteBreakdown:()=>'',checkoutEmailField:()=>'',membership:{},devicePrinting:{simulated:false}};
  const html=extra=>vm.runInNewContext(declarations+'\ncheckoutPage()',{...base,...extra});
  const normal=html({});assert.match(normal,/id="print-checkout-form"/);assert.match(normal,/name="accepted" type="checkbox" required/);assert.match(normal,/type="submit"/);assert.match(normal,/\$12.34/);
- for(const extra of [{paymentLoading:true},{paymentConfig:{available:false}},{paymentError:'Unavailable'},{PRINT_AVAILABLE:false},{checkoutDraft:{...base.checkoutDraft,fulfillmentType:'courier'}},{checkoutDraft:{...base.checkoutDraft,fulfillmentType:'air'}}]){
+ for(const extra of [{paymentLoading:true},{paymentConfig:{available:false}},{paymentError:'Unavailable'},{PRINT_AVAILABLE:false},{checkoutDraft:{...base.checkoutDraft,fulfillmentType:'air'}}]){
   const rendered=html(extra);assert.doesNotMatch(rendered,/id="print-checkout-form"/);
   assert.equal((rendered.match(/class="checkout-pay-dock"/g)||[]).length,1);
   assert.match(rendered,/class="button primary"\s+disabled/);
  }
  assert.match(html({pickupCheckoutReady:()=>false}),/type="submit" class="button primary"\s+disabled/);
+ const courierDraft={...base.checkoutDraft,fulfillmentType:'courier',deliveryAddressSaved:true};
+ const courierConfig={available:true,provider:'stripe',mode:'test',fulfillment_type:'courier',quote:{print_amount:'12.34',shipping_amount:'4.00',total_amount:'16.34',currency:'USD'}};
+ const courier=html({checkoutDraft:courierDraft,paymentConfig:courierConfig,pickupCheckoutReady:()=>false});
+ assert.match(courier,/id="courier-address-form"/);assert.match(courier,/\$16.34/);assert.match(courier,/type="submit" class="button primary"\s*>/);
+ assert.match(html({checkoutDraft:{...courierDraft,deliveryAddressSaved:false},paymentConfig:courierConfig}),/type="submit" class="button primary"\s+disabled/);
  const free=html({paymentConfig:{available:true,provider:'free_test',zero_price_test:true},PRINT_PRICE:'$0.00'});
  assert.match(free,/Confirm free order/);assert.doesNotMatch(free,/Awaiting payment/);
+ const freeCourier=html({devicePrinting:{simulated:true},checkoutDraft:courierDraft,paymentConfig:{...courierConfig,provider:'free',mode:'test',zero_price_test:true,quote:{...courierConfig.quote,print_amount:'0.00',shipping_amount:'0.00',total_amount:'0.00'}}});
+ assert.match(freeCourier,/Confirm free order/);assert.match(freeCourier,/no-charge delivery test order/);assert.doesNotMatch(freeCourier,/Confirm at the station/);
+
 });

@@ -668,16 +668,16 @@ function providerOrderPage(order){
  const view=paymentState(order,{returned,exhausted:paymentPollCount>=12});
  const oldReceipt=document.querySelector('.payment-receipt');
  const receiptOpen=oldReceipt?.dataset.order===order.id&&oldReceipt.open;
- const headline=view.canPay&&isPickup(order)?(locale()==='zh-CN'?'确认并付款':'Review & pay'):order.progress&&!order.refund&&!view.pending?progressPaymentText(order.progress,locale()):view.title;
- const headingMessage=order.progress&&!order.refund&&!view.pending?(locale()==='zh-CN'?'订单已保存，打印与出货进度见下方。':'Your order is saved. See printing and dispensing progress below.'):view.message;
+ const headline=view.canPay&&(isPickup(order)||order.fulfillmentType==='courier'&&order.shippingQuote?.version===1)?(locale()==='zh-CN'?'确认并付款':'Review & pay'):order.progress&&!order.refund&&!view.pending?progressPaymentText(order.progress,locale()):view.title;
+ const headingMessage=order.fulfillmentType==='courier'?view.message:order.progress&&!order.refund&&!view.pending?(locale()==='zh-CN'?'订单已保存，打印与出货进度见下方。':'Your order is saved. See printing and dispensing progress below.'):view.message;
  const canStartNew=['ready','completed','collected','cancelled'].includes(order.status)||order.refund?.status==='succeeded';
- return `<section class="flow wrap review-flow payment-flow v35-checkout ${view.fulfilled?'payment-fulfilled':''} ${view.canPay&&isPickup(order)?'v35-checkout-design':''}" data-active-order="${esc(order.id)}"><div class="ai-heading">${view.pending?`<a class="back-link" href="#orders">← ${locale()==='zh-CN'?'我的订单':'My orders'}</a>`:''}${view.fulfilled?'':`<p class="eyebrow">${paymentLabel(order.mode)}</p>`}<div class="checkout-title-row"><h1>${esc(headline)}</h1>${view.canPay?`<span class="checkout-status">${esc(orderStatus(order.status,order.refund))}</span>`:''}</div><p role="status">${esc(headingMessage)}</p></div>${progressPanel(order.progress,{lang:locale()})}${!view.pending?`<div id="pickup-station-panel">${pickupStationPanel()}</div>`:''}
+ return `<section class="flow wrap review-flow payment-flow v35-checkout ${view.fulfilled?'payment-fulfilled':''} ${view.canPay&&(isPickup(order)||order.fulfillmentType==='courier'&&order.shippingQuote?.version===1)?'v35-checkout-design':''}" data-active-order="${esc(order.id)}"><div class="ai-heading">${view.pending?`<a class="back-link" href="#orders">← ${locale()==='zh-CN'?'我的订单':'My orders'}</a>`:''}${view.fulfilled?'':`<p class="eyebrow">${paymentLabel(order.mode)}</p>`}<div class="checkout-title-row"><h1>${esc(headline)}</h1>${view.canPay?`<span class="checkout-status">${esc(orderStatus(order.status,order.refund))}</span>`:''}</div><p role="status">${esc(headingMessage)}</p></div>${progressPanel(order.progress,{lang:locale()})}${!view.pending?`<div id="pickup-station-panel">${pickupStationPanel()}</div>`:''}
  <div class="ai-order-layout">${checkoutDesignCard(order.pass)}${view.pending?`<div id="pickup-station-panel">${pickupStationPanel()}</div>`:''}
  <div class="ai-order-card" aria-busy="${passBusy}">${view.fulfilled?'':`<p class="eyebrow">${esc(orderStatus(order.status,order.refund))}</p><h2>${esc(order.currency)} ${money(order.priceCents)}</h2>`}
  ${order.mode==='free_test'?`<p class="payment-environment">${locale()==='zh-CN'?'0 元免付联调，不产生实际收款。':'No-charge test order. No payment was collected.'}</p>`:order.mode.endsWith('_test')?`<p class="payment-environment">${provider} test mode · No real charge.</p>`:view.pending?'<p class="payment-environment">Live payment · Your payment method will be charged.</p>':''}
  ${orderActionError||paymentError?`<p class="error" role="alert">${esc(orderActionError||paymentError)}</p>`:''}
  ${passBusy?`<p role="status" aria-live="polite">${locale()==='zh-CN'?'正在处理，请稍候…':'Processing your request… Please wait.'}</p>`:''}
- ${view.canPay&&isPickup(order)?checkoutDock({price:`${order.currency} ${money(order.priceCents)}`,label:passBusy?t('Opening secure checkout…'):(locale()==='zh-CN'?'继续付款':'Pay now'),disabled:passBusy,orderId:order.id}):''}
+ ${view.canPay&&(isPickup(order)||order.fulfillmentType==='courier'&&order.shippingQuote?.version===1)?checkoutDock({price:`${order.currency} ${money(order.priceCents)}`,label:passBusy?t('Opening secure checkout…'):(locale()==='zh-CN'?'继续付款':'Pay now'),disabled:passBusy,orderId:order.id}):''}
  ${deliveryStatusPanel(order,{lang:locale(),busy:passBusy})}${deviceFulfillmentPanel(order)}
  <button class="text-button payment-refresh" data-action="refresh-payment" ${passBusy?'disabled':''}>${locale()==='zh-CN'?'刷新订单进度':'Refresh order progress'}</button>
 
@@ -706,6 +706,8 @@ startVisiblePolling({interval:15000,enabled:()=>location.hash.split('?')[0]==='#
  }catch{if(alive()&&location.hash===hash&&navigationId===nav){orderError=locale()==='zh-CN'?'订单进度暂时无法刷新，已保留上次结果。':'Order progress could not be refreshed. Showing the last known results.';render(true);}}}
 });
 function quoteBreakdown(pass,price,editing){
+ if(checkoutDraft?.fulfillmentType==='courier'&&paymentConfig?.quote){const q=paymentConfig.quote,zh=locale()==='zh-CN';return `<section class="print-quote"><h2>${zh?'费用明细':'Price details'}</h2><dl><div><dt>${zh?'手机壳 · 1 份':'Phone case · 1 case'}</dt><dd>${esc(q.currency)} ${esc(q.print_amount)}</dd></div><div><dt>${zh?'固定快递运费':'Fixed shipping'}</dt><dd>${esc(q.currency)} ${esc(q.shipping_amount)}</dd></div><div class="quote-total"><dt>${zh?'合计':'Total due'}</dt><dd>${esc(q.currency)} ${esc(q.total_amount)}</dd></div></dl><p>${paymentConfig.mode==='test'?'Test mode · No real charge.':zh?'付款后将按收货地址安排配送。':'Your case will be delivered to your saved address.'}</p></section>`;}
+
  const provider=providerName(paymentConfig?.provider),paidCheckout=['stripe','airwallex'].includes(paymentConfig?.provider)&&!editing;
  const hasAI=pass.source==='photo'&&Boolean(pass.ai);
  return `<section class="print-quote" aria-label="Price details"><h2>Price details</h2><dl>
@@ -727,20 +729,20 @@ function checkoutDock({price,label,disabled=false,submit=false,orderId=''}){
 function checkoutPage(){
  if(!checkoutDraft)return '<section class="empty wrap"><h1>Choose your design first.</h1><a class="button primary" href="#choose">Back to your design</a></section>';
  const {pass,editId}=checkoutDraft,order=editId?orderBook.orders[editId]:null,locked=editId&&order?.status!=='paid';
- const delivery=order?.fulfillmentType||checkoutDraft.fulfillmentType||'pickup',pickup=delivery==='pickup';
- const price=order?money(order.priceCents):PRINT_PRICE;
+ const delivery=order?.fulfillmentType||checkoutDraft.fulfillmentType||'pickup',pickup=delivery==='pickup',courier=delivery==='courier',supported=pickup||courier;
+ const price=order?money(order.priceCents):courier?(paymentConfig?.quote?'$'+paymentConfig.quote.total_amount:'—'):PRINT_PRICE;
  const provider=providerName(paymentConfig?.provider),paidCheckout=['stripe','airwallex'].includes(paymentConfig?.provider)&&!editId;
  const zh=locale()==='zh-CN',say=(en,cn)=>zh?cn:en;
- const canConfirm=pickup&&!paymentLoading&&(editId||paymentConfig?.available&&!paymentError)&&(PRINT_AVAILABLE||editId)&&!locked;
- const displayPrice=pickup&&(paymentConfig?.available||editId)?(editId?'$0.00':price):'—';
+ const canConfirm=supported&&!paymentLoading&&(editId||paymentConfig?.available&&!paymentError)&&(PRINT_AVAILABLE||editId)&&!locked;
+ const displayPrice=supported&&(paymentConfig?.available||editId)?(editId?'$0.00':price):'—';
  const actionLabel=editId?say('Save changes','保存修改'):paidCheckout?say('Pay now','立即付款'):paymentConfig?.zero_price_test?say('Confirm free order','确认免付订单'):say('Confirm test order','确认测试订单');
- const confirmation=`${!pickup?`<p class="delivery-notice" role="status">${locale()==='zh-CN'?'快递配送暂未开放，设计已保存，暂不收款。可返回继续编辑，或选择设备现场自取。':'Courier delivery is coming soon. Your design is saved and checkout is paused. You can keep editing or choose on-site pickup.'}</p>`:paymentLoading?'<p role="status" aria-live="polite">Loading checkout… If the service is busy, we will retry up to 3 times.</p>':!editId&&(!paymentConfig?.available||paymentError)?`<p class="error" role="alert">${esc(paymentError||'Payment is unavailable. Please try again later.')}</p><button class="text-button" data-action="refresh-payment">Reload checkout</button>`:!PRINT_AVAILABLE&&!editId?'<p class="error">Printing is unavailable. Please reload and try again.</p>':locked?'<p class="error">This order has started printing. Return to My design to create a new order.</p>':`<form id="print-checkout-form">${!editId?checkoutEmailField(membership):''}<label class="ai-consent"><input name="accepted" type="checkbox" required><span>I confirm this design and phone model. ${editId?'Update my existing design at no extra printing charge.':paidCheckout?`Pay ${price} for one case with ${provider}.${paymentConfig.mode==='test'?' Test mode: no real charge.':''}`:devicePrinting.simulated?(locale()==='zh-CN'?'创建 0 元模拟订单，手机确认后模拟打印，不会操作真实设备。':'Create a no-charge simulation order. Phone confirmation starts simulated printing only.'):paymentConfig?.zero_price_test?'Create a no-charge integration order. Confirm at the station to start a real print.':`Simulate a ${price} payment for one print. No real charge.`} The design and any photo will be securely saved with this order.</span></label>${checkoutDock({price:displayPrice,label:actionLabel,disabled:passBusy||!editId&&!pickupCheckoutReady(),submit:true})}</form>`}`;
+ const confirmation=`${!supported?`<p class="delivery-notice" role="status">${locale()==='zh-CN'?'此配送方式不再用于新订单，请选择附近打印或快递到家。':'This delivery method is not available for new orders. Choose nearby printing or courier delivery.'}</p>`:paymentLoading?'<p role="status" aria-live="polite">Loading checkout… If the service is busy, we will retry up to 3 times.</p>':!editId&&(!paymentConfig?.available||paymentError)?`<p class="error" role="alert">${esc(paymentError||'Payment is unavailable. Please try again later.')}</p><button class="text-button" data-action="refresh-payment">Reload checkout</button>`:!PRINT_AVAILABLE&&!editId?'<p class="error">Printing is unavailable. Please reload and try again.</p>':locked?'<p class="error">This order has started printing. Return to My design to create a new order.</p>':`<form id="print-checkout-form">${!editId?checkoutEmailField(membership):''}<label class="ai-consent"><input name="accepted" type="checkbox" required><span>I confirm this design and phone model. ${editId?'Update my existing design at no extra printing charge.':paidCheckout?`Pay ${price} for one case with ${provider}.${paymentConfig.mode==='test'?' Test mode: no real charge.':''}`:courier&&paymentConfig?.zero_price_test?'Create a no-charge delivery test order. No payment is taken.':devicePrinting.simulated?(locale()==='zh-CN'?'创建 0 元模拟订单，手机确认后模拟打印，不会操作真实设备。':'Create a no-charge simulation order. Phone confirmation starts simulated printing only.'):paymentConfig?.zero_price_test?(courier?'Create a no-charge delivery test order. No payment is taken.':'Create a no-charge integration order. Confirm at the station to start a real print.'):`Simulate a ${price} payment for one print. No real charge.`} The design and any photo will be securely saved with this order.</span></label>${checkoutDock({price:displayPrice,label:actionLabel,disabled:passBusy||!editId&&(pickup?!pickupCheckoutReady():!checkoutDraft.deliveryAddressSaved),submit:true})}</form>`}`;
  return `<section class="flow wrap review-flow v35-checkout v35-checkout-design">
  <a class="back-link" href="#orders">← ${say('My orders','我的订单')}</a>
- <header class="checkout-heading"><p class="eyebrow">${say('ONE LAST LOOK. THEN MAKE IT YOURS.','最后确认，让设计成为你的专属。')}</p><div class="checkout-title-row"><h1>${editId?say('Review your changes','确认设计修改'):paidCheckout?say('Review & pay','确认并付款'):say('Review & confirm','确认你的订单')}</h1><span class="checkout-status">${paymentLoading?say('Loading checkout','正在加载'):!pickup?say('Checkout paused','暂不可结算'):editId?say('Editing design','修改设计'):paymentConfig?.zero_price_test?say('No-charge test','免付测试'):paidCheckout?say('Awaiting payment','等待付款'):say('Review order','确认订单')}</span></div><span class="checkout-fulfillment-tag">${pickup?say('Nearby printing','附近打印'):deliveryLabel(delivery,locale())}</span><p>${say('Check your artwork and phone model before confirming.','确认前请检查图案和手机机型。')}</p></header>
+ <header class="checkout-heading"><p class="eyebrow">${say('ONE LAST LOOK. THEN MAKE IT YOURS.','最后确认，让设计成为你的专属。')}</p><div class="checkout-title-row"><h1>${editId?say('Review your changes','确认设计修改'):paidCheckout?say('Review & pay','确认并付款'):say('Review & confirm','确认你的订单')}</h1><span class="checkout-status">${paymentLoading?say('Loading checkout','正在加载'):!supported?say('Checkout paused','暂不可结算'):editId?say('Editing design','修改设计'):paymentConfig?.zero_price_test?say('No-charge test','免付测试'):paidCheckout?say('Awaiting payment','等待付款'):say('Review order','确认订单')}</span></div><span class="checkout-fulfillment-tag">${pickup?say('Nearby printing','附近打印'):deliveryLabel(delivery,locale())}</span><p>${say('Check your artwork and phone model before confirming.','确认前请检查图案和手机机型。')}</p></header>
  <div class="ai-order-layout">${checkoutDesignCard(pass)}
  <section class="ai-order-card checkout-fulfillment">${singlePrintNotice(checkoutDraft,locale())}${!editId?deliveryOptions(delivery,locale(),{pickupDetails:pickupStationPanel(),presentation:'checkout'}):`<h2>${deliveryLabel(delivery,locale())}</h2>`}${pickup&&scannedStation?stationIdentity(scannedStation,{lang:locale(),navigation:false}):''}${delivery==='courier'&&!editId?courierAddressForm(checkoutDraft,locale()):''}</section>
- <section class="ai-order-card checkout-summary">${pickup&&(paymentConfig||editId)?quoteBreakdown(pass,price,Boolean(editId)):''}${pickup?`<p class="field-note">${paidCheckout||paymentConfig?.zero_price_test?'Check your design carefully. The artwork is locked when the payment order is created.':'You can edit your design until printing starts. Saving a revision updates your design. After printing starts, changes need a new order.'}</p>`:''}${confirmation}</section></div>
+ <section class="ai-order-card checkout-summary">${supported&&(paymentConfig||editId)?quoteBreakdown(pass,price,Boolean(editId)):''}${pickup?`<p class="field-note">${paidCheckout||paymentConfig?.zero_price_test?'Check your design carefully. The artwork is locked when the payment order is created.':'You can edit your design until printing starts. Saving a revision updates your design. After printing starts, changes need a new order.'}</p>`:''}${confirmation}</section></div>
  ${canConfirm?'':checkoutDock({price:displayPrice,label:actionLabel,disabled:true})}</section>`;
 }
 function render(preserveScroll=false) {
@@ -880,7 +882,7 @@ app.addEventListener('change',async event=>{
     if(!['pickup','courier'].includes(event.target.value))return;
     checkoutDraft.fulfillmentType=event.target.value;checkoutDraft.requestKey=crypto.randomUUID();
     if(event.target.value==='pickup')void requestStationLocation();
-    await privateWrite('checkout-draft',checkoutDraft);syncStationFinder();render(true);return;
+    paymentConfig=null;paymentLoading=true;await privateWrite('checkout-draft',checkoutDraft);syncStationFinder();render(true);await navigate();return;
   }
   if(event.target.id==='language'){
     if(aiBusy||photoBusy||passBusy)return;
@@ -900,6 +902,7 @@ app.addEventListener('change',async event=>{
 app.addEventListener('input',event=>{
   if(event.target.closest('#courier-address-form')&&checkoutDraft&&!checkoutDraft.editId){
     checkoutDraft.deliveryAddress=Object.fromEntries(new FormData(event.target.form));checkoutDraft.deliveryAddressSaved=false;
+    const pay=document.querySelector('#print-checkout-form button');if(pay)pay.disabled=true;
     event.target.form.querySelector('.address-status').textContent=locale()==='zh-CN'?'地址有变更，请保存。':'Address changed. Save your details.';return;
   }
 
@@ -926,8 +929,9 @@ app.addEventListener('submit',async event=>{
     try{
       workspace.check();draft.deliveryAddress=address;draft.deliveryAddressSaved=false;
       await privateWrite('checkout-draft',{...draft,deliveryAddressSaved:true});
-      if(checkoutDraft!==draft)return;draft.deliveryAddressSaved=true;
-      status.textContent=locale()==='zh-CN'?'地址已保存在此浏览器，尚未下单。':'Address saved on this browser. No order has been placed.';
+      if(checkoutDraft!==draft||draft.deliveryAddress!==address)return;draft.deliveryAddressSaved=true;
+      render(true);
+      status.textContent=locale()==='zh-CN'?'收货地址已保存。':'Address saved.';
     }catch{status.textContent=locale()==='zh-CN'?'地址未能保存，请重试。':'Could not save your address. Please try again.';}
     finally{button.disabled=false;}
     return;
@@ -944,14 +948,15 @@ app.addEventListener('submit',async event=>{
     try{
       await syncAIAccount();workspace.check();
       const values=new FormData(event.target),accepted=values.has('accepted'),existing=orderBook.orders[checkoutDraft.editId];let order;
-      if(!existing&&checkoutDraft.fulfillmentType&&checkoutDraft.fulfillmentType!=='pickup')throw Error('Courier and air delivery are not available for checkout yet. Your design is saved; no payment has been taken.');
-      if(!existing&&!pickupCheckoutReady())throw Error(locale()==='zh-CN'?'请先刷新并确认有该机型库存的网点。':'Refresh station stock and confirm availability before checkout.');
+      if(!existing&&!['pickup','courier'].includes(checkoutDraft.fulfillmentType||'pickup'))throw Error('Choose nearby printing or courier delivery.');
+      if(!existing&&checkoutDraft.fulfillmentType==='courier'&&(!checkoutDraft.deliveryAddressSaved||paymentConfig?.fulfillment_type!=='courier'))throw Error('Save your delivery address and reload courier pricing before payment.');
+      if(!existing&&checkoutDraft.fulfillmentType!=='courier'&&!pickupCheckoutReady())throw Error(locale()==='zh-CN'?'请先刷新并确认有该机型库存的网点。':'Refresh station stock and confirm availability before checkout.');
       if(!existing&&!paymentConfig?.available)throw Error('Payment is unavailable. Please reload and try again.');
       if(checkoutDraft.editId&&!existing)throw Error('This order could not be loaded. Open it from My orders and retry.');
       if(existing&&!existing.server){let result;orderBook=await updateDesign('print-orders-v1',b=>{result=commitPrintOrder(b,checkoutDraft.pass,{accepted,editId:existing.id});return result.book;},freshOrders());order=result.order;}
       else{
         checkoutDraft.requestKey||=crypto.randomUUID();await privateWrite('checkout-draft',checkoutDraft);
-        const data=existing?await orderRequest(existing.id+'/',{method:'PATCH',body:{quantity:1,accepted,revision:checkoutDraft.revision??existing.revision,snapshot:checkoutDraft.pass}}):await orderRequest('',{method:'POST',body:checkoutBody(checkoutDraft,{accepted,email:String(values.get('email')||''),account:membership,amount:(PRINT_PRICE_CENTS/100).toFixed(2),provider:paymentConfig.provider,mode:paymentConfig.mode})});
+        const data=existing?await orderRequest(existing.id+'/',{method:'PATCH',body:{quantity:1,accepted,revision:checkoutDraft.revision??existing.revision,snapshot:checkoutDraft.pass}}):await orderRequest('',{method:'POST',body:checkoutBody(checkoutDraft,{accepted,email:String(values.get('email')||''),account:membership,amount:checkoutDraft.fulfillmentType==='courier'?paymentConfig.quote.total_amount:(PRINT_PRICE_CENTS/100).toFixed(2),provider:paymentConfig.provider,mode:paymentConfig.mode})});
         order=await rememberOrder(data);
       }
       if(devicePrinting.enabled&&isProviderOrder(order))order=await prepareDeviceOrder(order,stockScope,{save:rememberOrder});
@@ -1186,7 +1191,7 @@ async function navigate(){
  stopPaymentPolling();paymentPollCount=0;
  if(route==='checkout'){
   paymentConfig=null;paymentError='';paymentLoading=true;render(true);
-  const [config,account]=await Promise.allSettled([getPaymentConfig(),syncAIAccount()]);
+  const [config,account]=await Promise.allSettled([getPaymentConfig(fetch,undefined,checkoutDraft?.fulfillmentType||'pickup'),syncAIAccount()]);
   if(currentNavigation!==navigationId)return;
   paymentLoading=false;
   if(config.status==='fulfilled')paymentConfig=config.value;
