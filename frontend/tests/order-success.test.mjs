@@ -7,7 +7,7 @@ test('success notices require confirmed server status and distinguish paid, free
  assert.equal(orderSuccessContent(paid).title,'Payment successful');assert.equal(orderSuccessContent(paid).amount,'$0.50');
  for(const patch of [{server:false},{status:'pending'},{status:'cancelled'},{progress:{payment:'unpaid'}},{progress:null},{refund:{status:'pending'}},{refund:{status:'succeeded'}},{refund:{status:'failed'}},{priceCents:NaN},{currency:'<bad>'},{mode:'legacy'}])assert.equal(orderSuccessContent({...paid,...patch}),null);
  const free=orderSuccessContent({...paid,mode:'free_test',priceCents:0,progress:{payment:'free'}});
- assert.equal(free.title,'Order confirmed');assert.match(free.message,/No payment was collected/);
+ assert.equal(free.title,'Payment successful');assert.match(free.message,/No payment was collected/);
  assert.equal(orderSuccessContent({...paid,mode:'free_test',progress:{payment:'free'}}),null);
  for(const mode of ['stripe_test','airwallex_test','demo']){const view=orderSuccessContent({...paid,mode,progress:{payment:'test'}});assert.equal(view.title,'Test order confirmed');assert.match(view.message,/No real payment/);}
  assert.equal(orderSuccessContent(paid,'zh-CN').title,'支付成功');

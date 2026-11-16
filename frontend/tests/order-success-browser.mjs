@@ -49,7 +49,7 @@ try{
   await freePage.goto(origin+`/#payment?order=${id}`);await freePage.locator(`[data-active-order="${id}"]`).waitFor();
   assert.equal(await freePage.locator('.v35-order-success').count(),0,'An old paid order does not trigger a new success notice');
   await freePage.goto(target);await freePage.locator('.v35-order-success[open]').waitFor();
-  assert.equal(await freePage.locator('#order-success-title').innerText(),'Order confirmed');
+  assert.equal(await freePage.locator('#order-success-title').innerText(),'Payment successful');
   assert.equal(await freePage.locator('.order-success-amount').innerText(),'$0.00');
   assert.match(await freePage.locator('#order-success-message').innerText(),/No payment was collected/);
   await freePage.screenshot({path:`test-results/order-success/${width}-free.png`});
@@ -82,7 +82,7 @@ try{
   await freePage.locator('#print-checkout-form button:not([disabled])').click();
   await freePage.locator('.v35-order-success[open]').waitFor();
   assert.equal(new URL(freePage.url()).hash,`#payment?order=${createdId}`);
-  assert.equal(await freePage.locator('#order-success-title').innerText(),'Order confirmed');
+  assert.equal(await freePage.locator('#order-success-title').innerText(),'Payment successful');
   assert.equal(submitted.length,1);assert.equal(submitted[0].expected_amount,'0.00');assert.equal(submitted[0].quantity,1);assert.equal(submitted[0].fulfillment_type,'courier');
   assert.deepEqual(errors,[]);assert.deepEqual(writes,[]);
   await freeContext.close();console.log('PASS verified paid/free receipt, new checkout, return/polling gates, session deduplication and modal layout',width,height);

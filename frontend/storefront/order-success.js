@@ -7,7 +7,7 @@ export function orderSuccessContent(order,lang='en-US'){
  const zh=lang==='zh-CN',say=(en,cn)=>zh?cn:en;
  let title,message;
  if(order.mode==='free_test'&&order.priceCents===0&&order.progress?.payment==='free'){
-  title=say('Order confirmed','下单成功');message=say('Your no-charge order is confirmed and your design is saved. No payment was collected.','免付订单已确认，设计已保存，无需付款。');
+  title=say('Payment successful','0 元支付成功');message=say('Your zero-payment test order is confirmed and your design is saved. No payment was collected.','0 元测试订单支付已确认，设计已保存，无需扣款。');
  }else if(/^(stripe|airwallex)_live$/.test(order.mode||'')&&order.progress?.payment==='paid'){
   title=say('Payment successful','支付成功');message=say('Your payment is complete and your design is saved.','付款已完成，你的设计已保存。');
  }else if((/^(stripe|airwallex)_test$/.test(order.mode||'')||order.mode==='demo')&&order.progress?.payment==='test'){
