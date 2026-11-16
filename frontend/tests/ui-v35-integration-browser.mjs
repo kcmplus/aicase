@@ -102,6 +102,38 @@ try{
   assert((await page.locator('#home-phone-model').innerText()).includes(model));
   await page.locator('[data-home-confirm]').click();
   await page.locator('.look-browser[open]').waitFor();
+  await page.locator('.look-comparison[data-image-state="ready"]').waitFor();
+  const studio=page.locator('.look-browser');
+  const geometry=await studio.evaluate(dialog=>{
+   const rect=s=>dialog.querySelector(s).getBoundingClientRect().toJSON();
+   return {film:rect('.look-filmstrip'),title:rect('.look-title-row'),preview:rect('.look-comparison'),footer:rect('.look-dock'),dialog:dialog.getBoundingClientRect().toJSON(),fit:getComputedStyle(dialog.querySelector('.look-comparison>img')).objectFit};
+  });
+  assert(geometry.film.bottom<=geometry.title.top&&geometry.title.bottom<=geometry.preview.top,'Styles and title precede the preview');
+  assert.equal(geometry.fit,'contain','Default example shows the whole image');
+  assert(geometry.dialog.x>=0&&geometry.dialog.right<=width&&geometry.dialog.y>=0&&geometry.dialog.bottom<=height);
+  assert(geometry.footer.bottom<=height,'Upload and generation actions stay reachable');
+  await page.screenshot({path:`test-results/v35-integration/${width}-ai-studio.png`});
+  const firstStyle=await studio.locator('.look-thumb[aria-pressed="true"]').getAttribute('data-ai-look-style');
+  await studio.locator('[data-ai-look-step="1"]').click();
+  assert.notEqual(await studio.locator('.look-thumb[aria-pressed="true"]').getAttribute('data-ai-look-style'),firstStyle);
+  await studio.locator('[data-ai-look-step="-1"]').click();
+  assert.equal(await studio.locator('.look-thumb[aria-pressed="true"]').getAttribute('data-ai-look-style'),firstStyle);
+  await studio.locator('[data-look-mode="compare"]').click();
+  await studio.locator('.look-wipe').focus();await page.keyboard.press('ArrowRight');
+  assert.equal(await studio.locator('.look-wipe').inputValue(),'51');
+  assert.equal(await studio.locator('.look-comparison').getAttribute('data-look-view'),'compare');
+  await studio.locator('[data-look-action="zoom"]').click();
+  assert(await studio.evaluate(el=>el.classList.contains('is-zoomed')));
+  await page.screenshot({path:`test-results/v35-integration/${width}-ai-studio-zoom.png`});
+  await page.keyboard.press('Escape');
+  assert(!await studio.evaluate(el=>el.classList.contains('is-zoomed')));
+  await studio.locator('[data-look-mode="effect"]').click();
+  const groups=studio.locator('[data-ai-group]');
+  if(await groups.count()>1){await groups.nth(1).click();assert.equal(await groups.nth(1).getAttribute('aria-pressed'),'true');await groups.first().click();}
+  const replacement=page.waitForEvent('filechooser');
+  await studio.locator('[data-ai-action="upload"]').click();
+  await (await replacement).setFiles({name:'replacement.png',mimeType:'image/png',buffer:Buffer.from(photoBytes,'base64')});
+  await page.locator('.look-browser[open] .look-upload img').waitFor();
   await page.keyboard.press('Escape');
   await page.goto(origin+'/#choose?design=bloom');
   await page.locator('[data-action="choose-phone"]').click();
