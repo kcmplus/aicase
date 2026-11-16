@@ -60,7 +60,7 @@ def main():
                     env[key] = os.environ[key]
             scripts = ['frontend/tests/ui-v35-integration-browser.mjs']
             if width == 1440:
-                scripts.append('frontend/tests/preview-fit-browser.mjs')
+                scripts.extend(['frontend/tests/preview-fit-browser.mjs', 'frontend/tests/order-success-browser.mjs'])
             for script in scripts:
                 subprocess.run(['node', script], cwd=ROOT, env=env, check=True, timeout=180)
 

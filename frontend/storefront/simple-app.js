@@ -14,6 +14,7 @@ import {stationEntry} from './station-entry.js';
 import {loadDeviceInfo,deviceInfoErrorMessage} from './device-info-service.js';
 import {fulfillmentConfig,prepareDeviceOrder,fulfillmentView,scopeIds,scanScope,stationIdentity,isPickup,deliveryOptions,deliveryLabel,deliveryStatusPanel,courierAddressForm} from './fulfillment-service.js';
 import {paymentState} from './payment-state.js';
+import {createOrderSuccessTracker,orderSuccessContent,openOrderSuccess} from './order-success.js';
 import {openAirwallexCheckout} from './airwallex-checkout.js';
 import {t,locale,setLocale,localized,languageControl,localize} from './simple-i18n.js';
 import {imageTag} from './image-view.js';
@@ -92,6 +93,8 @@ for(const order of Object.values(orderBook.orders||{}))if(order.phoneTemplate)tr
 if(checkoutDraft?.phoneTemplate)try{registerSupplierTemplates([checkoutDraft.phoneTemplate]);}catch{}
 let orderLoading=false;
 let orderRows=[],orderPage=1,orderHasMore=false,orderError='',entryOrders=null,entryOrderError='';
+const orderSuccessTracker=createOrderSuccessTracker({key:workspace.active?workspace.key('order-success'):'popomo-order-success-locked'});
+let orderSuccessDialog=null;
 let paymentConfig=null,paymentError='',orderActionError='',paymentOrder=null,stopPaymentPolling=()=>{},paymentPollCount=0,paymentLoading=false,navigationId=0;
 let userPosition=null,locatingStations=false,stationLocationError='';
 const openStationMaps=new Set(),stationChoices=new Map();
@@ -715,16 +718,23 @@ function providerOrderPage(order){
  ${canStartNew?'<a class="button secondary full payment-next-design" href="#choose">Create a new design →</a>':''}</div></div></section>`;
 }
 function paymentPage(){return paymentOrder?providerOrderPage(paymentOrder):`<section class="empty wrap v35-checkout" aria-busy="${!paymentError}"><h1>Payment status</h1><p class="${paymentError?'error':'v35-order-notice'}" role="${paymentError?'alert':'status'}">${esc(paymentError||'Loading your order…')}</p><button class="text-button" data-action="refresh-payment">Refresh payment status</button><a class="text-button" href="#orders">View all my orders →</a></section>`;}
+function confirmOrderSuccess(order,{returned=false}={}){
+ if(!workspace.active||!order)return;
+ const [route,query='']=location.hash.slice(1).split('?');
+ if(!(route==='payment'&&new URLSearchParams(query).get('order')===order.id)&&!(route==='pass'&&state.pass?.code===order.pass?.code))return;
+ if(orderSuccessDialog?.id===order.id&&!orderSuccessContent(order))orderSuccessDialog.close();
+ if(orderSuccessTracker.observe(order,{returned})&&!orderSuccessDialog)orderSuccessDialog=openOrderSuccess(order,{lang:locale(),onOrders:()=>go('orders'),onClose:()=>{orderSuccessDialog=null;}});
+}
 function schedulePaymentPoll(){
  stopPaymentPolling();
  if(!paymentOrder)return;
  const hash=location.hash,id=paymentOrder.id;
  stopPaymentPolling=startVisiblePolling({interval:5000,
-  enabled:()=>location.hash===hash&&!passBusy&&!photoBusy&&!aiBusy&&(!['dispensed','cancelled','closed','refunded','test','delivery','unspecified'].includes(paymentOrder?.progress?.code)||['requested','pending'].includes(paymentOrder?.refund?.status)),
+  enabled:()=>location.hash===hash&&!passBusy&&!photoBusy&&!aiBusy&&(paymentOrder?.status==='pending'||!['dispensed','cancelled','closed','refunded','test','delivery','unspecified'].includes(paymentOrder?.progress?.code)||['requested','pending'].includes(paymentOrder?.refund?.status)),
   refresh:async alive=>{const before=paymentOrder;try{
    const data=await orderRequest(id+'/progress/');
    if(!alive()||location.hash!==hash||passBusy||paymentOrder!==before||paymentOrder?.id!==id)return;
-   paymentOrder=mergeOrderProgress(paymentOrder,data);syncStationFinder();paymentPollCount++;paymentError='';render(true);
+   paymentOrder=mergeOrderProgress(paymentOrder,data);syncStationFinder();paymentPollCount++;paymentError='';render(true);confirmOrderSuccess(paymentOrder);
   }catch{if(alive()&&location.hash===hash){paymentError=locale()==='zh-CN'?'进度暂时无法刷新，已保留上次结果。':'Progress could not be refreshed. Showing the last known result.';render(true);}}}
  });
 }
@@ -988,6 +998,7 @@ app.addEventListener('submit',async event=>{
         const data=existing?await orderRequest(existing.id+'/',{method:'PATCH',body:{quantity:1,accepted,revision:checkoutDraft.revision??existing.revision,snapshot:checkoutDraft.pass}}):await orderRequest('',{method:'POST',body:checkoutBody(checkoutDraft,{accepted,email:String(values.get('email')||''),account:membership,amount:checkoutDraft.fulfillmentType==='courier'?paymentConfig.quote.total_amount:(PRINT_PRICE_CENTS/100).toFixed(2),provider:paymentConfig.provider,mode:paymentConfig.mode})});
         order=await rememberOrder(data);
       }
+      if(!existing)orderSuccessTracker.arm(order.id);
       if(devicePrinting.enabled&&isProviderOrder(order))order=await prepareDeviceOrder(order,stockScope,{save:rememberOrder});
       state.pass=order.pass;state.job=null;state.editOrderId=null;checkoutDraft=null;await privateWrite('checkout-draft',null);save();
       if(isProviderOrder(order)){paymentOrder=order;go('payment?order='+order.id);if(order.status==='pending'){render(true);await openPaymentCheckout(order.id);}}else go('pass');
@@ -1207,6 +1218,7 @@ async function refreshStockChoices(){
 }
 setInterval(async()=>{if(document.hidden||passBusy||photoBusy||aiBusy||canvasExpanded||(stockCatalogStatus==='ready'&&Date.now()-stockRefreshedAt<60000))return;const changed=await refreshStockChoices();if(changed&&location.hash.startsWith('#choose'))render(true);},10000);
 async function navigate(){
+ let verifiedNoticeOrder=null;
  const currentNavigation=++navigationId;
  const [route,query='']=location.hash.slice(1).split('?');const params=new URLSearchParams(query);
  if(['choose','review','ai','my-designs','pass','orders','payment'].includes(route))try{await syncAIAccount();}catch(error){if(currentNavigation!==navigationId)return;customerUI.error=error.message;}
@@ -1229,7 +1241,7 @@ async function navigate(){
  }else paymentLoading=false;
  if(route==='payment'){
   const paymentHash=location.hash;paymentError='';orderActionError='';paymentOrder=null;render(true);
-  try{const latest=await refreshOrder(params.get('order'));if(location.hash!==paymentHash)return;paymentOrder=latest;state.pass=paymentOrder.pass;save();}
+  try{const latest=await refreshOrder(params.get('order'));if(location.hash!==paymentHash)return;paymentOrder=latest;verifiedNoticeOrder=latest;state.pass=paymentOrder.pass;save();}
   catch(e){if(location.hash!==paymentHash)return;paymentError=e.message;}
   schedulePaymentPoll();
  }
@@ -1238,7 +1250,7 @@ async function navigate(){
    if(currentNavigation!==navigationId)return;
    const detailRoute=route==='pass'&&providerOrderRoute(order);
    if(detailRoute){history.replaceState(null,'','#'+detailRoute);return navigate();}
-   if(order?.server)try{const latest=await refreshOrder(order.id);state.pass=latest.pass;if(state.job?.orderId===latest.id)state.job={...state.job,status:latest.status,pass:latest.pass};}catch(e){notify(e.message);}
+   if(order?.server)try{const latest=await refreshOrder(order.id);verifiedNoticeOrder=latest;state.pass=latest.pass;if(state.job?.orderId===latest.id)state.job={...state.job,status:latest.status,pass:latest.pass};}catch(e){notify(e.message);}
  }
  if(route==='orders'){orderLoading=true;orderError='';render(true);try{if(entryOrderError)throw Error(entryOrderError);const data=entryOrders||await orderRequest('?page='+orderPage);if(currentNavigation!==navigationId)return;orderRows=data.results;orderHasMore=data.has_more;orderError='';}catch(e){if(currentNavigation!==navigationId)return;orderError=e.message;}finally{if(currentNavigation===navigationId)orderLoading=false;entryOrders=null;entryOrderError='';}}
  if(route==='choose'&&designs.some(d=>d.id===params.get('design'))){state.designId=params.get('design');state.source='collection';}
@@ -1255,6 +1267,7 @@ async function navigate(){
  if(route==='choose'&&params.get('studio')==='1'){effectPanelOpen=true;editorTool='base';editorToolsOpen=true;}
  if(currentNavigation!==navigationId)return;
  syncStationFinder();render();document.querySelector('#main')?.focus({preventScroll:true});
+ if(verifiedNoticeOrder)confirmOrderSuccess(verifiedNoticeOrder,{returned:params.get('result')==='success'});
  if(route==='choose'&&params.get('studio')==='1')openAIStudio();
  if(route==='choose'&&params.get('step')==='model')openModelPicker();
 }
@@ -1301,6 +1314,7 @@ async function mergeAIAccount(data){
  membership=await privateUpdate('ai-membership-v1',a=>({...a,...data,jobs:a.customer?.id===data.customer?.id?a.jobs||{}:{}}),freshMembership());
 }
 function lockPrivateWorkspace(){
+ orderSuccessDialog?.close();
  workspace.lock();
  // Keep committed data in its original namespace while removing private views.
  Object.assign(state,{photo:'',phoneColor:null,pass:null,job:null,ai:null,aiJobId:null,artworkLayouts:{},photoArtwork:[],photoPlacement:null,editOrderId:null});

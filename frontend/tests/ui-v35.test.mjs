@@ -1,3 +1,4 @@
+import {createOrderSuccessTracker} from '../storefront/order-success.js';
 import {progressPanel,progressPaymentText} from '../storefront/order-progress.js';
 import {caseMaterialLabel} from '../storefront/case-styles.js';
 import {createStationFinder} from '../storefront/pickup-stations.js';
@@ -374,7 +375,7 @@ test('the actual library loader keeps bundled templates valid instead of treatin
 test('actual identity merge clears private memory on a changed session before reload and rejects late AI results',async()=>{
  const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8'),storage=memoryDesignStorage(),workspace=createDesignWorkspace(customerIdentity(8),storage);
  await workspace.write('draft-photo','synthetic-private-photo');let reloads=0;
- const context={workspace,designOwner,freshMembership:()=>({jobs:{}}),freshOrders:()=>({orders:{}}),privateUpdate:(...args)=>workspace.update(...args),save:()=>{},state:{photo:'synthetic-private-photo',pass:{code:'private'},artworkLayouts:{secret:{}},photoArtwork:[{}]},membership:customerIdentity(8),aiJob:{customerId:8,remoteId:'private'},checkoutDraft:{},reviewPass:{},localDesigns:[{}],orderRows:[{}],paymentOrder:{},customerUI:{ledger:[{}]},location:{reload(){reloads++;}},data:customerIdentity(9)};
+ const context={orderSuccessDialog:null,workspace,designOwner,freshMembership:()=>({jobs:{}}),freshOrders:()=>({orders:{}}),privateUpdate:(...args)=>workspace.update(...args),save:()=>{},state:{photo:'synthetic-private-photo',pass:{code:'private'},artworkLayouts:{secret:{}},photoArtwork:[{}]},membership:customerIdentity(8),aiJob:{customerId:8,remoteId:'private'},checkoutDraft:{},reviewPass:{},localDesigns:[{}],orderRows:[{}],paymentOrder:{},customerUI:{ledger:[{}]},location:{reload(){reloads++;}},data:customerIdentity(9)};
  vm.createContext(context);vm.runInContext(appFunction(source,'lockPrivateWorkspace')+'\n'+appFunction(source,'mergeAIAccount')+'\n'+appFunction(source,'rememberLiveJob'),context);
  await assert.rejects(vm.runInContext('mergeAIAccount(data)',context),/sign-in changed/);
  assert.equal(reloads,1);assert.equal(workspace.active,false);assert.equal(context.state.photo,'');assert.equal(context.state.pass,null);assert.equal(context.aiJob,null);assert.equal(context.checkoutDraft,null);assert.equal(context.localDesigns.length,0);assert.equal(context.customerUI.ledger.length,0);
@@ -386,7 +387,7 @@ test('actual sign-out failure still clears the private view, and rejected verifi
  const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
  for(const action of ['logout','verify']){
   const storage=memoryDesignStorage(),workspace=createDesignWorkspace(customerIdentity(8),storage);let verificationCalls=0,syncCalls=0,navigations=0;
-  const context={workspace,customerUI:{busy:false,email:'synthetic@example.test',ledger:[{}],codeSent:false},state:{photo:'synthetic-private'},membership:customerIdentity(8),aiJob:{},localDesigns:[{}],orderRows:[],reviewPass:{},paymentOrder:{},checkoutDraft:{},freshOrders:()=>({orders:{}}),freshMembership:()=>({jobs:{}}),
+  const context={orderSuccessDialog:null,workspace,customerUI:{busy:false,email:'synthetic@example.test',ledger:[{}],codeSent:false},state:{photo:'synthetic-private'},membership:customerIdentity(8),aiJob:{},localDesigns:[{}],orderRows:[],reviewPass:{},paymentOrder:{},checkoutDraft:{},freshOrders:()=>({orders:{}}),freshMembership:()=>({jobs:{}}),
    render:()=>{},signOutCustomer:async()=>{throw Error('Unknown sign-out result');},verifyEmailCode:async(email,code)=>{verificationCalls++;assert.equal(code,'123456');throw Error('Code expired');},syncAIAccount:async()=>{syncCalls++;},go:()=>{navigations++;},location:{reload(){navigations++;}}};
   vm.createContext(context);vm.runInContext(appFunction(source,'lockPrivateWorkspace')+'\n'+appFunction(source,'handleCustomer'),context);
   await vm.runInContext(`handleCustomer('${action}',new Map([['code','123456']]))`,context);
@@ -562,7 +563,7 @@ async function startColorDraft(editor,response){
  const refreshEnd=source.indexOf('\nsetInterval(async()=>',refreshStart);
  assert.ok(start>=0&&end>start&&refreshStart>0&&refreshEnd>refreshStart);
  let currentResponse=response;
- const context=vm.createContext({singlePrintDraft,createStationFinder,selectSupplierTemplate,editorHistory:{record(){}},syncEditorHistoryButtons(){},
+ const context=vm.createContext({createOrderSuccessTracker,singlePrintDraft,createStationFinder,selectSupplierTemplate,editorHistory:{record(){}},syncEditorHistoryButtons(){},
   document:{querySelector:()=>({textContent:''})},location:{hash:'#choose',href:'http://localhost/#choose'},
   localStorage:{getItem:key=>editor.get(key)||null,setItem:(key,value)=>editor.set(key,value)},
   t:value=>value,deviceScope:()=>'',scopeIds:()=>null,loadCatalog:async()=>null,
@@ -681,7 +682,7 @@ test('QA actual checkout bootstrap persists one-copy adjustment across reloads w
  let stored={quantity:3,requestKey:'previous-timeout-key',pass:{code:'synthetic',zoom:123,x:31,y:67}};
  const original=structuredClone(stored);let writes=0;
  for(let reload=0;reload<2;reload++){
-  const context=vm.createContext({singlePrintDraft,createStationFinder,selectSupplierTemplate,editorHistory:{record(){}},syncEditorHistoryButtons(){},
+  const context=vm.createContext({createOrderSuccessTracker,singlePrintDraft,createStationFinder,selectSupplierTemplate,editorHistory:{record(){}},syncEditorHistoryButtons(){},
    privateRead:async key=>{assert.equal(key,'checkout-draft');return structuredClone(stored);},
    privateWrite:async(key,value)=>{assert.equal(key,'checkout-draft');stored=structuredClone(value);writes++;},
    stopForStorage:()=>assert.fail('bootstrap unexpectedly failed'),

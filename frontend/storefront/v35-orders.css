@@ -137,3 +137,18 @@ body.station-picker-open{overflow:hidden}
 .v35-station-picker button:disabled{opacity:.45;cursor:not-allowed}
 .v35-station-picker .text-button{color:#7926bc}.v35-station-picker .station-map-links a{color:#7926bc;border-color:#dfcceb}
 @media(max-width:480px){.v35-station-picker{width:calc(100% - 16px);max-height:calc(100dvh - 20px);border-radius:20px}.v35-station-picker>header{padding:18px}.v35-station-picker h2{font-size:22px}.station-picker-content{padding:18px}.v35-station-picker .pickup-station-row{padding:14px}}
+body.order-success-open{overflow:hidden}
+.v35-order-success{box-sizing:border-box;width:min(560px,calc(100% - 32px));max-height:calc(100dvh - 32px);overflow:auto;border:1px solid #d8bce9;border-radius:24px;background:#fbf7ff;color:#100519;padding:32px;text-align:center;box-shadow:0 20px 70px #18052933}
+.v35-order-success::backdrop{background:#1d102766;backdrop-filter:blur(5px)}
+.order-success-check{display:grid;place-items:center;width:82px;height:82px;margin:0 auto 28px;border-radius:50%;background:#efe2fb;color:#7923bc;font-size:52px;line-height:1}
+.v35-order-success h2{margin:0 0 22px;font-size:30px;font-weight:700;line-height:1.2}
+.v35-order-success p{font-size:16px;line-height:1.8;margin:0 0 26px}
+.order-success-amount{display:block;font-size:42px;line-height:1.2;margin:30px 0}
+.v35-order-success .order-success-reference{font-size:14px;color:#7d698d;overflow-wrap:anywhere;margin-bottom:30px}
+.order-success-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.order-success-actions .button{padding:14px 12px;min-height:48px;white-space:normal;font-size:15px;border-radius:9px;border:2px solid white}
+.order-success-actions .primary{background:#a234fd;color:white;box-shadow:0 4px 0 #ddd4e4}
+.order-success-actions .secondary{background:#100519;color:white}
+.v35-order-success :focus-visible{outline:2px solid #7923bc;outline-offset:4px}
+@media(max-width:480px){.v35-order-success{padding:26px 20px}.v35-order-success h2{font-size:26px}.order-success-check{width:66px;height:66px;font-size:44px;margin-bottom:22px}.order-success-amount{font-size:38px}.order-success-actions .button{font-size:14px}}
+@media(max-width:350px){.order-success-actions{grid-template-columns:1fr}.v35-order-success{padding:22px 16px}.v35-order-success h2{font-size:24px}.v35-order-success p{font-size:14px}.order-success-amount{margin:20px 0}}
