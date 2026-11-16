@@ -187,3 +187,34 @@ body[data-v35-route=choose] .v35-header{max-width:760px}
 .v35-crop-controls{padding:10px 4px 0}.v35-crop-controls p{font-size:11px;line-height:1.5;color:#786185;margin-bottom:8px}
 .v35-crop-controls label{display:flex;align-items:center;gap:10px;font-size:12px;margin:6px 0}.v35-crop-controls input{flex:1;min-width:0;accent-color:#a234fd}.v35-crop-controls output{width:38px;text-align:right}
 @media(max-width:360px){.v35-photo-controls{padding-inline:10px}.v35-photo-transform{gap:5px}.v35-photo-transform button{width:32px;height:34px}.v35-photo-transform label{font-size:11px}}
+
+/* Use the phone's available viewport: controls keep their size, canvas takes the rest. */
+@media(max-width:760px){
+ #app.is-editor{display:flex;flex-direction:column;height:100vh;height:100dvh;min-height:0}
+ .is-editor>.v35-topbar{flex:none}
+ .is-editor>.v35-header{flex:none;min-height:48px;margin:6px auto 0;padding-inline:14px;backdrop-filter:none}
+ .is-editor>.ai-resume{flex:none;margin-block:4px;font-size:11px}
+ .is-editor>#main{display:flex;flex-direction:column;flex:1;min-height:0}
+ .is-editor>#main>.catalog-warning{flex:none}
+ .v35-editor.v35-design-editor{display:flex;flex-direction:column;flex:1;min-height:0}
+ .v35-design-editor>.v35-design-top{flex:none;padding:4px 14px}
+ .v35-design-editor .phone-settings>summary{min-height:36px;padding:5px 10px}
+ .v35-design-editor>.choose-layout{display:flex;flex-direction:column;flex:1;min-height:0;gap:0;overflow-y:auto;overscroll-behavior:contain}
+ .v35-design-editor .choose-layout>.large-preview{flex:1 0 128px;min-height:128px;height:auto;max-height:none;padding:48px 18px 10px}
+ .v35-design-editor .empty-photo-case{inset:48px 18px 10px}
+ .v35-design-editor .choose-details{flex:none}
+ .v35-design-editor .v35-canvas-top{padding:4px 12px}
+ .v35-design-editor .v35-photo-controls{padding:5px 12px 6px}
+ .v35-design-editor .v35-photo-transform{padding-bottom:4px}
+ .v35-design-editor .v35-photo-fit{gap:4px}
+ .v35-design-editor .v35-source-tools{gap:7px;padding:6px 12px}
+ .v35-design-editor .v35-source-tools>button,.v35-design-editor .ai-picker-launch{height:56px;gap:4px;padding:5px 4px}
+ .v35-design-editor .v35-tool-tabs{padding:3px 12px;gap:4px}
+ .v35-design-editor .v35-tool-tabs button{min-height:44px;padding:3px;gap:2px}
+ .v35-design-editor .editor-next.v35-design-bottom{flex:none;padding:6px 12px calc(6px + env(safe-area-inset-bottom))}
+ .v35-design-editor .v35-crop-controls{padding-top:4px}
+ .v35-design-editor .v35-crop-controls p{font-size:10px;line-height:1.3;margin-bottom:3px}
+ .v35-design-editor .v35-crop-controls label{margin:3px 0}
+ .v35-design-editor .v35-tabbed-library[open]>.editor-panel-body{max-height:min(28dvh,240px);padding:10px 14px}
+ .v35-design-editor .v35-base-tools>.editor-panel{max-height:150px;overflow:auto;margin-bottom:6px}
+}

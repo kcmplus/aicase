@@ -163,6 +163,23 @@ try{
   assert(footerBox.y>=tabsBox.y+tabsBox.height-1,'Review actions do not cover the editing tools');
   await page.screenshot({path:`test-results/v35-integration/${width}-photo-controls.png`,fullPage:true});
   if(width===390){
+   for(const phoneHeight of [852,700,659]){
+    await page.setViewportSize({width:393,height:phoneHeight});
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    const bounds=await page.evaluate(()=>{
+     const box=el=>el.getBoundingClientRect().toJSON();
+     return {height:innerHeight,scroll:document.documentElement.scrollHeight,width:document.documentElement.scrollWidth,
+      controls:[...document.querySelectorAll('.v35-header>a,.v35-header>button,.v35-canvas-top button,.v35-photo-controls button,#photo-size,.v35-source-tools>button,.ai-picker-launch,.v35-tool-tabs button,.v35-design-bottom a,.v35-design-bottom button')].filter(el=>el.getClientRects().length).map(box),
+      stage:box(document.querySelector('.large-preview')),phone:box(document.querySelector('.artwork-canvas .phone-case'))};
+    });
+    assert(bounds.scroll<=phoneHeight+1,'The photo editor fits the available iPhone viewport');
+    assert(bounds.width<=393,'The photo editor never scrolls sideways');
+    for(const button of bounds.controls)assert(button.top>=0&&button.bottom<=phoneHeight&&button.left>=0&&button.right<=393,JSON.stringify({phoneHeight,button}));
+    assert(bounds.phone.top>=bounds.stage.top&&bounds.phone.bottom<=bounds.stage.bottom,'The entire case remains inside the reduced canvas');
+    assert(bounds.phone.height>=150,'The phone preview remains readable with browser chrome visible');
+    await page.screenshot({path:`test-results/v35-integration/iphone16-${phoneHeight}-editor.png`});
+   }
+   await page.setViewportSize({width,height});
    const pixels=await page.evaluate(async model=>{
     const {exportCase}=await import('/print-export.js');const {phoneTemplate}=await import('/phone-templates.js');
     const source=document.createElement('canvas');source.width=200;source.height=50;const sourceCtx=source.getContext('2d');sourceCtx.fillStyle='#ff0000';sourceCtx.fillRect(0,0,200,50);
