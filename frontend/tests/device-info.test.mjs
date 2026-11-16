@@ -25,23 +25,19 @@ test('device info retries only temporary 503 reads and preserves identity checks
  assert.equal(invalid.name,'Station');assert.equal(invalid.coordinates,null);
 });
 
-test('map URLs retain exact WGS84 destination with explicit map conversion and coordinate ordering',()=>{
+test('navigation offers only Google and Apple with the exact WGS84 destination',()=>{
  const device={name:'高玥 & 测试',location:'广州小蛮腰',coordinates:{latitude:'23.109611405810412',longitude:'113.31919351869149',coordinate_type:'WGS84'}};
  const links=Object.fromEntries(stationNavigationLinks(device).map(l=>[l.id,new URL(l.url)]));
- assert.deepEqual(Object.keys(links),['google','apple','amap','baidu']);
+ assert.deepEqual(Object.keys(links),['google','apple']);
  assert.equal(links.google.searchParams.get('destination'),'23.109611405810412,113.31919351869149');
  assert.equal(links.apple.searchParams.get('destination'),links.google.searchParams.get('destination'));
- assert.equal(links.amap.searchParams.get('position'),'113.31919351869149,23.109611405810412');
- assert.equal(links.amap.searchParams.get('coordinate'),'wgs84');
- assert.equal(links.amap.searchParams.get('name'),device.name);
- assert.equal(links.baidu.searchParams.get('coord_type'),'wgs84');
- assert.equal(links.baidu.searchParams.get('location'),links.google.searchParams.get('destination'));
  for(const value of Object.values(links)){assert.equal(value.protocol,'https:');assert.equal(value.searchParams.has('origin'),false);}
  const html=stationNavigation({...device,name:'<script>alert(1)</script>'},{lang:'zh-CN'});
- assert.ok(html.includes('高德地图'));assert.ok(html.includes('rel="noopener noreferrer"'));assert.ok(!html.includes('<script>'));
+ assert.ok(html.includes('Google 地图'));assert.ok(html.includes('Apple 地图'));assert.doesNotMatch(html,/高德|百度|amap|baidu/);assert.ok(html.includes('rel="noopener noreferrer"'));assert.ok(!html.includes('<script>'));
  assert.deepEqual(stationNavigationLinks({...device,coordinates:null}),[]);
  for(const latitude of [null,true,'',NaN,Infinity,91,[],{}])assert.deepEqual(stationNavigationLinks({...device,coordinates:{...device.coordinates,latitude}}),[]);
  assert.deepEqual(stationNavigationLinks({...device,coordinates:{...device.coordinates,coordinate_type:''}}),[]);
+ for(const coordinate_type of ['GCJ02','BD09'])assert.deepEqual(stationNavigationLinks({...device,coordinates:{...device.coordinates,coordinate_type}}),[]);
  const overseas=stationNavigationLinks({...device,coordinates:{latitude:-33.9,longitude:151.2,coordinate_type:'WGS84'}});
  assert.equal(new URL(overseas[0].url).searchParams.get('destination'),'-33.9,151.2');
 });
