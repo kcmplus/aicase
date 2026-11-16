@@ -1,3 +1,4 @@
+import {loadOrderHistory} from './order-history.js';
 import {orderListPage,mountOrderPreviews} from './v35-order-list.js';
 import {createEditorHistory} from './editor-history.js';
 import {openPhoneModelDialog} from './phone-model-dialog.js';
@@ -742,7 +743,7 @@ function schedulePaymentPoll(){
 }
 startVisiblePolling({interval:15000,enabled:()=>location.hash.split('?')[0]==='#orders'&&!passBusy&&!photoBusy&&!aiBusy,
  refresh:async alive=>{const hash=location.hash,page=orderPage,nav=navigationId;try{
-  const data=await orderRequest('?page='+page);
+  const data=await loadOrderHistory({request:orderRequest,page,filter:orderFilter,search:orderSearch,alive:()=>alive()&&location.hash===hash&&navigationId===nav});
   if(!alive()||location.hash!==hash||orderPage!==page||navigationId!==nav)return;
   orderRows=data.results;orderHasMore=data.has_more;orderCounts=data.counts||null;orderError='';render(true);
  }catch{if(alive()&&location.hash===hash&&navigationId===nav){orderError=locale()==='zh-CN'?'订单进度暂时无法刷新，已保留上次结果。':'Order progress could not be refreshed. Showing the last known results.';render(true);}}}
@@ -1258,7 +1259,7 @@ async function navigate(){
    if(detailRoute){history.replaceState(null,'','#'+detailRoute);return navigate();}
    if(order?.server)try{const latest=await refreshOrder(order.id);verifiedNoticeOrder=latest;state.pass=latest.pass;if(state.job?.orderId===latest.id)state.job={...state.job,status:latest.status,pass:latest.pass};}catch(e){notify(e.message);}
  }
- if(route==='orders'){orderLoading=true;orderError='';render(true);try{if(entryOrderError)throw Error(entryOrderError);const data=entryOrders||await orderRequest('?page='+orderPage+'&status='+orderFilter+'&q='+encodeURIComponent(orderSearch));if(currentNavigation!==navigationId)return;orderRows=data.results;orderHasMore=data.has_more;orderCounts=data.counts||null;orderError='';}catch(e){if(currentNavigation!==navigationId)return;orderError=e.message;}finally{if(currentNavigation===navigationId)orderLoading=false;entryOrders=null;entryOrderError='';}}
+ if(route==='orders'){orderLoading=true;orderError='';render(true);try{if(entryOrderError)throw Error(entryOrderError);const data=await loadOrderHistory({request:orderRequest,page:orderPage,filter:orderFilter,search:orderSearch,initial:entryOrders,alive:()=>currentNavigation===navigationId});if(currentNavigation!==navigationId)return;orderRows=data.results;orderHasMore=data.has_more;orderCounts=data.counts||null;orderError='';}catch(e){if(currentNavigation!==navigationId)return;orderError=e.message;}finally{if(currentNavigation===navigationId)orderLoading=false;entryOrders=null;entryOrderError='';}}
  if(route==='choose'&&designs.some(d=>d.id===params.get('design'))){state.designId=params.get('design');state.source='collection';}
  if(route==='choose'&&params.get('source')==='photo'){
   if(params.get('fresh')==='1'){

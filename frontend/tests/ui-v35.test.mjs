@@ -731,6 +731,7 @@ async function qaOrdersNavigation(){
  assert.ok(start>=0&&end>start);
  const identity=[];
  const context=vm.createContext({
+  loadOrderHistory:async({request,page,filter,search,initial})=>initial||request('?page='+page+'&status='+filter+'&q='+encodeURIComponent(search)),
   URLSearchParams,location:{hash:'#orders'},navigationId:0,
   syncAIAccount:()=>new Promise(resolve=>identity.push(resolve)),
   workspace:{active:true},customerUI:{},clearTimeout:()=>{},
