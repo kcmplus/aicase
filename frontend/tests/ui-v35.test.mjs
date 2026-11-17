@@ -98,11 +98,11 @@ test('Works center filters the existing editable catalog, preserves bilingual se
  assert.deepEqual(matchingWorks(designs,{category:'graphic',query:'statement'}).map(work=>work.id),['type']);
  assert.deepEqual(matchingWorks(designs,{category:'travel'}).map(work=>work.id),['sunset']);
  const html=worksPage({works:designs,preview,params:new URLSearchParams({category:'all',q:'<unmatched>"'})});
- assert.match(html,/No matching designs/);assert.match(html,/value="&lt;unmatched&gt;&quot;"/);assert.doesNotMatch(html,/value="<unmatched>/);
+ assert.match(html,/No matching designs/);assert.match(html,/&lt;unmatched&gt;&quot;/);assert.doesNotMatch(html,/<unmatched>/);
  for(const lang of ['en-US','zh-CN']){
   const all=worksPage({works:designs,preview,lang});
   for(const work of designs)assert.match(all,new RegExp(`href="#work\\?id=${work.id}"`));
-  assert.match(all,/id="v35-work-search"/);assert.match(all,/role="status"/);
+  assert.doesNotMatch(all,/id="v35-work-search"|v35-works-toolbar/);assert.match(all,/role="status"/);assert.match(all,/v35-community-grid/);assert.match(all,/href="#my-designs"/);
  }
 });
 test('Work details resolve only available template ids and lead to the real editor without simulated orders',()=>{

@@ -1,3 +1,4 @@
+import {mountWorkLikes} from './v35-work-likes.js';
 import {loadOrderHistory} from './order-history.js';
 import {orderListPage,mountOrderPreviews} from './v35-order-list.js';
 import {createEditorHistory} from './editor-history.js';
@@ -75,6 +76,7 @@ let aiJob=null,aiBusy=false;
 const aiUi={mode:'pair',compare:50,lookMode:'effect',lookCompare:50,accepted:false,error:'',reconnecting:false};
 let cleanupAIStudio=()=>{};
 let cleanupShell=()=>{};
+let cleanupWorkLikes=()=>{};
 let cleanupHomePhone=()=>{};
 let cleanupPhoneModels=()=>{};
 const customerUI={email:'',codeSent:false,busy:false,error:'',success:'',ledger:[],ledgerNext:null,ledgerOpen:false,ledgerBusy:false,ledgerError:'',resendAt:0,next:'choose'};
@@ -794,6 +796,7 @@ function render(preserveScroll=false) {
   cleanupAIStudio();
   cleanupOrderPreviews();
   cleanupShell();
+  cleanupWorkLikes();
   cleanupHomePhone();
   cleanupPhoneModels();
   const oldY=window.scrollY;
@@ -803,7 +806,7 @@ function render(preserveScroll=false) {
   if(route!=='choose')canvasExpanded=false;
   if(route!=='choose')effectPanelOpen=false;
   document.body.classList.toggle('canvas-editor-open',canvasExpanded);
-  const pages={review:()=>designReview({pass:reviewPass,preview:passPreview,lang:locale(),busy:passBusy,saved:reviewSaved}),account:()=>customerPage(membership,customerUI),'my-designs':()=>myDesignsPage({rows:localDesigns,lang:locale(),preview:passPreview,error:localDesignError,busy:localDesignBusy,guest:workspace.owner==='guest'}),choose,pass:passPage,kiosk:()=>publicStationPage(true),designs:()=>worksPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),work:()=>workDetailPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),'how-it-works':()=>tutorialPage({lang:locale()}),about:()=>aboutPage({lang:locale()}),locations:publicStationPage,printers:publicStationPage,ai:()=>aiPage(aiJob,membership,aiBusy,{...aiUi,phoneModels,stockCatalogStatus}),membership:()=>membershipInfoPage({account:membership,lang:locale()}),checkout:checkoutPage,orders:ordersPage,payment:paymentPage};
+  const pages={review:()=>designReview({pass:reviewPass,preview:passPreview,lang:locale(),busy:passBusy,saved:reviewSaved}),account:()=>customerPage(membership,customerUI),'my-designs':()=>myDesignsPage({rows:localDesigns,lang:locale(),preview:passPreview,error:localDesignError,busy:localDesignBusy,guest:workspace.owner==='guest'}),choose,pass:passPage,kiosk:()=>publicStationPage(true),designs:()=>worksPage({works:designs,preview:casePreview,model:phoneModels[0]||'',lang:locale(),params:new URLSearchParams(query)}),work:()=>workDetailPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),'how-it-works':()=>tutorialPage({lang:locale()}),about:()=>aboutPage({lang:locale()}),locations:publicStationPage,printers:publicStationPage,ai:()=>aiPage(aiJob,membership,aiBusy,{...aiUi,phoneModels,stockCatalogStatus}),membership:()=>membershipInfoPage({account:membership,lang:locale()}),checkout:checkoutPage,orders:ordersPage,payment:paymentPage};
   app.classList.toggle('is-ai-studio',route==='ai'&&aiJob?.mode==='live');
   app.classList.toggle('is-editor',route==='choose');
   document.body.classList.toggle('v35-home-page',!Object.hasOwn(pages,route));
@@ -822,6 +825,7 @@ function render(preserveScroll=false) {
   document.querySelector('.canvas-editor')?.addEventListener('cancel',event=>{event.preventDefault();closeCanvasEditor();});
   document.querySelector('.look-browser')?.addEventListener('cancel',event=>{event.preventDefault();closeAIStudio();});
   if(route==='orders'&&workspace.active)cleanupOrderPreviews=mountOrderPreviews(app,{load:async id=>{const data=await orderRequest(id+'/');if(data.reference!==id)throw Error('Order identity mismatch.');return savedOrder(data);},preview:passPreview,active:()=>workspace.active,lang:locale()});
+  if(route==='designs')cleanupWorkLikes=mountWorkLikes(app,{read:()=>privateRead('liked-templates-v1'),update:fn=>privateUpdate('liked-templates-v1',fn,[]),active:()=>workspace.active,onError:()=>notify(locale()==='zh-CN'?'喜欢状态未能保存，请重试。':'Your like could not be saved. Please try again.')});
   observeCanvasPreview();
   if(canvasExpanded)openCanvasEditor();
   else if(effectPanelOpen)openAIStudio();
