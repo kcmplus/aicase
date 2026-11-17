@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {aiRequest,createLiveRender,mergeLiveRender,hydrateLiveImage} from '../storefront/ai-service.js';
+import {generatedPhotoPlacement,submitLiveRender,aiRequest,createLiveRender,mergeLiveRender,hydrateLiveImage} from '../storefront/ai-service.js';
 import {refreshAIOrder,canApplyAIOrder} from '../storefront/ai-core.js';
 import {aiPage} from '../storefront/ai-view.js';
 import {freshMembership,refreshMembership} from '../storefront/ai-membership.js';
@@ -168,4 +168,20 @@ test('AI confirmation opens the shared model picker only before submission',()=>
  for(const frozen of [{...pending,submissionAttempted:true},{...pending,remoteId:'known'},{...pending,status:'queued'},{...pending,status:'ready'}]){
   assert.doesNotMatch(aiPage(frozen,account,false,ui),/id="ai-phone-model"/);
  }
+});
+
+test('camera-aware renders freeze template and material and preserve the full generated photo',async t=>{
+ const draft=createLiveRender({photo,styleId:'anime',exampleId:'portrait',model:'iPhone 17',phoneTemplateId:'iphone-17-a-v1',caseMaterial:'magnetic'});
+ let submitted;
+ t.mock.method(globalThis,'fetch',async(url,options)=>{
+  if(url.endsWith('csrf/'))return {ok:true,json:async()=>({csrfToken:'fixture'})};
+  submitted=JSON.parse(options.body);
+  return {ok:true,json:async()=>({...response(draft),composition:{version:1,fit:'blur',model:'iPhone 17',template_id:'iphone-17-a-v1',case_material:'magnetic'}})};
+ });
+ assert.throws(()=>mergeLiveRender(draft,{...response(draft),composition:{version:1,fit:'blur',model:'iPhone 17',template_id:'other-template',case_material:'magnetic'}}),/different case/);
+ const job=await submitLiveRender(draft,true);
+ assert.equal(submitted.phone_template_id,'iphone-17-a-v1');
+ assert.equal(submitted.case_material,'magnetic');
+ assert.deepEqual(generatedPhotoPlacement(job),{x:50,y:50,scale:100,rotation:0,fit:'blur'});
+ assert.equal(generatedPhotoPlacement({...job,composition:null}),null);
 });

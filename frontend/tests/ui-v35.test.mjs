@@ -1,3 +1,4 @@
+import {generatedPhotoPlacement} from '../storefront/ai-service.js';
 import {homeLooks} from '../storefront/v35-home.js';
 import {orderListPage} from '../storefront/v35-order-list.js';
 import {createOrderSuccessTracker} from '../storefront/order-success.js';
@@ -896,7 +897,7 @@ test('changing the AI model preserves photo/style/request identity and submits t
  assert.equal(context.state.model,'iPhone 13 Pro');assert.equal(context.state.caseMaterial,'standard');assert.equal(context.state.phoneTemplateId,'new-standard-template');assert.equal(context.state.phoneColor,null);
  assert.equal(context.aiUi.accepted,false);assert.equal(context.aiUi.error,'');assert.equal(sent.length,0);
  await context.confirmAI(true,true);
- assert.equal(sent.length,1);assert.equal(sent[0].model,'iPhone 13 Pro');assert.equal(sent[0].submissionAttempted,true);
+ assert.equal(sent.length,1);assert.equal(sent[0].phoneTemplateId,'new-standard-template');assert.equal(sent[0].caseMaterial,'standard');assert.equal(sent[0].model,'iPhone 13 Pro');assert.equal(sent[0].submissionAttempted,true);
  assert(writes.find(item=>item.submissionAttempted&&item.status==='awaiting_confirmation'),'Attempt flag persists before sending');
 });
 test('unavailable models and frozen AI jobs cannot change their original selection',async()=>{
@@ -1127,5 +1128,21 @@ test('Print on either private draft card restores it and opens review without cr
   context.prepareDesignReview=async()=>{throw Error('Choose your phone model first.');};
   await assert.rejects(context.reviewSavedDesign(row,photo),/Choose your phone model/);
   assert.equal(routes.at(-1),'choose');
+ }
+});
+
+test('applying camera-aware AI preserves the full image and rejects a changed case configuration',async()=>{
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
+ for(const change of [{},{model:'Other'},{caseMaterial:'magnetic'},{phoneTemplateId:'replacement'}]){
+  const writes=[];
+  const context={aiBusy:false,aiUi:{},state:{model:'iPhone 17',caseMaterial:'standard',phoneTemplateId:'original',photo:'previous',...change},
+   aiJob:{id:'AI-fixture',mode:'live',model:'iPhone 17',status:'ready',resultPhoto:'generated',composition:{version:1,fit:'blur',case_material:'standard',template_id:'original'}},
+   render:()=>{},save:()=>{},go:()=>{},notify:()=>{},canApplyAIOrder:()=>true,generatedPhotoPlacement,
+   phoneTemplate:(model,id)=>({id}),refreshLiveRender:async job=>job,
+   rememberLiveJob:async job=>{context.aiJob=job;},privateWrite:async(...args)=>writes.push(args)};
+  vm.createContext(context);vm.runInContext(appFunction(source,'handleAI').split('let pollBusy=')[0],context);
+  await context.handleAI('apply');
+  if(Object.keys(change).length){assert.equal(writes.length,0);assert.equal(context.state.photo,'previous');assert.ok(context.aiUi.error);}
+  else{assert.equal(writes.length,1);assert.equal(context.state.photo,'generated');assert.equal(context.state.photoPlacement.fit,'blur');assert.equal(context.state.photoPlacement.scale,100);}
  }
 });

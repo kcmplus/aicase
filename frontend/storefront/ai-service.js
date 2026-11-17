@@ -24,16 +24,17 @@ export async function aiRequest(path,{method='GET',body,fetcher=fetch,image=fals
 }
 export function createLiveRender(input){
  if(!input.model)throw Error('Choose your phone model first.');
- return {...createAIOrder(input),mode:'live',version:3,model:input.model,priceCents:0,
+ return {...createAIOrder(input),mode:'live',version:3,model:input.model,phoneTemplateId:input.phoneTemplateId||'',caseMaterial:input.caseMaterial||'standard',priceCents:0,
   status:'awaiting_confirmation',payment:'unpaid',allocation:null,remoteId:null,resultPhoto:null};
 }
 export function mergeLiveRender(job,data){
  if(!uuid.test(data.id)||data.requestKey!==job.id.replace(/^AI-/,''))throw Error('The AI service returned an invalid render.');
  if(!['queued','generating','ready','failed','cancelled'].includes(data.status)||data.mode!=='live')throw Error('The AI service returned an invalid render.');
+ if(data.composition?.version===1&&(data.composition.model!==job.model||data.composition.case_material!==(job.caseMaterial||'standard')||(job.phoneTemplateId&&data.composition.template_id!==job.phoneTemplateId)))throw Error('The AI service returned a different case configuration.');
  const result=data.status==='ready'?`/api/v1/store/ai-renders/${data.id}/image/`:null;
  if(data.result!==result)throw Error('The AI service returned an invalid image.');
  return {...job,remoteId:data.id,mode:'live',status:data.status,payment:data.payment,
-  allocation:data.allocation,paidAt:data.createdAt,startedAt:data.startedAt,completedAt:data.completedAt,
+  allocation:data.allocation,composition:data.composition?.version===1&&data.composition.fit==='blur'?{...data.composition}:null,paidAt:data.createdAt,startedAt:data.startedAt,completedAt:data.completedAt,
   errorCode:data.errorCode,errorMessage:data.errorMessage,result,imageExpired:Boolean(data.imageExpired),imageExpiresAt:data.imageExpiresAt||null};
 }
 export const getAIAccount=()=>aiRequest('ai-account/');
@@ -51,7 +52,7 @@ export async function hydrateLiveImage(job){
 }
 export async function submitLiveRender(job,accepted){
  const data=await aiRequest('ai-renders/',{method:'POST',body:{request_key:job.id.replace(/^AI-/,''),
-  accepted,photo:job.photo,style_id:job.styleId,model:job.model,provider:AI_PROVIDER}});
+  accepted,photo:job.photo,style_id:job.styleId,model:job.model,phone_template_id:job.phoneTemplateId||'',case_material:job.caseMaterial||'standard',provider:AI_PROVIDER}});
  return hydrateLiveImage(mergeLiveRender(job,data));
 }
 export async function refreshLiveRender(job){
@@ -61,4 +62,10 @@ export async function refreshLiveRender(job){
 export async function cancelLiveRender(job){
  if(!job.remoteId)return {...job,status:'cancelled',payment:'unpaid'};
  return mergeLiveRender(job,await aiRequest(`ai-renders/${job.remoteId}/`,{method:'POST',body:{action:'cancel'}}));
+}
+
+export function generatedPhotoPlacement(job){
+ // Preserve the entire generated image; use the same fit as server composition geometry.
+ return job?.composition?.version===1&&job.composition.fit==='blur'
+  ?{x:50,y:50,scale:100,rotation:0,fit:'blur'}:null;
 }

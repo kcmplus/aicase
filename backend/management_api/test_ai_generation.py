@@ -72,6 +72,31 @@ class LiveGenerationTests(TestCase):
         self.assertNotIn('Private English style prompt',str(response.data));self.assertNotIn('api_key',str(response.data))
         conflict,_=self.create(model='iPhone 16e');self.assertEqual(conflict.status_code,409)
 
+    def test_composition_is_frozen_with_idempotency_and_invalid_template_costs_nothing(self):
+        invalid, dispatch = self.create(phone_template_id='iphone-16e-v1')
+        self.assertEqual(invalid.status_code, 400)
+        self.assertFalse(dispatch.called)
+        self.assertEqual(AIAccount.objects.get().trial_used, 0)
+        self.body.update(phone_template_id='iphone-17-a-v1', case_material='standard')
+        response, dispatch = self.create()
+        self.assertEqual(response.status_code, 202, response.data)
+        job = AIRender.objects.get(pk=response.data['id'])
+        frozen = job.composition_snapshot
+        self.assertEqual(response.data['composition']['fit'], 'blur')
+        self.assertIn('TEMPLATE-BASED COMPOSITION', job.prompt)
+        self.assertIn('COMPLETE head', job.prompt)
+        self.assertNotIn('image_safe', response.data['composition'])
+        PhoneModel.objects.filter(name='iPhone 17').update(composition_revision=10)
+        again, dispatch = self.create()
+        self.assertEqual(again.status_code, 200)
+        self.assertFalse(dispatch.called)
+        job.refresh_from_db()
+        self.assertEqual(job.composition_snapshot, frozen)
+        self.assertEqual(self.create(case_material='magnetic')[0].status_code, 409)
+        self.assertEqual(self.create(phone_template_id='')[0].status_code, 409)
+        self.assertEqual(AIRender.objects.count(), 1)
+        self.assertEqual(AIAccount.objects.get().trial_used, 1)
+
     def test_published_model_without_bundled_template_can_generate_and_retry_once(self):
         model = PhoneModel.objects.create(brand=PhoneModel.objects.get(name='iPhone 17').brand,
             code='iphone-13-pro', name='iPhone 13 Pro', active=True, adaptation_prompt='Keep the portrait centered.')

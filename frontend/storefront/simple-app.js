@@ -44,7 +44,7 @@ import {stylePanel, aiPage} from './ai-view.js';
 import {setAIView,setAIComparison,mountAIStudio} from './ai-interactions.js';
 import {activeLook,lookBrowserContent,setLookMode,setLookComparison,updateLookImageState} from './ai-look-browser.js';
 import {aiStyles,refreshAIOrder,canApplyAIOrder} from './ai-core.js';
-import {createLiveRender,getAIAccount,changeAIAccount,submitLiveRender,refreshLiveRender,cancelLiveRender} from './ai-service.js';
+import {generatedPhotoPlacement,createLiveRender,getAIAccount,changeAIAccount,submitLiveRender,refreshLiveRender,cancelLiveRender} from './ai-service.js';
 import {importPhoto} from './simple-upload.js';
 import {customerPage,sendEmailCode,verifyEmailCode,signOutCustomer,updateCustomerName,getCustomerCredits} from './customer-account.js';
 import {createDesignWorkspace,createDesignLibrary,designOwner} from './design-workspace.js';
@@ -1395,7 +1395,7 @@ async function changeAIPhoneModel(model){
   if(!aiJob||aiJob.id!==jobId||aiJob.status!=='awaiting_confirmation'||aiJob.remoteId||aiJob.submissionAttempted)throw Error('This render has changed. Please review it again.');
   if(stockCatalogStatus!=='ready'||!phoneModels.includes(model))throw Error('This phone model is unavailable. Please choose again.');
   // Preserve the request key, photo and style. Changing a draft must not submit a render.
-  await rememberLiveJob({...aiJob,model});
+  await rememberLiveJob({...aiJob,model,caseMaterial:'standard',phoneTemplateId:stockSelection(model,'standard')?.templateId||''});
   Object.assign(state,{model,caseMaterial:'standard',phoneTemplateId:stockSelection(model,'standard')?.templateId,phoneColor:null});
   selectSupplierTemplate(model,state.phoneTemplateId);colorNotice=false;reviewPass=null;aiUi.accepted=false;save();
  }catch(error){aiUi.error=error.message;notify(error.message);}
@@ -1424,7 +1424,9 @@ async function confirmAI(generation,accepted){
 }
 async function newAI(input){
  if(!AI_GENERATION_CONNECTED)throw Error('AI generation is not configured. Please contact the store.');
- const job=createLiveRender({...input,model:input.model||state.model});
+ const model=input.model||state.model;
+ const selected=phoneTemplate(model,state.phoneTemplateId);
+ const job=createLiveRender({...input,model,caseMaterial:state.caseMaterial||'standard',phoneTemplateId:selected?.id||''});
  if(aiJob?.mode==='live'&&aiJob.status==='awaiting_confirmation'&&!aiJob.remoteId)await rememberLiveJob({...aiJob,status:'cancelled'});
  Object.assign(aiUi,{mode:'pair',compare:50,accepted:false,error:'',reconnecting:false});
  await rememberLiveJob(job);
@@ -1455,8 +1457,11 @@ async function handleAI(action){
    if(aiJob?.mode!=='live')throw Error('Choose your photo and start a new AI render.');
    await rememberLiveJob(await refreshLiveRender(aiJob));
    if(!canApplyAIOrder(aiJob))throw Error('Wait until the render is ready before using its result.');
+   if(aiJob.composition?.case_material&&aiJob.composition.case_material!==state.caseMaterial)throw Error('Choose the case style used for this AI image before applying it.');
+   if(aiJob.model!==state.model)throw Error('Choose the phone model used for this AI image before applying it.');
+   if(aiJob.composition?.template_id&&phoneTemplate(state.model,state.phoneTemplateId)?.id!==aiJob.composition.template_id)throw Error('The case template has changed. Choose the original template or generate a new image.');
    const photo=aiJob.resultPhoto;await privateWrite('draft-photo',photo);
-   Object.assign(state,{photo,source:'photo',photoOrigin:'upload',effect:'original',zoom:100,x:50,y:50,photoPlacement:null,ai:{styleId:aiJob.styleId,jobId:aiJob.id,mode:'live'}});
+   Object.assign(state,{photo,source:'photo',photoOrigin:'upload',effect:'original',zoom:100,x:50,y:50,photoPlacement:generatedPhotoPlacement(aiJob),ai:{styleId:aiJob.styleId,jobId:aiJob.id,mode:'live'}});
    save();go('choose');notify('AI image applied. Adjust your crop, then review your print order.');
   }
  }catch(error){aiUi.error=error.message||'The AI service could not be reached. Please try again.';notify(aiUi.error);}
