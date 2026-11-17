@@ -1,3 +1,4 @@
+import {createPhotoDraftLibrary} from './photo-drafts.js';
 import {homeCollection} from './v35-home.js';
 import {mountWorkLikes} from './v35-work-likes.js';
 import {loadOrderHistory} from './order-history.js';
@@ -70,6 +71,8 @@ const privateRead=name=>workspace.active?workspace.read(name):Promise.resolve(un
 const privateWrite=(name,value)=>workspace.write(name,value);
 const privateUpdate=(name,transform,initial)=>workspace.update(name,transform,initial);
 const library=createDesignLibrary(workspace,{validate:pass=>readPass(pass.code,pass)});
+const photoDraftLibrary=createPhotoDraftLibrary(workspace);
+let localPhotoDrafts=[];
 let localDesigns=[],localDesignError='',localDesignBusy=false,reviewPass=null,reviewSaved=false,noticeTimer;
 let state = {designId:'bloom',model:'',caseMaterial:'',pass:null,stationId:'DEMO-01',job:null,source:'collection',photo:'',effect:'original',intensity:65,zoom:100,x:50,y:50,aiStyle:'anime',aiExample:'portrait',artworkLayouts:{},photoArtwork:[],keepCollection:false,photoPlacement:null,photoOrigin:'upload',ai:null,aiJobId:null};
 let storageWarning = false;
@@ -233,6 +236,8 @@ function clearPreviousPhotoArtwork(){
 // Saved orders and render snapshots have their own copies and remain resumable.
 async function clearPhotoDraft(){
  finishInlineText();
+ // Archive before clearing; a failed save leaves the current photo intact.
+ await photoDraftLibrary.save(state);
  await privateWrite('draft-photo','');
  Object.assign(state,{photo:'',photoOrigin:'upload',ai:null,effect:'original',intensity:65,zoom:100,x:50,y:50});
  clearPreviousPhotoArtwork();selectedArtwork=null;
@@ -482,7 +487,12 @@ function openHomePhone(){
  cleanupHomePhone();
  cleanupHomePhone=openHomePhoneDialog({root:app,initial:state,lang:locale(),scoped:Boolean(stockScope),
   catalog:()=>({models:phoneModels,status:stockCatalogStatus,selection:stockSelection}),refresh:refreshStockChoices,
-  onConfirm:choice=>{phoneSettingsOpen=false;Object.assign(state,choice);selectSupplierTemplate(state.model,state.phoneTemplateId);colorNotice=false;reviewPass=null;save();go('choose?source=photo&studio=1');}});
+  onConfirm:async choice=>{
+   photoBusy=true;
+   try{await clearPhotoDraft();phoneSettingsOpen=false;Object.assign(state,choice);selectSupplierTemplate(state.model,state.phoneTemplateId);colorNotice=false;reviewPass=null;save();go('choose?source=photo&studio=1');}
+   catch(error){notify(error.message);}
+   finally{photoBusy=false;}
+  }});
 }
 function openPhotoPicker(){
  // Run inside the click gesture, before any await, so mobile browsers allow it.
@@ -623,8 +633,21 @@ async function loadLocalDesigns(){
   const rows=await privateRead('saved-designs')||[];
   for(const row of rows)if(row.phoneTemplate?.id?.startsWith('supplier-'))registerSupplierTemplates([row.phoneTemplate]);
   localDesigns=await library.list();
- }catch(error){localDesigns=[];localDesignError=error.message;}
+  localPhotoDrafts=await photoDraftLibrary.list();
+ }catch(error){localDesigns=[];localPhotoDrafts=[];localDesignError=error.message;}
  finally{localDesignBusy=false;}
+}
+async function restorePhotoDraft(snapshot){
+ if(!isPhoto(snapshot?.photo))throw Error('This photo draft could not be loaded.');
+ finishInlineText();await photoDraftLibrary.save(state);
+ await privateWrite('draft-photo',snapshot.photo);workspace.check();
+ Object.assign(state,structuredClone(snapshot),{source:'photo',pass:null,job:null,editOrderId:null});
+ if(stockCatalogStatus==='ready'&&!phoneModels.includes(state.model))state.model='';
+ if(stockCatalogStatus==='ready'&&!stockSelection(state.model,state.caseMaterial))state.caseMaterial='';
+ state.phoneTemplateId=stockSelection(state.model,state.caseMaterial)?.templateId;
+ selectSupplierTemplate(state.model,state.phoneTemplateId);syncDraftColor();
+ selectedArtwork=null;comparing=false;reviewPass=null;effectPanelOpen=false;cropPanelOpen=false;
+ save();go('choose');
 }
 async function restoreLocalDesign(pass){
  const p=readPass(pass.code,pass);
@@ -807,7 +830,7 @@ function render(preserveScroll=false) {
   if(route!=='choose')canvasExpanded=false;
   if(route!=='choose')effectPanelOpen=false;
   document.body.classList.toggle('canvas-editor-open',canvasExpanded);
-  const pages={review:()=>designReview({pass:reviewPass,preview:passPreview,lang:locale(),busy:passBusy,saved:reviewSaved}),account:()=>customerPage(membership,customerUI),'my-designs':()=>myDesignsPage({rows:localDesigns,lang:locale(),preview:passPreview,error:localDesignError,busy:localDesignBusy,guest:workspace.owner==='guest'}),choose,pass:passPage,kiosk:()=>publicStationPage(true),designs:()=>worksPage({works:designs,preview:casePreview,model:phoneModels[0]||'',lang:locale(),params:new URLSearchParams(query)}),work:()=>workDetailPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),'how-it-works':()=>tutorialPage({lang:locale()}),about:()=>aboutPage({lang:locale()}),locations:publicStationPage,printers:publicStationPage,ai:()=>aiPage(aiJob,membership,aiBusy,{...aiUi,phoneModels,stockCatalogStatus}),membership:()=>membershipInfoPage({account:membership,lang:locale()}),checkout:checkoutPage,orders:ordersPage,payment:paymentPage};
+  const pages={review:()=>designReview({pass:reviewPass,preview:passPreview,lang:locale(),busy:passBusy,saved:reviewSaved}),account:()=>customerPage(membership,customerUI),'my-designs':()=>myDesignsPage({rows:localDesigns,photoDrafts:localPhotoDrafts,lang:locale(),preview:passPreview,error:localDesignError,busy:localDesignBusy,guest:workspace.owner==='guest'}),choose,pass:passPage,kiosk:()=>publicStationPage(true),designs:()=>worksPage({works:designs,preview:casePreview,model:phoneModels[0]||'',lang:locale(),params:new URLSearchParams(query)}),work:()=>workDetailPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),'how-it-works':()=>tutorialPage({lang:locale()}),about:()=>aboutPage({lang:locale()}),locations:publicStationPage,printers:publicStationPage,ai:()=>aiPage(aiJob,membership,aiBusy,{...aiUi,phoneModels,stockCatalogStatus}),membership:()=>membershipInfoPage({account:membership,lang:locale()}),checkout:checkoutPage,orders:ordersPage,payment:paymentPage};
   app.classList.toggle('is-ai-studio',route==='ai'&&aiJob?.mode==='live');
   app.classList.toggle('is-editor',route==='choose');
   document.body.classList.toggle('v35-home-page',!Object.hasOwn(pages,route));
@@ -1057,7 +1080,7 @@ app.addEventListener('click',async event=>{
   if(el.dataset.action==='home-ai'){event.preventDefault();openHomePhone();return;}
   if(el.dataset.action==='reload-private-workspace'){location.reload();return;}
   if(el.dataset.action==='close-design-review'){closeDesignReview();return;}
-  if(['save-local-design','continue-design-checkout','restore-design','delete-design','refresh-designs','restore-legacy-draft'].includes(el.dataset.action)){
+  if(['save-local-design','continue-design-checkout','restore-design','delete-design','refresh-designs','restore-legacy-draft','restore-photo-draft','delete-photo-draft'].includes(el.dataset.action)){
    event.preventDefault();passBusy=true;
    try{
     workspace.check();
@@ -1080,6 +1103,11 @@ app.addEventListener('click',async event=>{
     }else if(el.dataset.action==='restore-design'){
      const row=localDesigns.find(row=>row.id===el.dataset.id);if(!row)throw Error('This saved design could not be found.');
      await restoreLocalDesign(row.pass);
+    }else if(el.dataset.action==='delete-photo-draft'){
+     await photoDraftLibrary.remove(el.dataset.id);await loadLocalDesigns();
+    }else if(el.dataset.action==='restore-photo-draft'){
+     const row=localPhotoDrafts.find(row=>row.id===el.dataset.id);if(!row)throw Error('This photo draft could not be found.');
+     await restorePhotoDraft(row.snapshot);
     }else if(el.dataset.action==='restore-legacy-draft'){
      if(workspace.owner!=='guest')throw Error('Older browser drafts are separate from signed-in accounts.');
      const legacy=JSON.parse(localStorage.getItem('popomo-simple-v1')||'null');
@@ -1238,7 +1266,7 @@ async function navigate(){
  // Retire the old route before it can restart loading or consume entry data.
  if(currentNavigation!==navigationId)return;
  if(!workspace.active&&route!=='account'){render();return;}
- if(route==='choose'){reviewPass=null;reviewSaved=false;await refreshStockChoices();}
+ if(route==='choose'){reviewPass=null;reviewSaved=false;await refreshStockChoices();if(currentNavigation!==navigationId)return;}
  if(route==='review'&&!reviewPass){try{const prepared=await prepareDesignReview({...state});if(currentNavigation!==navigationId)return;reviewPass=prepared;reviewSaved=false;}catch(error){if(currentNavigation!==navigationId)return;notify(error.message);go('choose');return;}}
  if(route==='my-designs'){localDesigns=[];localDesignBusy=true;render(true);await loadLocalDesigns();}
  if(route==='account'||route==='membership')try{await syncAIAccount();if(route==='account'&&membership.authenticated)await loadCustomerCredits(true);}catch(error){customerUI.error=error.message;}
@@ -1267,12 +1295,18 @@ async function navigate(){
  if(route==='orders'){orderLoading=true;orderError='';render(true);try{if(entryOrderError)throw Error(entryOrderError);const data=await loadOrderHistory({request:orderRequest,page:orderPage,filter:orderFilter,search:orderSearch,initial:entryOrders,alive:()=>currentNavigation===navigationId});if(currentNavigation!==navigationId)return;orderRows=data.results;orderHasMore=data.has_more;orderCounts=data.counts||null;orderError='';}catch(e){if(currentNavigation!==navigationId)return;orderError=e.message;}finally{if(currentNavigation===navigationId)orderLoading=false;entryOrders=null;entryOrderError='';}}
  if(route==='choose'&&designs.some(d=>d.id===params.get('design'))){state.designId=params.get('design');state.source='collection';}
  if(route==='choose'&&params.get('source')==='photo'){
-  if(params.get('fresh')==='1'){
+  // URL-based Studio entries start a new photo; the editor's Studio button
+  // opens the dialog directly and keeps the current composition.
+  if(params.get('fresh')==='1'||params.get('studio')==='1'){
    photoBusy=true;
    try{await clearPhotoDraft();state.editOrderId=null;}
    catch(error){notify(error.message||'Your design could not be saved. Please try again.');return;}
    finally{photoBusy=false;}
-   params.delete('fresh');history.replaceState(null,'',`#choose?${params}`);
+   if(currentNavigation!==navigationId)return;
+   params.delete('fresh');
+   // Consume the entry marker so a refresh does not discard a new upload.
+   const consumed=new URLSearchParams(params);consumed.delete('studio');
+   history.replaceState(null,'',`#choose?${consumed}`);
   }
   state.source='photo';save();
  }
@@ -1330,7 +1364,7 @@ function lockPrivateWorkspace(){
  workspace.lock();
  // Keep committed data in its original namespace while removing private views.
  Object.assign(state,{photo:'',phoneColor:null,pass:null,job:null,ai:null,aiJobId:null,artworkLayouts:{},photoArtwork:[],photoPlacement:null,editOrderId:null});
- reviewPass=null;reviewSaved=false;checkoutDraft=null;aiJob=null;localDesigns=[];orderRows=[];paymentOrder=null;orderBook=freshOrders();
+ reviewPass=null;reviewSaved=false;checkoutDraft=null;aiJob=null;localDesigns=[];localPhotoDrafts=[];orderRows=[];paymentOrder=null;orderBook=freshOrders();
  membership={...freshMembership(),server:true,authenticated:false,customer:null};
  Object.assign(customerUI,{email:'',codeSent:false,ledger:[],ledgerNext:null,ledgerOpen:false});
 }

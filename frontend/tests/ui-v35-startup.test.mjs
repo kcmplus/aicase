@@ -1,3 +1,4 @@
+import {createPhotoDraftLibrary} from '../storefront/photo-drafts.js';
 import {createOrderSuccessTracker} from '../storefront/order-success.js';
 import {createStationFinder} from '../storefront/pickup-stations.js';
 import {selectSupplierTemplate} from '../storefront/phone-templates.js';
@@ -40,7 +41,7 @@ test('startup stops when the saved draft photo cannot be read',async()=>{
   localStorage:{getItem:()=>JSON.stringify({source:'photo',designId:'bloom'})},
   t:value=>value,deviceScope:()=>'',scopeIds:()=>null,
   loadCatalog:async()=>null,loadStockCatalog:async()=>null,fulfillmentConfig:async()=>({}),
-  getAIAccount:async()=>({authenticated:false}),createDesignWorkspace,createDesignLibrary,
+  getAIAccount:async()=>({authenticated:false}),createDesignWorkspace,createDesignLibrary,createPhotoDraftLibrary,
   readPass:()=>{},readDesign:async key=>{if(key.endsWith(':draft-photo')){photoRead++;throw Error('Synthetic read failure');}},
   writeDesign:async()=>{},updateDesign:async(key,transform,initial)=>transform(initial),
   freshMembership:()=>({jobs:{}}),freshOrders:()=>({orders:{}}),
@@ -81,7 +82,7 @@ test('a transient photo read failure preserves the scoped draft for a later star
   const context=vm.createContext({createOrderSuccessTracker,singlePrintDraft,createStationFinder,selectSupplierTemplate,document:{querySelector:()=>app},location,
    localStorage:{getItem:key=>editor.get(key)||null},t:value=>value,deviceScope:()=>'',scopeIds:()=>null,
    loadCatalog:async()=>null,loadStockCatalog:async()=>null,fulfillmentConfig:async()=>({}),
-   getAIAccount:async()=>({authenticated:true,customer:{id}}),createDesignWorkspace,createDesignLibrary,readPass:()=>{},
+   getAIAccount:async()=>({authenticated:true,customer:{id}}),createDesignWorkspace,createDesignLibrary,createPhotoDraftLibrary,readPass:()=>{},
    readDesign:async key=>{if(key.endsWith(':draft-photo')&&failPhoto)throw Error('Synthetic temporary failure');return rows.get(key);},
    writeDesign:async(key,value)=>rows.set(key,value),updateDesign:async(key,transform,initial)=>transform(rows.get(key)??initial),
    freshMembership:()=>({jobs:{}}),freshOrders:()=>({orders:{}}),designs:[{id:'bloom'}],phoneModels:[],stations:[],aiStyles:[],aiExamples:[],effects:[],
@@ -117,7 +118,7 @@ for(const failure of ['membership','orders','draft','draft-photo','migration','u
    t:value=>value,deviceScope:()=>'',scopeIds:()=>null,
    loadCatalog:async()=>null,loadStockCatalog:async()=>null,fulfillmentConfig:async()=>({}),
    getAIAccount:async()=>failure==='unknown-session-orders'?null:{authenticated:false},
-   createDesignWorkspace,createDesignLibrary,readPass:()=>{},
+   createDesignWorkspace,createDesignLibrary,createPhotoDraftLibrary,readPass:()=>{},
    readDesign:async key=>{if((failure==='draft'&&key.endsWith(':checkout-draft'))||(failure==='draft-photo'&&key.endsWith(':draft-photo')))fail();},
    writeDesign:async()=>{effects.push('design write');},
    updateDesign:async(key,transform,initial)=>{

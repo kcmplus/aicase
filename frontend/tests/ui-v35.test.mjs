@@ -371,17 +371,17 @@ test('actual restore handler retains rotations, text, crop and original bytes wh
 test('the actual library loader keeps bundled templates valid instead of treating them as supplier uploads',async()=>{
  const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8'),storage=memoryDesignStorage(),workspace=createDesignWorkspace(customerIdentity(8),storage),library=createDesignLibrary(workspace,{validate:validateLocal});
  const pass=syntheticPass();await library.save(pass,phoneTemplate(pass.model,pass.phoneTemplateId));let registrations=0;
- const context={privateRead:key=>workspace.read(key),library,localDesigns:[],localDesignError:'',localDesignBusy:false,registerSupplierTemplates(){registrations++;throw Error('Invalid supplier template');}};
+ const context={privateRead:key=>workspace.read(key),library,photoDraftLibrary:createPhotoDraftLibrary(workspace),localPhotoDrafts:[],localDesigns:[],localDesignError:'',localDesignBusy:false,registerSupplierTemplates(){registrations++;throw Error('Invalid supplier template');}};
  await vm.runInNewContext(appFunction(source,'loadLocalDesigns')+'\nloadLocalDesigns()',context);
  assert.equal(registrations,0);assert.equal(context.localDesigns.length,1);assert.equal(context.localDesignError,'');assert.equal(context.localDesignBusy,false);
 });
 test('actual identity merge clears private memory on a changed session before reload and rejects late AI results',async()=>{
  const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8'),storage=memoryDesignStorage(),workspace=createDesignWorkspace(customerIdentity(8),storage);
  await workspace.write('draft-photo','synthetic-private-photo');let reloads=0;
- const context={orderSuccessDialog:null,workspace,designOwner,freshMembership:()=>({jobs:{}}),freshOrders:()=>({orders:{}}),privateUpdate:(...args)=>workspace.update(...args),save:()=>{},state:{photo:'synthetic-private-photo',pass:{code:'private'},artworkLayouts:{secret:{}},photoArtwork:[{}]},membership:customerIdentity(8),aiJob:{customerId:8,remoteId:'private'},checkoutDraft:{},reviewPass:{},localDesigns:[{}],orderRows:[{}],paymentOrder:{},customerUI:{ledger:[{}]},location:{reload(){reloads++;}},data:customerIdentity(9)};
+ const context={orderSuccessDialog:null,workspace,designOwner,freshMembership:()=>({jobs:{}}),freshOrders:()=>({orders:{}}),privateUpdate:(...args)=>workspace.update(...args),save:()=>{},state:{photo:'synthetic-private-photo',pass:{code:'private'},artworkLayouts:{secret:{}},photoArtwork:[{}]},membership:customerIdentity(8),aiJob:{customerId:8,remoteId:'private'},checkoutDraft:{},reviewPass:{},localDesigns:[{}],localPhotoDrafts:[{}],orderRows:[{}],paymentOrder:{},customerUI:{ledger:[{}]},location:{reload(){reloads++;}},data:customerIdentity(9)};
  vm.createContext(context);vm.runInContext(appFunction(source,'lockPrivateWorkspace')+'\n'+appFunction(source,'mergeAIAccount')+'\n'+appFunction(source,'rememberLiveJob'),context);
  await assert.rejects(vm.runInContext('mergeAIAccount(data)',context),/sign-in changed/);
- assert.equal(reloads,1);assert.equal(workspace.active,false);assert.equal(context.state.photo,'');assert.equal(context.state.pass,null);assert.equal(context.aiJob,null);assert.equal(context.checkoutDraft,null);assert.equal(context.localDesigns.length,0);assert.equal(context.customerUI.ledger.length,0);
+ assert.equal(reloads,1);assert.equal(workspace.active,false);assert.equal(context.state.photo,'');assert.equal(context.state.pass,null);assert.equal(context.aiJob,null);assert.equal(context.checkoutDraft,null);assert.equal(context.localDesigns.length,0);assert.equal(context.localPhotoDrafts.length,0);assert.equal(context.customerUI.ledger.length,0);
  assert.equal(storage.rows.get('v35:customer-8:draft-photo'),'synthetic-private-photo');assert.equal(storage.rows.has('v35:customer-9:draft-photo'),false);
  await assert.rejects(vm.runInContext("rememberLiveJob({id:'late-private-result',status:'ready',customerId:8})",context),/sign-in needs checking/);assert.equal(context.aiJob,null);
 });
@@ -571,7 +571,7 @@ async function startColorDraft(editor,response){
   localStorage:{getItem:key=>editor.get(key)||null,setItem:(key,value)=>editor.set(key,value)},
   t:value=>value,deviceScope:()=>'',scopeIds:()=>null,loadCatalog:async()=>null,
   loadStockCatalog:()=>loadStockCatalog(async()=>currentResponse(),''),fulfillmentConfig:async()=>({}),
-  getAIAccount:async()=>customerIdentity(8),createDesignWorkspace,createDesignLibrary,readPass,
+  getAIAccount:async()=>customerIdentity(8),createDesignWorkspace,createDesignLibrary,createPhotoDraftLibrary,readPass,
   readDesign:async()=>undefined,writeDesign:async()=>{},updateDesign:async(key,transform,initial)=>transform(initial),
   freshMembership:()=>({jobs:{}}),freshOrders:()=>({orders:{}}),designs:[{id:'bloom'}],phoneModels:stockedPhoneModels,
   stations:[],aiStyles:[],aiExamples:[],effects:[],stockSelection,
@@ -998,4 +998,110 @@ test('prototype checkout dock preserves consent, loading, fulfillment and availa
  const freeCourier=html({devicePrinting:{simulated:true},checkoutDraft:courierDraft,paymentConfig:{...courierConfig,provider:'free',mode:'test',zero_price_test:true,quote:{...courierConfig.quote,print_amount:'0.00',shipping_amount:'0.00',total_amount:'0.00'}}});
  assert.match(freeCourier,/Confirm free order/);assert.match(freeCourier,/no-charge delivery test order/);assert.doesNotMatch(freeCourier,/Confirm at the station/);
 
+});
+
+async function qaStudioEntry(){
+ const {context}=await qaOrdersNavigation();
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
+ const start=source.indexOf('function clearPreviousPhotoArtwork(){');
+ const end=source.indexOf('// The editor keeps a draft per template.',start);
+ const writes=[];
+ Object.assign(context,{
+  location:{hash:'#choose?source=photo&studio=1'},syncAIAccount:async()=>{},
+  refreshStockChoices:async()=>{},designs:[],save:()=>{},notify:message=>{throw Error(message);},
+  state:{source:'photo',photo:'old-upload',model:'iPhone 13 Pro',phoneColor:{rgb:'#535451'},caseMaterial:'standard',photoArtwork:[{id:'old-text'}],photoPlacement:{scale:150},ai:{jobId:'previous'},editOrderId:'old-order'},
+  aiJob:{id:'generating-job',status:'generating',photo:'render-snapshot'},aiUi:{accepted:true,error:'old error'},
+  photoDraftLibrary:{save:async()=>{}},photoBusy:false,effectPanelOpen:false,cropPanelOpen:true,editorPanels:{collection:true,graphics:true},
+  finishInlineText:()=>{},privateWrite:async(key,value)=>{writes.push([key,value]);},
+  opened:0,openAIStudio:()=>{context.opened++;},
+  history:{replaceState:(_state,_title,hash)=>{context.location.hash=hash;}},
+ });
+ vm.runInContext(source.slice(start,end),context);
+ return {context,writes};
+}
+
+test('external AI Studio entry clears the draft photo once, retaining phone choice and render snapshots',async()=>{
+ const {context,writes}=await qaStudioEntry();
+ await context.navigate();
+ assert.equal(context.state.photo,'');assert.equal(context.state.ai,null);
+ assert.equal(context.state.photoArtwork.length,0);assert.equal(context.state.photoPlacement,null);
+ assert.equal(context.state.editOrderId,null);assert.equal(context.state.model,'iPhone 13 Pro');
+ assert.equal(context.state.phoneColor.rgb,'#535451');assert.equal(context.state.caseMaterial,'standard');
+ assert.deepEqual(writes,[['draft-photo','']]);
+ assert.equal(context.aiJob.status,'generating');assert.equal(context.aiJob.photo,'render-snapshot');
+ assert.equal(context.opened,1);assert.equal(context.effectPanelOpen,true);
+ assert.equal(context.location.hash,'#choose?source=photo');
+ // A subsequent navigation/refresh must not consume the newly uploaded image.
+ context.state.photo='new-upload';await context.navigate();
+ assert.equal(context.state.photo,'new-upload');assert.equal(writes.length,1);
+ // Leaving and deliberately entering Studio again begins another creation.
+ context.location.hash='#home';await context.navigate();
+ context.location.hash='#choose?source=photo&studio=1';await context.navigate();
+ assert.equal(context.state.photo,'');assert.equal(writes.length,2);
+});
+
+test('ordinary editor navigation keeps its photo, and obsolete Studio navigation cannot clear it',async()=>{
+ const {context,writes}=await qaStudioEntry();
+ context.location.hash='#choose';await context.navigate();
+ assert.equal(context.state.photo,'old-upload');assert.equal(writes.length,0);
+ let release;context.refreshStockChoices=()=>new Promise(resolve=>{release=resolve;});
+ context.location.hash='#choose?source=photo&studio=1';const pending=context.navigate();
+ await new Promise(resolve=>setImmediate(resolve));
+ context.location.hash='#home';await context.navigate();release();await pending;
+ assert.equal(context.state.photo,'old-upload');assert.equal(writes.length,0);
+ assert.equal(context.location.hash,'#home');assert.equal(context.opened,0);
+});
+
+import {createPhotoDraftLibrary} from '../storefront/photo-drafts.js';
+test('photo drafts are private, deduplicated editing snapshots without order or request authority',async()=>{
+ const storage=memoryDesignStorage();
+ const guest=createDesignWorkspace({authenticated:false},storage);
+ const member=createDesignWorkspace({authenticated:true,customer:{id:8}},storage);
+ let count=0;const drafts=createPhotoDraftLibrary(guest,{now:()=>42,id:()=>String(++count)});
+ const state={source:'photo',photo:'data:image/png;base64,AAAA',model:'',photoPlacement:{x:42,y:31,scale:120,rotation:90},photoArtwork:[{id:'text'}],pass:{code:'private-order'},job:{id:'print'},aiJobId:'request',editOrderId:'order'};
+ await drafts.save(state);await drafts.save(state);
+ let rows=await drafts.list();assert.equal(rows.length,1);
+ assert.equal(rows[0].snapshot.model,'','unfinished photos can be saved without a model');
+ assert.deepEqual(rows[0].snapshot.photoPlacement,state.photoPlacement);
+ for(const key of ['pass','job','aiJobId','editOrderId'])assert.equal(key in rows[0].snapshot,false);
+ state.photoPlacement.x=90;assert.equal((await drafts.list())[0].snapshot.photoPlacement.x,42);
+ assert.equal((await createPhotoDraftLibrary(member).list()).length,0);
+ await drafts.save({source:'photo',photo:''});assert.equal((await drafts.list()).length,1);
+ await drafts.remove(rows[0].id);assert.equal((await drafts.list()).length,0);
+ guest.lock();await assert.rejects(drafts.save(state),/sign-in needs checking/);
+});
+
+test('a failed photo archive never clears the active photo or consumes the Studio entry',async()=>{
+ const {context,writes}=await qaStudioEntry();
+ context.photoDraftLibrary.save=async()=>{throw Error('Storage full');};
+ const notices=[];context.notify=message=>notices.push(message);
+ await context.navigate();
+ assert.equal(context.state.photo,'old-upload');assert.equal(writes.length,0);
+ assert.deepEqual(notices,['Storage full']);assert.equal(context.photoBusy,false);
+ assert.equal(context.location.hash,'#choose?source=photo&studio=1');assert.equal(context.opened,0);
+});
+
+test('My designs exposes photo drafts separately with restore/delete actions and escaped labels',()=>{
+ const html=myDesignsPage({photoDrafts:[{id:'draft-1',updatedAt:42,snapshot:{photo:'data:image/png;base64,AAAA',model:'<model>'}}]});
+ assert.match(html,/Photo drafts/);assert.match(html,/&lt;model&gt;/);
+ assert.match(html,/data-action="restore-photo-draft"/);assert.match(html,/data-action="delete-photo-draft"/);
+ assert.doesNotMatch(html,/A little inspiration is waiting/);
+});
+
+test('restoring a photo draft recovers composition and archives the current photo without restoring order authority',async()=>{
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
+ const saved={source:'photo',photo:'data:image/png;base64,AAAA',model:'iPhone 13 Pro',caseMaterial:'standard',phoneColor:{rgb:'#535451'},photoPlacement:{x:36,y:58,scale:120,rotation:90},photoArtwork:[{id:'caption',text:'Hello'}],artworkLayouts:{},keepCollection:false};
+ const old={source:'photo',photo:'data:image/png;base64,BBBB',pass:{code:'old'},job:{id:'order'},editOrderId:'order'};
+ const writes=[],archives=[],routes=[];
+ const context={isPhoto,structuredClone,state:old,finishInlineText:()=>{},photoDraftLibrary:{save:async state=>archives.push(structuredClone(state))},privateWrite:async(...args)=>writes.push(args),workspace:{check(){}},stockCatalogStatus:'ready',phoneModels:['iPhone 13 Pro'],stockSelection:()=>({templateId:'current-template'}),selectSupplierTemplate:()=>{},syncDraftColor:()=>{},save:()=>{},go:route=>routes.push(route)};
+ vm.createContext(context);vm.runInContext(appFunction(source,'restorePhotoDraft'),context);
+ await context.restorePhotoDraft(saved);
+ assert.equal(archives[0].photo,'data:image/png;base64,BBBB');
+ assert.deepEqual(writes,[['draft-photo',saved.photo]]);
+ assert.deepEqual(context.state.photoPlacement,saved.photoPlacement);
+ assert.deepEqual(context.state.photoArtwork,saved.photoArtwork);
+ assert.equal(context.state.pass,null);assert.equal(context.state.job,null);assert.equal(context.state.editOrderId,null);
+ assert.equal(context.state.phoneTemplateId,'current-template');assert.equal(context.effectPanelOpen,false);
+ assert.deepEqual(routes,['choose']);
+ context.state.photoPlacement.x=99;assert.equal(saved.photoPlacement.x,36);
 });
