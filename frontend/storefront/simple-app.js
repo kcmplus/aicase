@@ -637,7 +637,7 @@ async function loadLocalDesigns(){
  }catch(error){localDesigns=[];localPhotoDrafts=[];localDesignError=error.message;}
  finally{localDesignBusy=false;}
 }
-async function restorePhotoDraft(snapshot){
+async function restorePhotoDraft(snapshot,{navigate=true}={}){
  if(!isPhoto(snapshot?.photo))throw Error('This photo draft could not be loaded.');
  finishInlineText();await photoDraftLibrary.save(state);
  await privateWrite('draft-photo',snapshot.photo);workspace.check();
@@ -647,9 +647,9 @@ async function restorePhotoDraft(snapshot){
  state.phoneTemplateId=stockSelection(state.model,state.caseMaterial)?.templateId;
  selectSupplierTemplate(state.model,state.phoneTemplateId);syncDraftColor();
  selectedArtwork=null;comparing=false;reviewPass=null;effectPanelOpen=false;cropPanelOpen=false;
- save();go('choose');
+ save();if(navigate)go('choose');
 }
-async function restoreLocalDesign(pass){
+async function restoreLocalDesign(pass,{navigate=true}={}){
  const p=readPass(pass.code,pass);
  if(p.source==='photo')await privateWrite('draft-photo',p.photo);
  workspace.check();finishInlineText();
@@ -660,9 +660,16 @@ async function restoreLocalDesign(pass){
  const currentTemplate=stockSelection(state.model,state.caseMaterial)?.templateId;
  const templateChanged=Boolean(currentTemplate&&currentTemplate!==state.phoneTemplateId);
  if(currentTemplate)state.phoneTemplateId=currentTemplate;
- syncDraftColor();aiJob=null;selectedArtwork=null;comparing=false;reviewPass=null;save();go('choose');
+ syncDraftColor();aiJob=null;selectedArtwork=null;comparing=false;reviewPass=null;save();if(navigate)go('choose');
  if(templateChanged)notify(locale()==='zh-CN'?'机型模板已变化，请重新确认预览。':'The phone template changed. Please preview your design again.');
  if(!state.model)notify('This phone model is out of stock or unavailable. Please choose again.');
+}
+async function reviewSavedDesign(row,photoDraft=false){
+ // A card's Print action starts review; checkout and device release remain explicit.
+ if(photoDraft)await restorePhotoDraft(row.snapshot,{navigate:false});
+ else await restoreLocalDesign(row.pass,{navigate:false});
+ try{reviewPass=await prepareDesignReview({...state});reviewSaved=false;go('review');}
+ catch(error){go('choose');throw error;}
 }
 async function prepareDesignReview(submitted){
  if(!phoneModels.includes(submitted.model))throw Error('Choose your phone model first.');
@@ -830,7 +837,7 @@ function render(preserveScroll=false) {
   if(route!=='choose')canvasExpanded=false;
   if(route!=='choose')effectPanelOpen=false;
   document.body.classList.toggle('canvas-editor-open',canvasExpanded);
-  const pages={review:()=>designReview({pass:reviewPass,preview:passPreview,lang:locale(),busy:passBusy,saved:reviewSaved}),account:()=>customerPage(membership,customerUI),'my-designs':()=>myDesignsPage({rows:localDesigns,photoDrafts:localPhotoDrafts,lang:locale(),preview:passPreview,error:localDesignError,busy:localDesignBusy,guest:workspace.owner==='guest'}),choose,pass:passPage,kiosk:()=>publicStationPage(true),designs:()=>worksPage({works:designs,preview:casePreview,model:phoneModels[0]||'',lang:locale(),params:new URLSearchParams(query)}),work:()=>workDetailPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),'how-it-works':()=>tutorialPage({lang:locale()}),about:()=>aboutPage({lang:locale()}),locations:publicStationPage,printers:publicStationPage,ai:()=>aiPage(aiJob,membership,aiBusy,{...aiUi,phoneModels,stockCatalogStatus}),membership:()=>membershipInfoPage({account:membership,lang:locale()}),checkout:checkoutPage,orders:ordersPage,payment:paymentPage};
+  const pages={review:()=>designReview({pass:reviewPass,preview:passPreview,lang:locale(),busy:passBusy,saved:reviewSaved}),account:()=>customerPage(membership,customerUI),'my-designs':()=>myDesignsPage({rows:localDesigns,photoDrafts:localPhotoDrafts,lang:locale(),preview:passPreview,draftPreview:p=>personalizedPreview(p,p.model||'',locale()==='zh-CN'?'你的设计':'Your design'),error:localDesignError,busy:localDesignBusy,guest:workspace.owner==='guest'}),choose,pass:passPage,kiosk:()=>publicStationPage(true),designs:()=>worksPage({works:designs,preview:casePreview,model:phoneModels[0]||'',lang:locale(),params:new URLSearchParams(query)}),work:()=>workDetailPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),'how-it-works':()=>tutorialPage({lang:locale()}),about:()=>aboutPage({lang:locale()}),locations:publicStationPage,printers:publicStationPage,ai:()=>aiPage(aiJob,membership,aiBusy,{...aiUi,phoneModels,stockCatalogStatus}),membership:()=>membershipInfoPage({account:membership,lang:locale()}),checkout:checkoutPage,orders:ordersPage,payment:paymentPage};
   app.classList.toggle('is-ai-studio',route==='ai'&&aiJob?.mode==='live');
   app.classList.toggle('is-editor',route==='choose');
   document.body.classList.toggle('v35-home-page',!Object.hasOwn(pages,route));
@@ -1080,7 +1087,7 @@ app.addEventListener('click',async event=>{
   if(el.dataset.action==='home-ai'){event.preventDefault();openHomePhone();return;}
   if(el.dataset.action==='reload-private-workspace'){location.reload();return;}
   if(el.dataset.action==='close-design-review'){closeDesignReview();return;}
-  if(['save-local-design','continue-design-checkout','restore-design','delete-design','refresh-designs','restore-legacy-draft','restore-photo-draft','delete-photo-draft'].includes(el.dataset.action)){
+  if(['save-local-design','continue-design-checkout','restore-design','delete-design','refresh-designs','restore-legacy-draft','restore-photo-draft','delete-photo-draft','print-design','print-photo-draft'].includes(el.dataset.action)){
    event.preventDefault();passBusy=true;
    try{
     workspace.check();
@@ -1103,6 +1110,10 @@ app.addEventListener('click',async event=>{
     }else if(el.dataset.action==='restore-design'){
      const row=localDesigns.find(row=>row.id===el.dataset.id);if(!row)throw Error('This saved design could not be found.');
      await restoreLocalDesign(row.pass);
+    }else if(['print-design','print-photo-draft'].includes(el.dataset.action)){
+     const photoDraft=el.dataset.action==='print-photo-draft';
+     const row=(photoDraft?localPhotoDrafts:localDesigns).find(row=>row.id===el.dataset.id);if(!row)throw Error('This saved design could not be found.');
+     await reviewSavedDesign(row,photoDraft);
     }else if(el.dataset.action==='delete-photo-draft'){
      await photoDraftLibrary.remove(el.dataset.id);await loadLocalDesigns();
     }else if(el.dataset.action==='restore-photo-draft'){

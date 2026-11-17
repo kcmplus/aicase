@@ -1081,9 +1081,9 @@ test('a failed photo archive never clears the active photo or consumes the Studi
  assert.equal(context.location.hash,'#choose?source=photo&studio=1');assert.equal(context.opened,0);
 });
 
-test('My designs exposes photo drafts separately with restore/delete actions and escaped labels',()=>{
- const html=myDesignsPage({photoDrafts:[{id:'draft-1',updatedAt:42,snapshot:{photo:'data:image/png;base64,AAAA',model:'<model>'}}]});
- assert.match(html,/Photo drafts/);assert.match(html,/&lt;model&gt;/);
+test('My designs combines automatic and saved drafts in one private collection with escaped labels',()=>{
+ const html=myDesignsPage({rows:[{id:'saved-1',updatedAt:12,pass:{model:'Saved model'}}],photoDrafts:[{id:'draft-1',updatedAt:42,snapshot:{photo:'data:image/png;base64,AAAA',model:'<model>'}}],preview:()=>'<div>SAVED PREVIEW</div>',draftPreview:()=>'<div>DRAFT PREVIEW</div>'});
+ assert.match(html,/2 designs/);assert.equal((html.match(/class="v35-private-grid"/g)||[]).length,1);assert.equal((html.match(/>Private draft</g)||[]).length,2);assert.doesNotMatch(html,/Photo drafts|Saved designs/);assert.ok(html.indexOf('DRAFT PREVIEW')<html.indexOf('SAVED PREVIEW'));assert.match(html,/data-action="print-photo-draft"/);assert.match(html,/data-action="print-design"/);assert.match(html,/&lt;model&gt;/);
  assert.match(html,/data-action="restore-photo-draft"/);assert.match(html,/data-action="delete-photo-draft"/);
  assert.doesNotMatch(html,/A little inspiration is waiting/);
 });
@@ -1104,4 +1104,20 @@ test('restoring a photo draft recovers composition and archives the current phot
  assert.equal(context.state.phoneTemplateId,'current-template');assert.equal(context.effectPanelOpen,false);
  assert.deepEqual(routes,['choose']);
  context.state.photoPlacement.x=99;assert.equal(saved.photoPlacement.x,36);
+});
+
+test('Print on either private draft card restores it and opens review without creating an order',async()=>{
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
+ for(const photo of [false,true]){
+  const routes=[],restores=[];
+  const row={snapshot:{photo:'local-photo'},pass:{code:'saved'}};
+  const context={state:{model:'iPhone 13 Pro'},restorePhotoDraft:async(value,options)=>restores.push(['photo',value,options.navigate]),restoreLocalDesign:async(value,options)=>restores.push(['saved',value,options.navigate]),prepareDesignReview:async state=>({...state,code:'checked-preview'}),go:value=>routes.push(value)};
+  vm.createContext(context);vm.runInContext(appFunction(source,'reviewSavedDesign'),context);
+  await context.reviewSavedDesign(row,photo);
+  assert.equal(restores[0][0],photo?'photo':'saved');assert.equal(restores[0][2],false);
+  assert.deepEqual(routes,['review']);assert.equal(context.reviewPass.code,'checked-preview');
+  context.prepareDesignReview=async()=>{throw Error('Choose your phone model first.');};
+  await assert.rejects(context.reviewSavedDesign(row,photo),/Choose your phone model/);
+  assert.equal(routes.at(-1),'choose');
+ }
 });
