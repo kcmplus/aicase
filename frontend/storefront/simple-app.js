@@ -1,3 +1,4 @@
+import {homeCollection} from './v35-home.js';
 import {mountWorkLikes} from './v35-work-likes.js';
 import {loadOrderHistory} from './order-history.js';
 import {orderListPage,mountOrderPreviews} from './v35-order-list.js';
@@ -438,12 +439,12 @@ function header() {
  const route=location.hash.slice(1).split('?')[0]||'home';
  return shellHeader({lang:locale(),authenticated:membership.authenticated,language:languageControl(),route})+`${aiJob&&['queued','generating','ready'].includes(aiJob.status)&&state.ai?.jobId!==aiJob.id?`<div class="ai-resume wrap"><a href="#ai">✦ AI studio · ${aiJob.status==='ready'?'Your AI image is ready':aiJob.status==='queued'?'Waiting in queue':'Rendering'} <span>View render →</span></a></div>`:''}`;
 }
-function footer() {return shellFooter(locale());}
+function footer(home=false) {return shellFooter(locale(),home);}
 function steps(active) {
   return `<ol class="steps" aria-label="Your design journey">${['Pick your design','Confirm & save','Scan & print'].map((label,i)=>`<li ${i===active?'aria-current="step"':''} class="${i===active?'active':i<active?'complete':''}"><span>${i<active?'✓':i+1}</span>${label}</li>`).join('')}</ol>`;
 }
 function home() {
- const gallery=`<section class="collection wrap home-gallery" id="designs"><div class="section-heading"><div><p class="eyebrow">A LITTLE INSPIRATION</p><h2>No photo in mind? Try the gallery.</h2></div><p>Ready-made designs, if you need a starting point.</p><a class="text-button" href="#designs">${locale()==='zh-CN'?'查看全部设计 →':'View all designs →'}</a></div><div class="design-grid">${designs.map((d,i)=>`<a class="design-card" href="#work?id=${d.id}" aria-label="${esc(t('View design')+': '+d.name)}"><div class="design-image" style="--card:${d.color}"><span class="card-index">0${i+1}</span><div class="card-case">${casePreview(d.id)}</div><span class="card-arrow">${arrow()}</span></div><div class="card-caption"><div><h3>${d.name}</h3><p>${d.category}</p></div></div></a>`).join('')}</div></section>`;
+ const gallery=homeCollection({works:designs,preview:casePreview,lang:locale()});
  return homePresentation({lang:locale(),busy:photoBusy,gallery,station:stockScope?`<div class="v35-wrap">${stationContext()}</div>`:''});
 }
 function phonePicker(){
@@ -812,7 +813,7 @@ function render(preserveScroll=false) {
   document.body.classList.toggle('v35-home-page',!Object.hasOwn(pages,route));
   const privateRoute=['choose','review','pass','ai','membership','my-designs','checkout','orders','payment'].includes(route);
   document.body.dataset.v35Route=route;
-  app.innerHTML=header()+`<main id="main" tabindex="-1">${catalogStatus==='unavailable'?'<div class="catalog-warning" role="status">Prices and AI previews could not be loaded. Your saved designs are still available. <button class="text-button" data-action="reload-catalog">Try again</button></div>':''}${!workspace.active&&privateRoute?privateWorkspaceNotice():(Object.hasOwn(pages,route)?pages[route]:home)()}</main>`+footer();
+  app.innerHTML=header()+`<main id="main" tabindex="-1">${catalogStatus==='unavailable'?'<div class="catalog-warning" role="status">Prices and AI previews could not be loaded. Your saved designs are still available. <button class="text-button" data-action="reload-catalog">Try again</button></div>':''}${!workspace.active&&privateRoute?privateWorkspaceNotice():(Object.hasOwn(pages,route)?pages[route]:home)()}</main>`+footer(!Object.hasOwn(pages,route));
   if(aiBusy)document.querySelectorAll('[data-ai-action],#ai-credit-form button,#ai-subscription-form button').forEach(el=>el.disabled=true);
   const title=({review:locale()==='zh-CN'?'预览确认':'Review & confirm',account:'My account','my-designs':'My designs',choose:'Choose your case',pass:'Your design pass',kiosk:'Print locations',designs:'Works center',work:'Design details','how-it-works':'How to use',about:'About POPOMO',locations:'Print locations',printers:'Print locations',ai:'Your AI render',membership:'AI membership',checkout:'Review print order',orders:'My orders',payment:'Payment status'})[route];
   document.title=title?`${t(title)} · POPOMO`:t('POPOMO — A little more you.');

@@ -1,3 +1,4 @@
+import {homeLooks} from '../storefront/v35-home.js';
 import {orderListPage} from '../storefront/v35-order-list.js';
 import {createOrderSuccessTracker} from '../storefront/order-success.js';
 import {progressPanel,progressPaymentText} from '../storefront/order-progress.js';
@@ -29,7 +30,7 @@ import {customerPage} from '../storefront/customer-account.js';
 
 test('V35 home prioritizes photo design without an automatic album picker',()=>{
  const html=homePresentation({gallery:'<section id="designs">CATALOG</section>'});
- assert.ok(html.indexOf('data-action="home-photo"')<html.indexOf('href="#designs"'));
+ assert.ok(html.indexOf('data-action="home-photo"')<html.indexOf('data-home-collection'));
  assert.doesNotMatch(html,/type="file"|data-home-upload/);
  assert.match(html,/href="#choose\?source=photo&studio=1"/);
  assert.match(html,/<section id="designs">CATALOG<\/section>/);
@@ -57,9 +58,9 @@ test('shared shell exposes working legacy destinations and bilingual native menu
 });
 test('home instructions follow phone confirmation and do not ask to save a design QR',()=>{
  const html=homePresentation({lang:'zh-CN'});
- assert.match(html,/扫描设备屏上的二维码/);
- assert.match(html,/已出货不等于已取件/);
- assert.match(html,/快递／空运暂未开放结算/);
+ assert.doesNotMatch(html,/快递／空运暂未开放结算|v35-guide/);
+ assert.match(html,/未扫码可设计全部已发布机型/);
+ assert.match(shellInfo('tutorial','zh-CN')[1],/扫描设备屏二维码/);
  assert.doesNotMatch(html,/保存.{0,4}二维码|Keep your code|save the QR code|Show your code/);
  assert.match(shellInfo('station','en-US')[1],/Nearby search is not available/);
  assert.match(shellInfo('ai','zh-CN')[1],/服务端确认/);
@@ -67,6 +68,7 @@ test('home instructions follow phone confirmation and do not ask to save a desig
 test('all V35 presentation assets are local and available; editor entry retains the existing service module',async()=>{
  const html=homePresentation(),css=await readFile(new URL('../storefront/v35-shell.css',import.meta.url),'utf8');
  for(const path of new Set([...html.matchAll(/(?:src)="\.\/([^"?]+)"/g),...css.matchAll(/url\('\.\/([^']+)'\)/g)].map(match=>match[1])))await access(new URL('../storefront/'+path,import.meta.url));
+ for(const look of Object.values(homeLooks))for(const path of [look.original,look.result])await access(new URL('../storefront/'+path,import.meta.url));
  const entry=await readFile(new URL('../storefront/index.html',import.meta.url),'utf8');
  assert.match(entry,/href="\.\/v35-shell.css"/);assert.match(entry,/src="\.\/simple-app.js"/);
  assert.doesNotMatch(entry,/popomo-ui|order-store.js|profile-store.js/);
