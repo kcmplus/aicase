@@ -582,7 +582,11 @@ class PhoneColorMigrationTests(TransactionTestCase):
             apps = executor.loader.project_state(after).apps
             model = apps.get_model('management_api', 'PhoneModel').objects.get(pk=model.pk)
             order = apps.get_model('management_api', 'PrintOrder').objects.get(pk=order.pk)
-            self.assertEqual({f.attname: getattr(model, f.attname) for f in model._meta.fields}, expected_model)
+            # Compare the historical columns: later additive migrations may add
+            # fields without changing any existing configuration.
+            self.assertEqual({key: getattr(model, key) for key in expected_model}, expected_model)
+            self.assertEqual(model.composition_regions, {})
+            self.assertEqual(model.composition_revision, 0)
             self.assertEqual({key: getattr(order, key) for key in expected_order}, expected_order)
             self.assertEqual(order.delivery_address, {})
             self.assertEqual(order.shipping_quote, {})
