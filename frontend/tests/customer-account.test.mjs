@@ -8,7 +8,7 @@ test('guest cannot claim local trial credits and registered allowance is server-
  assert.equal(credits({server:true,authenticated:false,trialRemaining:20}).trial,0);
  assert.equal(credits({server:true,authenticated:true,trialRemaining:2,trialCount:0}).trial,2);
  const page=customerPage({authenticated:false,signupCredits:3},{email:'"><script>alert(1)</script>',codeSent:false});
- assert.match(page,/One-time welcome gift/);assert.match(page,/3 <span>AI generations/);assert.doesNotMatch(page,/<script>/);
+ assert.match(page,/A welcome gift for you/);assert.match(page,/3 <span>AI creations/);assert.doesNotMatch(page,/<script>/);
 });
 test('email sign-in and AI mutations include CSRF and session cookies',async()=>{
  for(const send of [fetcher=>customerRequest('verify/',{method:'POST',body:{code:'123456'},fetcher}),fetcher=>aiRequest('ai-renders/',{method:'POST',body:{accepted:true},key:'a'.repeat(64),fetcher})]){
