@@ -232,7 +232,7 @@ test('saved design, payment page and order receipt render shared statuses from s
   for(const mode of ['demo','stripe_test','airwallex_test','free_test']){
    const order=Object.freeze({id:'SYNTHETIC-ORDER',server:true,pass,status,refund,mode,priceCents:0,currency:'USD',fulfillmentType:'pickup'});
    const before=JSON.stringify(order);
-   const context={progressPanel,caseMaterialLabel,phoneColorName,arrow:()=>'→',t:v=>v,pickupStationPanel:()=>'',orderActionError:'',state:{pass},orderBook:{},orderForCode:()=>order,locale:()=> 'en-US',esc,
+   const context={progressPanel:()=>'<section class="order-progress">PRINT PROGRESS</section>',caseMaterialLabel,phoneColorName,arrow:()=>'→',t:v=>v,pickupStationPanel:()=>'',orderActionError:'',state:{pass},orderBook:{},orderForCode:()=>order,locale:()=> 'en-US',esc,
     money:()=> '0.00',PRINT_PRICE:'0.00',passPreview:()=>'',passName:()=> 'Synthetic design',effectCaption:()=>'',
     previewStationPanel:()=>'',scannedStation:null,stockScope:'',paymentState,paymentOrder:order,paymentPollCount:0,paymentError:'',passBusy:false,
     document:{querySelector:()=>null},location:{hash:'#payment?order=SYNTHETIC-ORDER&result=success'},URLSearchParams,
@@ -243,6 +243,14 @@ test('saved design, payment page and order receipt render shared statuses from s
    assert.equal(JSON.stringify(order),before,'rendering cannot change server order state');
    if(mode!=='demo'){
     assert.match(html,/<dt>Order status<\/dt><dd>/);
+    if(paymentState(order).fulfilled){
+     assert.match(html,/v35-order-detail/);
+     assert.match(html,/<h1>Order details<\/h1>/);
+     assert.match(html,new RegExp(`<span class="checkout-status">${label}</span>`));
+     assert.doesNotMatch(html,/class="order-progress|PRINT PROGRESS|progress below/);
+     assert.equal((html.match(/id="pickup-station-panel"/g)||[]).length,1);
+    }
+
     if(status!=='pending'||refund)assert.doesNotMatch(html,/data-action="pay-provider"/);
     if(status==='pending'){
      assert.match(html,/Confirming your payment/);
