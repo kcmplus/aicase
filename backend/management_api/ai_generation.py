@@ -40,7 +40,7 @@ from .ai_images import image_expired, image_response, maybe_cleanup_images
 from .models import AIAccount, AIRender, AIServiceConfig, AIStyle, PhoneModel, PricingPlan
 from .orders import StrictSerializer
 from .customer_auth import customer_owner as owner, customer_for, public_customer, signup_credits
-from .phone_templates import template_for
+from .ai_composition import resolve_template, composition_snapshot, prompt_guidance
 
 
 class GenerationUnavailable(APIException):
@@ -106,6 +106,7 @@ def render_data(job):
     return {'id': str(job.id), 'requestKey': str(job.request_key), 'mode': 'live', 'status': job.status,
             'styleId': job.style_code, 'styleName': job.style_name, 'model': job.phone_model,
             'phoneTemplateId': job.phone_template_id, 'allocation': job.allocation,
+            'composition': {k: job.composition_snapshot[k] for k in ('version','fit','model','template_id','case_material') if k in job.composition_snapshot},
             'createdAt': int(job.created_at.timestamp()*1000),
             'startedAt': int(job.started_at.timestamp()*1000) if job.started_at else None,
             'completedAt': int(job.completed_at.timestamp()*1000) if job.completed_at else None,
@@ -139,6 +140,8 @@ class RenderInput(StrictSerializer):
     photo = serializers.CharField(max_length=3_000_000, trim_whitespace=False)
     style_id = serializers.SlugField(max_length=80)
     model = serializers.CharField(max_length=120)
+    phone_template_id = serializers.CharField(max_length=80, allow_blank=True, required=False, default='')
+    case_material = serializers.ChoiceField(choices=('standard', 'magnetic'), required=False, default='standard')
     provider = serializers.ChoiceField(choices=tuple(PROVIDERS), required=False)
 
     def validate_accepted(self, value):
@@ -147,7 +150,7 @@ class RenderInput(StrictSerializer):
         return value
 
 
-def build_prompt(style, model, template):
+def build_prompt(style, model, template, composition=None):
     # AI design is allowed for every published model, independently of print
     # inventory/templates. Missing geometry must not masquerade as an exact fit.
     canvas_guidance = (
@@ -158,6 +161,11 @@ def build_prompt(style, model, template):
         'Create full-bleed portrait artwork using the conservative placement rules above; '
         'the exact print fit will be checked separately before printing. '
     )
+    if composition:
+        canvas_guidance = canvas_guidance.replace('that can be cropped to that narrower ratio', 'whose entire 2:3 image is contained within that ratio with background extension')
+    final_guidance = prompt_guidance(composition) if composition else (
+        'Keep the main subject within the central half of the image and important facial details '
+        'below the upper quarter. ')
     # Text guidance, not a claim that the provider receives the actual cutout mask.
     # Put composition constraints before every style, including custom styles.
     return ('PHONE-CASE CAMERA CUTOUT SAFETY — APPLY BEFORE STYLE\n'
@@ -179,8 +187,7 @@ def build_prompt(style, model, template):
             'to this uploaded subject; do not substitute a stock example or invent a different person.\n\n'
             'STYLE\n'+style.prompt+'\n\nCOMPOSITION\n'+model.adaptation_prompt+
             '\n'+canvas_guidance+
-            'Keep the main subject within the central half of the image and important facial details '
-            'below the upper quarter. Extend the background to the edges. The application will apply '
+            final_guidance+'\nExtend the background to the edges. The application will apply '
             'the case mask after generation. Do not depict a phone, case border, camera lens, camera '
             'cutout, mockup, watermark or extra text unless the requested style explicitly requires text.')
 
@@ -294,7 +301,9 @@ class AIRenders(AIPrivateView):
                 raise GenerationUnavailable('AI generation is not configured. Please contact the store.')
             existing=AIRender.objects.filter(request_key=data['request_key']).defer('input_image','result_image').first()
             if existing:
-                if existing.owner_hash!=key or (existing.input_hash,existing.style_code,existing.phone_model)!=(digest,data['style_id'],data['model']):
+                if (existing.owner_hash!=key or (existing.input_hash,existing.style_code,existing.phone_model)!=(digest,data['style_id'],data['model'])
+                        or existing.composition_snapshot.get('requested_template_id', '') != data['phone_template_id']
+                        or existing.composition_snapshot.get('case_material', 'standard') != data['case_material']):
                     return Response({'detail':'This render request conflicts with an existing request.'},status=409)
                 return Response(render_data(existing))
             if data.get('provider', 'openai') != config.provider:
@@ -302,11 +311,12 @@ class AIRenders(AIPrivateView):
             plan=ai_plan()
             style=AIStyle.objects.filter(code=data['style_id'],active=True).first()
             model=PhoneModel.objects.filter(name=data['model'],active=True,brand__active=True).first()
-            template=template_for(data['model'])
+            template=resolve_template(model, data['case_material'], data['phone_template_id']) if model else None
             if not style or not style.prompt.strip():
                 raise serializers.ValidationError('This AI style is unavailable or has no saved prompt.')
             if not model:
                 raise serializers.ValidationError('Choose an available phone model first.')
+            composition=composition_snapshot(model, template, data['case_material'], data['phone_template_id'])
             if AIRender.objects.filter(owner_hash=key,status__in=['queued','generating']).exists():
                 return Response({'detail':'Finish your current render before starting another.'},status=409)
             if AIRender.objects.filter(created_at__gte=timezone.now()-timedelta(days=1)).count()>=settings.AI_DAILY_RENDER_LIMIT:
@@ -327,7 +337,7 @@ class AIRenders(AIPrivateView):
             account.save(update_fields=['trial_used','subscription','updated_at'])
             job=AIRender.objects.create(request_key=data['request_key'],owner_hash=key,style_code=style.code,
                 style_name=style.name,provider=config.provider,model_name=config.model_name,phone_model=model.name,phone_template_id=template['id'] if template else '',
-                prompt=build_prompt(style,model,template),input_image=raw,input_mime=mime,input_hash=digest,allocation=allocation)
+                prompt=build_prompt(style,model,template,composition),composition_snapshot=composition,input_image=raw,input_mime=mime,input_hash=digest,allocation=allocation)
             pool = 'gift' if allocation['type']=='trial' else 'monthly'
             record(account, 'render:'+str(job.pk), 'generation', pool, gift_before if pool=='gift' else monthly_before, balance(account,pool), render_id=job.pk, period=allocation.get('period'))
             transaction.on_commit(lambda:dispatch_render(job.id))

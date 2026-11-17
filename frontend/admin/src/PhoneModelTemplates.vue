@@ -2,8 +2,10 @@
 import {computed,ref,onMounted,onBeforeUnmount} from 'vue';
 import {api,allRecords,can} from './api.js';
 import PhoneTemplateInfo from './PhoneTemplateInfo.vue';
+import PhoneComposition from './PhoneComposition.vue';
 const props=defineProps({model:{type:Object,default:null},disabled:Boolean});
-const emit=defineEmits(['updated','busy']);
+const emit=defineEmits(['updated','busy','dirty']);
+const compositionBusy=ref(false);
 const busy=ref(false),error=ref(''),progress=ref(''),result=ref(null);
 const devices=ref([]),selectedDevice=ref(null),optionsLoading=ref(false),optionsError=ref(''),modelResult=ref(null),syncingModels=ref(false);
 const canSyncModels=computed(()=>['view_device','view_supplierproduct','change_supplierproduct','add_brand','add_phonemodel'].every(p=>can('management_api.'+p)));
@@ -33,14 +35,14 @@ async function syncModels(){
  finally{busy.value=false;syncingModels.value=false;emit('busy',false);}
 }
 async function syncOne(source){
- if(busy.value||props.disabled)return;
+ if(busy.value||compositionBusy.value||props.disabled)return;
  busy.value=true;emit('busy',true);error.value='';
  try{await api(`admin/phone-models/${props.model.id}/import-template/`,{method:'POST',body:{source:source.id,refresh:true}});}
  catch(e){error.value=e.message;}
  finally{emit('updated');busy.value=false;emit('busy',false);}
 }
 async function syncAll(){
- if(busy.value||props.disabled)return;
+ if(busy.value||compositionBusy.value||props.disabled)return;
  busy.value=true;emit('busy',true);error.value='';result.value=null;
  const summary={imported:0,masks:0,missing:0,kept:0,failed:[]};
  try{
@@ -80,6 +82,7 @@ async function syncAll(){
   <template v-else>
    <p>底图保留供应商原始像素尺寸。预览遮罩从透明区域提取，实际打印尺寸和范围尚待确认。</p>
    <PhoneTemplateInfo :model="model.name"/>
+   <PhoneComposition :model="model" :disabled="busy" @busy="compositionBusy=$event;emit('busy',$event)" @dirty="emit('dirty',$event)"/>
    <el-empty v-if="!sources.length" description="尚未关联供应商商品，可在商品与库存中同步机型。"/>
    <article v-for="source in sources" :key="source.id" class="source-card">
     <div class="source-heading"><div><strong>{{model.name}}</strong><p>{{source.device_name}} · 商品 {{source.goods_id}}</p><small>{{specs(source.specs)}}</small></div><el-button v-if="editable&&source.has_source" :loading="busy" :disabled="disabled" @click="syncOne(source)">{{source.image?'重新获取底图':'同步底图'}}</el-button></div>

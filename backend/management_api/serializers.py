@@ -44,6 +44,8 @@ class BrandSerializer(CatalogSerializer):
         fields = "__all__"
 
 class PhoneModelSerializer(CatalogSerializer):
+    composition_regions = serializers.JSONField(read_only=True)
+    composition_revision = serializers.IntegerField(read_only=True)
     brand_name = serializers.CharField(source="brand.name", read_only=True)
     template_sources = serializers.SerializerMethodField()
     def get_template_sources(self, instance):

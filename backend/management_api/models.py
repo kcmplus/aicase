@@ -158,6 +158,8 @@ class PhoneModel(CatalogItem):
     print_ready = models.BooleanField(default=False)
     notes = models.TextField(blank=True, max_length=2000)
     adaptation_prompt = models.TextField(blank=True, max_length=4000)
+    composition_regions = models.JSONField(default=dict, editable=False)
+    composition_revision = models.PositiveIntegerField(default=0, editable=False)
 
 class PhoneColor(Timestamped):
     """Preview configuration only; never a supplier SKU or print template."""
@@ -495,6 +497,7 @@ class AIRender(Timestamped):
     model_name = models.CharField(max_length=80)
     phone_model = models.CharField(max_length=120)
     phone_template_id = models.CharField(max_length=80)
+    composition_snapshot = models.JSONField(default=dict, editable=False)
     prompt = models.TextField(editable=False)
     input_image = models.BinaryField(editable=False)
     input_mime = models.CharField(max_length=20)

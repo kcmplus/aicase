@@ -118,9 +118,44 @@ class PhoneModelViewSet(AuditedViewSet):
     search_fields = ["name", "code", "brand__name"]
 
     def get_permissions(self):
-        if self.action == 'import_template':
+        if self.action in ('import_template', 'composition'):
             return [IsAdminUser()]
         return super().get_permissions()
+
+    @action(detail=True, methods=['get', 'put'], url_path='composition')
+    def composition(self, request, pk=None):
+        from .ai_composition import RegionInput, admin_regions, resolve_template, profile_key, composition_snapshot
+        required = ['management_api.view_phonemodel']
+        if request.method == 'PUT':
+            required.append('management_api.change_phonemodel')
+        if not request.user.has_perms(required):
+            raise PermissionDenied('需要相应的机型查看 / 修改权限。')
+        model = self.get_object()
+        if request.method == 'GET':
+            return Response(admin_regions(model))
+        data = RegionInput(data=request.data)
+        data.is_valid(raise_exception=True)
+        v = data.validated_data
+        with transaction.atomic():
+            model = m.PhoneModel.objects.select_for_update().get(pk=model.pk)
+            if model.composition_revision != v['revision']:
+                return Response({'detail': '构图区域已更新，请重新加载后再修改。'}, status=409)
+            template = resolve_template(model, v['case_material'], v['template_id'])
+            if not v['template_id'] and template:
+                raise serializers.ValidationError('此机型已有模板，请选择对应模板进行设置。')
+            key = profile_key(v['template_id'], v['case_material'])
+            regions = dict(model.composition_regions)
+            if v['reset']:
+                regions.pop(key, None)
+            else:
+                regions[key] = {k: v[k] for k in ('safe', 'avoid', 'margin', 'source_url', 'note', 'confirmed')}
+                regions[key]['origin'] = 'manual'
+            model.composition_regions = regions
+            composition_snapshot(model, template, v['case_material'], v['template_id'])
+            model.composition_revision += 1
+            model.save(update_fields=['composition_regions', 'composition_revision', 'updated_at'])
+            audit(request, 'update', 'management_api.phonemodel', model, '更新 AI 构图区域（不改变打印模板或库存）')
+        return Response(admin_regions(model))
 
     @action(detail=True, methods=['post'], url_path='import-template')
     def import_template(self, request, pk=None):
