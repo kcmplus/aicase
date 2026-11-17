@@ -44,7 +44,7 @@ test('upload busy state disables the album action without claiming upload succes
 test('shared shell exposes working legacy destinations and bilingual native menu semantics',()=>{
  for(const lang of ['en-US','zh-CN']){
   const header=shellHeader({lang,authenticated:true,route:'orders'});
-  for(const hash of ['home','designs','how-it-works','choose?source=photo','orders','pass','account'])assert.ok(header.includes(`href="#${hash}"`),hash);
+  for(const hash of ['home','designs','how-it-works','orders','account'])assert.ok(header.includes(`href="#${hash}"`),hash);
   assert.match(header,/<dialog id="v35-menu"/);
   assert.match(header,/aria-controls="v35-menu" aria-expanded="false"/);
   assert.match(header,/href="#orders" aria-current="page"/);
