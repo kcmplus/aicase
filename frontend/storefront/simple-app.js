@@ -1245,7 +1245,7 @@ if(selectedArtwork==='all'){const layout=artworkLayout();layout.zoom=100;layout.
       try{await navigator.clipboard.writeText(state.pass.code);notify('Design code copied.');}
       catch{notify('Your design code: '+state.pass.code);}
     }
-    if(el.dataset.action==='view-order'){go(await savedOrderRoute(el.dataset.id));}
+    if(el.dataset.action==='view-order'){const target=await savedOrderRoute(el.dataset.id);go(target+(el.dataset.orderSection==='printer'?(target.includes('?')?'&':'?')+'section=printer':''));}
     if(el.dataset.action==='cancel-order'){const order=orderForCode(orderBook,state.pass.code);if(order?.server){await orderAction(order,'cancel');notify('Test order cancelled. No money was charged.');render(true);}}
     if(el.dataset.action==='filter-orders'){orderFilter=el.dataset.filter;orderPage=1;entryOrders=null;await navigate();}
     if(el.dataset.action==='orders-page'){orderPage=Number(el.dataset.page);await navigate();}
@@ -1327,6 +1327,7 @@ async function navigate(){
  if(verifiedNoticeOrder)confirmOrderSuccess(verifiedNoticeOrder,{returned:params.get('result')==='success'});
  if(route==='choose'&&params.get('studio')==='1')openAIStudio();
  if(route==='choose'&&params.get('step')==='model')openModelPicker();
+ if(['payment','pass'].includes(route)&&params.get('section')==='printer')(document.querySelector('.device-fulfillment')||document.querySelector('#pickup-station-panel'))?.scrollIntoView({block:'start'});
 }
 const entryHash=location.hash;
 const entry=await stationEntry({scope:stockScope,hash:entryHash,station:scannedStation});
