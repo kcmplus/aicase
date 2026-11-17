@@ -8,12 +8,14 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.db import transaction
+from django.db.models import Prefetch
 from django.middleware.csrf import get_token
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.cache import never_cache
 from rest_framework import serializers, status, viewsets
-from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from rest_framework.decorators import api_view, permission_classes, authentication_classes, action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
@@ -110,9 +112,35 @@ class BrandViewSet(AuditedViewSet):
     search_fields = ["name", "code"]
 
 class PhoneModelViewSet(AuditedViewSet):
-    queryset = m.PhoneModel.objects.select_related("brand")
+    queryset = m.PhoneModel.objects.select_related("brand").prefetch_related(
+        Prefetch('supplierproduct_set__device_products', queryset=m.DeviceProduct.objects.select_related('product', 'device')))
     serializer_class = s.PhoneModelSerializer
     search_fields = ["name", "code", "brand__name"]
+
+    def get_permissions(self):
+        if self.action == 'import_template':
+            return [IsAdminUser()]
+        return super().get_permissions()
+
+    @action(detail=True, methods=['post'], url_path='import-template')
+    def import_template(self, request, pk=None):
+        from .supplier_templates import import_template, template_info, TemplateError
+        if not request.user.has_perms(['management_api.view_phonemodel', 'management_api.change_phonemodel']):
+            raise PermissionDenied('需要查看和修改机型权限。')
+        if not isinstance(request.data, dict) or set(request.data) - {'source', 'refresh'}:
+            raise serializers.ValidationError({'detail': '模板同步参数不正确。'})
+        source_id = serializers.IntegerField(min_value=1).run_validation(request.data.get('source'))
+        refresh = serializers.BooleanField().run_validation(request.data.get('refresh', False))
+        model = self.get_object()
+        if not m.DeviceProduct.objects.filter(pk=source_id, product__phone_model=model, present=True).exists():
+            raise serializers.ValidationError({'detail': '模板来源不属于此机型，或商品已移除。'})
+        try:
+            stock = import_template(source_id, model.pk, refresh=refresh)
+        except TemplateError as exc:
+            raise serializers.ValidationError({'detail': str(exc)}) from None
+        audit(request, 'sync', 'management_api.phonemodel', model,
+              f'导入供应商底图：设备商品 {stock.pk}；预览遮罩：{"已生成" if stock.template_mask else "待补充"}')
+        return Response(template_info(stock))
 
 class GraphicViewSet(AuditedViewSet):
     queryset = m.Graphic.objects.all()
@@ -140,7 +168,7 @@ class PricingPlanViewSet(AuditedViewSet):
     search_fields = ["name", "code"]
 
 class OrderViewSet(AuditedViewSet):
-    queryset = m.PrintOrder.objects.all()
+    queryset = m.PrintOrder.objects.select_related('refund')
     serializer_class = s.PrintOrderSerializer
     search_fields = ["customer_email", "model_name", "reference"]
     ordering_fields = ["created_at", "amount", "status"]
@@ -148,12 +176,26 @@ class OrderViewSet(AuditedViewSet):
     def get_serializer_class(self):
         return s.PrintOrderDetailSerializer if self.action == "retrieve" else s.PrintOrderSerializer
     def get_queryset(self):
-        qs = super().get_queryset()
+        from .order_progress import with_order_progress, GROUPS
+        qs = with_order_progress(super().get_queryset())
+        group = self.request.query_params.get("progress")
+        if group:
+            if group not in GROUPS:
+                raise serializers.ValidationError({"progress": "未知打印进度筛选。"})
+            qs = qs.filter(_progress_code__in=GROUPS[group])
         if self.action == "list":
             qs = qs.defer("snapshot", "owner_hash", "request_key")
         if self.request.query_params.get("status"):
             qs = qs.filter(status=self.request.query_params["status"])
         return qs
+    @action(detail=True, methods=['get'])
+    def progress(self, request, pk=None):
+        from .order_progress import progress_payload
+        order = self.get_object()
+        data = progress_payload(order, private=True)
+        data['can_refund'] = s.PrintOrderDetailSerializer(context={'request': request}).get_can_refund(order)
+        return Response(data)
+
     def update(self, request, *args, **kwargs):
         if set(request.data) - {"notes"}:
             raise serializers.ValidationError({"detail": "只能修改客服备注；付款和打印状态由业务服务更新。"})
@@ -238,6 +280,14 @@ class UploadView(APIView):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 @authentication_classes([])
+def public_phone_models(request):
+    from .store_catalog import store_models
+    return Response(store_models(request.query_params))
+
+@never_cache
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@authentication_classes([])
 def public_catalog(request):
     from .images import image_variants
     from .ai_generation import generation_available
@@ -259,7 +309,7 @@ def public_catalog(request):
              "results": [{"style_code": result.style.code, "image_path": result.image_path} for result in example.results.all() if result.style.active]}
             for example in m.AIExample.objects.filter(active=True, results__style__active=True).distinct().prefetch_related("results__style")
         ],
-        "plans": s.PricingPlanSerializer(m.PricingPlan.objects.filter(active=True), many=True).data,
+        "plans": s.PricingPlanSerializer(m.PricingPlan.objects.filter(active=True, kind__in=["print", "ai_monthly"]), many=True).data,
     }
     paths = [style["image_path"] for style in data["ai_styles"]]
     for example in data["ai_examples"]:

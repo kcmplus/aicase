@@ -6,7 +6,8 @@ import re
 import warnings
 from io import BytesIO
 from pathlib import Path
-from django.db.models import Q
+from django.db.models import Q, Count, F, CharField, Value
+from django.db.models.functions import Cast, Replace
 from .phone_templates import template_for, PHONE_TEMPLATES
 from decimal import Decimal
 from django.db import transaction
@@ -49,6 +50,9 @@ class Placement(StrictSerializer):
             raise serializers.ValidationError('Invalid artwork position.')
         return data
 
+class PhotoPlacement(Placement):
+    fit = serializers.ChoiceField(choices=['cover', 'contain', 'blur'], required=False)
+
 class Artwork(Placement):
     id = serializers.RegexField(r'^extra-[a-zA-Z0-9-]{1,60}$')
     type = serializers.ChoiceField(choices=['text', 'sticker'])
@@ -86,20 +90,37 @@ class AIMetadata(StrictSerializer):
     jobId = serializers.CharField(max_length=50, allow_blank=True)
     mode = serializers.ChoiceField(choices=['demo','live'])
 
+class ColorSelection(StrictSerializer):
+    code = serializers.SlugField(max_length=80)
+    version = serializers.IntegerField(min_value=0)
+    rgb = serializers.JSONField(required=False)
+
+    def to_internal_value(self, data):
+        if not isinstance(data, dict) or type(data.get('version')) is not int or not isinstance(data.get('code'), str):
+            raise serializers.ValidationError('Invalid color resource version.')
+        if data['version'] == 0:
+            from .phone_colors import validate_rgb
+            validate_rgb(data.get('rgb'))
+        elif 'rgb' in data:
+            raise serializers.ValidationError('Resource colors must use their saved version.')
+        return super().to_internal_value(data)
+
 class Snapshot(Layout):
     version = serializers.IntegerField(min_value=2, max_value=2)
     code = serializers.RegexField(r'^POP-C-[A-F0-9]{16}$')
     source = serializers.ChoiceField(choices=['collection','photo'])
     designId = serializers.SlugField(max_length=80)
     model = serializers.CharField(max_length=120)
+    caseMaterial = serializers.ChoiceField(choices=['standard', 'magnetic'], required=False)
     phoneTemplateId = serializers.SlugField(max_length=80, required=False)
     photo = serializers.CharField(max_length=3_000_000, allow_blank=True, default='')
     effect = serializers.ChoiceField(choices=['original','fresh','warm','bold'])
     intensity = serializers.FloatField(min_value=0, max_value=100)
     addedArtwork = Artwork(many=True, required=False, max_length=20)
-    photoPlacement = Placement(required=False)
+    photoPlacement = PhotoPlacement(required=False)
     collectionLayout = Layout(required=False)
     ai = AIMetadata(required=False)
+    phoneColor = ColorSelection(required=False)
     def validate(self, data):
         # JSON must be finite even for values where a serializer range comparison
         # alone would permit NaN. Clients cannot submit HTML, SVG or remote URLs.
@@ -107,16 +128,58 @@ class Snapshot(Layout):
             json.dumps(data, allow_nan=False)
         except ValueError:
             raise serializers.ValidationError('Invalid design numbers.')
-        if not PhoneModel.objects.filter(
+        from .models import Device
+        from .store_catalog import available_stocks, resolve_stock_template
+        supplied_template = data.get('phoneTemplateId', '')
+        if supplied_template.startswith('supplier-'):
+            stock, template = resolve_stock_template(data['model'], supplied_template)
+            if not stock:
+                raise serializers.ValidationError('This phone model is out of stock or unavailable. Please choose again.')
+            # Freeze server-owned asset paths for historical orders. The client
+            # cannot submit this internal metadata through StrictSerializer.
+            from .case_materials import stock_material
+            material = stock_material(stock)
+            if data.get('caseMaterial') and data['caseMaterial'] != material:
+                raise serializers.ValidationError('The selected case style does not match this product.')
+            if material:
+                data['caseMaterial'] = material
+            data['_template'] = template
+            data['_inventory_item'] = stock.pk
+        elif data.get('caseMaterial'):
+            raise serializers.ValidationError('Select an available template for this case style before checkout.')
+        elif Device.objects.exists() and not available_stocks().filter(product__phone_model__name=data['model']).exists():
+            raise serializers.ValidationError('This phone model is out of stock or unavailable. Please choose again.')
+        if not supplied_template.startswith('supplier-') and not PhoneModel.objects.filter(
             Q(legacy_index__isnull=False) | Q(code__in=[t['code'] for t in PHONE_TEMPLATES]),
             name=data['model'], active=True, brand__active=True,
         ).exists():
             raise serializers.ValidationError('This phone model is unavailable.')
-        if 'phoneTemplateId' in data and not template_for(data['model'], data['phoneTemplateId']):
+        if 'phoneTemplateId' in data and not supplied_template.startswith('supplier-') and not template_for(data['model'], data['phoneTemplateId']):
             raise serializers.ValidationError('This phone template is unavailable.')
         template = template_for(data['model'])
         if template:
             data.setdefault('phoneTemplateId', template['id'])
+        if 'phoneColor' in data:
+            from .store_catalog import available_colors
+            color_template = data.get('_template') or template_for(data['model'], data.get('phoneTemplateId'))
+            model = None
+            if color_template:
+                model = stock.product.phone_model if supplied_template.startswith('supplier-') else PhoneModel.objects.filter(
+                    name=data['model'], code=color_template['code']).first()
+            selection = data['phoneColor']
+            color = next((c for c in available_colors(model, color_template)
+                          if c['code'] == selection['code'] and (
+                              (c['resource'] and c['resource']['version'] == selection['version'])
+                              or (c.get('previewMode') == 'rgb' and selection['version'] == 0
+                                  and type(selection.get('rgb')) is dict
+                                  and set(selection['rgb']) == {'r', 'g', 'b'}
+                                  and all(type(v) is int for v in selection['rgb'].values())
+                                  and selection['rgb'] == c['rgb']))), None) if model else None
+            if color is None:
+                raise serializers.ValidationError('This phone color changed or is unavailable. Please preview your design again.')
+            # Resolve all display values and immutable resource paths on the server.
+            # Historical paid orders are read as-is and never re-resolve this data.
+            data['phoneColor'] = color
         if data['designId'] not in LAYERS or not DesignTemplate.objects.filter(code=data['designId'], active=True).exists():
             raise serializers.ValidationError('This design is unavailable.')
         for layout in (data, data.get('collectionLayout', {})):
@@ -144,9 +207,25 @@ class Snapshot(Layout):
             raise serializers.ValidationError('Unexpected photo in a collection design.')
         return data
 
+class SinglePrintQuantity(serializers.Field):
+    def to_internal_value(self, value):
+        if type(value) is not int or value != 1:
+            raise serializers.ValidationError('Printing supports exactly one copy per order.')
+        return 1
+
+    def to_representation(self, value):
+        return value
+
+
+from .courier import DeliveryAddress
+
+
 class Checkout(StrictSerializer):
+    quantity = SinglePrintQuantity(default=1)
+    fulfillment_type = serializers.ChoiceField(choices=['pickup', 'courier', 'air'], default='pickup')
+    delivery_address = DeliveryAddress(required=False)
     payment_mode = serializers.ChoiceField(choices=['demo', 'test', 'live'], default='demo')
-    payment_provider = serializers.ChoiceField(choices=['demo', 'stripe'], default='demo')
+    payment_provider = serializers.ChoiceField(choices=['demo', 'stripe', 'airwallex', 'free'], default='demo')
     request_key = serializers.UUIDField()
     accepted = serializers.BooleanField()
     expected_amount = serializers.DecimalField(max_digits=8, decimal_places=2, min_value=Decimal('0'))
@@ -160,6 +239,7 @@ class Checkout(StrictSerializer):
         return value
 
 class Revision(StrictSerializer):
+    quantity = SinglePrintQuantity(default=1)
     revision = serializers.IntegerField(min_value=1)
     accepted = serializers.BooleanField()
     snapshot = Snapshot()
@@ -182,11 +262,34 @@ def owner(request):
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def require_single_print_payment(order):
+    """Never pay an unreviewed legacy quantity or alter its frozen payment data.
+
+    Missing quantity is the historical single-copy contract. Even when no local
+    provider ID exists, an earlier timed-out write may exist remotely; this guard
+    must not reprice, rotate the request key, or discard provider identifiers.
+    """
+    quantity = order.snapshot.get('quantity', 1)
+    if type(quantity) is not int or quantity != 1:
+        raise Conflict('This historical order needs single-print review before payment. '
+                       'Its amount and payment records are preserved; do not create a duplicate payment.')
+
+
 def order_data(order, detail=True):
-    result = {key: getattr(order, key) for key in ('reference','model_name','customer_email','status','amount','currency','mode','revision','station_id','created_at','updated_at')}
+    result = {key: getattr(order, key) for key in ('reference','model_name','case_material','customer_email','status','amount','currency','mode','revision','station_id','fulfillment_type','created_at','updated_at')}
+    from .refunds import refund_data
+    result['refund'] = refund_data(order)
+    from .supplier_orders import public_state
+    result['fulfillment'] = public_state(order)
+    from .order_progress import order_progress
+    result['progress'] = order_progress(order)
     result['code'] = order.snapshot.get('code', '')
     if detail:
+        result['delivery_address'] = order.delivery_address
+        result['shipping_quote'] = order.shipping_quote
         result['snapshot'] = order.snapshot
+        if order.snapshot.get('_template'):
+            result['phone_template'] = order.snapshot['_template']
     return result
 
 
@@ -201,15 +304,42 @@ class StoreOrders(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'orders'
     def get(self, request):
-        qs = PrintOrder.objects.filter(owner_hash=owner(request)).defer('snapshot').order_by('-created_at')
+        from .order_progress import with_order_progress, order_progress
+        from .refunds import refund_data
+        qs = with_order_progress(PrintOrder.objects.filter(owner_hash=owner(request))).defer('snapshot').order_by('-created_at')
         try:
             page = max(1, min(10000, int(request.query_params.get('page', '1'))))
         except ValueError:
             raise serializers.ValidationError('Invalid page.')
+        filters = {
+            'pending': Q(status='pending', paid_at__isnull=True, refund__isnull=True),
+            'printed': Q(_progress_code__in=['printed', 'delivering', 'dispensed']),
+        }
+        filters['paid'] = (Q(paid_at__isnull=False, status__in=['paid', 'printing', 'ready', 'completed'])
+                           & ~Q(_progress_code__in=['printed', 'delivering', 'dispensed', 'cancelled'])
+                           & ~Q(refund__status__in=['requested', 'pending', 'succeeded']))
+        status = request.query_params.get('status', 'all')
+        if status not in ('all', *filters):
+            raise serializers.ValidationError('Invalid order filter.')
+        search = request.query_params.get('q', '').strip()
+        if len(search) > 120:
+            raise serializers.ValidationError('Search is too long.')
+        counts = qs.aggregate(all=Count('pk'), **{key: Count('pk', filter=value) for key, value in filters.items()})
+        if status != 'all':
+            qs = qs.filter(filters[status])
+        if search:
+            qs = qs.annotate(_reference_text=Replace(Cast('reference', CharField()), Value('-'), Value(''))).filter(
+                Q(_reference_text__icontains=search.replace('-', '')) | Q(model_name__icontains=search))
+        qs = qs.annotate(_design_id=F('snapshot__designId'), _design_source=F('snapshot__source'))
         rows = list(qs[(page-1)*20:page*20+1])
         # List responses exclude private photos and design codes.
-        data = [{key: getattr(o, key) for key in ('reference','model_name','status','amount','currency','mode','created_at')} for o in rows[:20]]
-        return Response({'results':data, 'has_more':len(rows)>20, 'page':page})
+        data = [{key: getattr(o, key) for key in ('reference','model_name','case_material','status','amount','currency','mode','fulfillment_type','created_at')} for o in rows[:20]]
+        for item, order in zip(data, rows[:20]):
+            item['progress'] = order_progress(order)
+            item['refund'] = refund_data(order)
+            item['design_id'] = order._design_id
+            item['design_source'] = order._design_source
+        return Response({'results':data, 'has_more':len(rows)>20, 'page':page, 'counts':counts})
     @transaction.atomic
     def post(self, request):
         owner_hash = owner(request)
@@ -221,14 +351,30 @@ class StoreOrders(APIView):
         plan = PricingPlan.objects.select_for_update().filter(kind='print', active=True).first()
         if not isinstance(request.data, dict):
             raise serializers.ValidationError({'detail':'Expected an order object.'})
+        # Validate the quantity envelope even on an idempotent retry. Do not
+        # revalidate mutable inventory or reprice an already frozen order.
+        SinglePrintQuantity().run_validation(request.data.get('quantity', 1))
+        if set(request.data) - set(Checkout().fields):
+            raise serializers.ValidationError({'detail': 'Unsupported order fields.'})
+        snapshot = request.data.get('snapshot')
+        if isinstance(snapshot, dict) and set(snapshot) - set(Snapshot().fields):
+            raise serializers.ValidationError({'snapshot': 'Unsupported design fields.'})
         request_key = serializers.UUIDField().run_validation(request.data.get('request_key'))
         existing = PrintOrder.objects.filter(request_key=request_key).first()
         if existing:
             if existing.owner_hash != owner_hash:
                 raise Conflict('This checkout key has already been used.')
-            if existing.status == 'pending' and existing.mode.startswith('stripe_'):
-                expected_mode = 'stripe_' + str(request.data.get('payment_mode', ''))
-                if request.data.get('payment_provider') != 'stripe' or expected_mode != existing.mode:
+            if request.data.get('fulfillment_type', 'pickup') != existing.fulfillment_type:
+                raise Conflict('This order uses a different delivery method. Open it from My orders to review it.')
+            if existing.fulfillment_type == 'courier':
+                address = DeliveryAddress(data=request.data.get('delivery_address'))
+                address.is_valid(raise_exception=True)
+                if address.validated_data != existing.delivery_address:
+                    raise Conflict('This order already has a saved delivery address. Open it from My orders to review it.')
+            if existing.status == 'pending' and existing.mode.startswith(('stripe_', 'airwallex_')):
+                expected_provider = existing.mode.rsplit('_', 1)[0]
+                expected_mode = expected_provider + '_' + str(request.data.get('payment_mode', ''))
+                if request.data.get('payment_provider') != expected_provider or expected_mode != existing.mode:
                     raise Conflict('This order uses a different payment environment. Open it from My orders to review it.')
             # Later edits must not make a retry overwrite the order snapshot.
             return Response(order_data(existing))
@@ -236,17 +382,29 @@ class StoreOrders(APIView):
         serializer = Checkout(data=payload)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        courier = data['fulfillment_type'] == PrintOrder.Fulfillment.COURIER
+        if data['fulfillment_type'] not in ('pickup', 'courier'):
+            from .fulfillment import SHIPPING_UNAVAILABLE
+            raise Conflict(SHIPPING_UNAVAILABLE)
+        if courier and not data.get('delivery_address'):
+            raise serializers.ValidationError({'delivery_address': 'Complete your delivery address.'})
+        if not courier and data.get('delivery_address'):
+            raise serializers.ValidationError({'delivery_address': 'Recipient details are only used for courier delivery.'})
         if 'customer_id' in data and data['customer_id'] != (customer.pk if customer else None):
             raise Conflict('Your sign-in changed. Reload checkout to review your email.')
         if not plan:
             raise Conflict('Printing is unavailable. Please try again later.')
-        if data['expected_amount'] != plan.price:
-            raise Conflict(f'The print price changed to {plan.currency} {plan.price}. Reload to review the new price.')
-        from .stripe_payments import checkout_settings
-        payment = checkout_settings(data['payment_provider'], data['payment_mode'])
-        if payment['mode'].startswith('stripe_') and plan.price < Decimal('0.50'):
-            raise Conflict('Stripe requires a print price of at least USD 0.50.')
-        order = PrintOrder.objects.create(owner_hash=owner_hash, request_key=data['request_key'], **payment, model_name=data['snapshot']['model'], amount=plan.price, currency=plan.currency, customer=customer, customer_email=data['customer_email'], snapshot=data['snapshot'])
+        from .courier import courier_quote
+        quote = courier_quote(plan, lock=True) if courier else {}
+        total = Decimal(quote['total_amount']) if courier else plan.price
+        if data['expected_amount'] != total:
+            raise Conflict(f'The order price changed to {plan.currency} {total}. Reload to review the new price.')
+        from .payments import checkout_settings
+        payment = checkout_settings(data['payment_provider'], data['payment_mode'], fulfillment_type=data['fulfillment_type'])
+        if payment['mode'].startswith(('stripe_', 'airwallex_')) and total < Decimal('0.50'):
+            raise Conflict('Online payment requires a print price of at least USD 0.50.')
+        order = PrintOrder.objects.create(owner_hash=owner_hash, request_key=data['request_key'],
+            fulfillment_type=data['fulfillment_type'], **payment, model_name=data['snapshot']['model'], case_material=data['snapshot'].get('caseMaterial', ''), amount=total, shipping_quote=quote, delivery_address=data.get('delivery_address', {}), currency=plan.currency, customer=customer, customer_email=data['customer_email'], snapshot=data['snapshot'])
         log(order, 'create')
         return Response(order_data(order), status=201)
 
@@ -260,6 +418,8 @@ class StoreOrder(StoreOrders):
         serializer = Revision(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        if order.snapshot.get('quantity', 1) != 1:
+            raise Conflict('This historical multi-print order cannot be edited. Its original snapshot is preserved.')
         if order.mode != 'demo' or order.status != 'paid':
             raise Conflict('This order can no longer be edited. Create a new order.')
         if data['snapshot'] == order.snapshot and data['revision'] + 1 == order.revision:
@@ -270,18 +430,67 @@ class StoreOrder(StoreOrders):
             raise Conflict('Save changes with a new design code.')
         order.snapshot = data['snapshot']
         order.model_name = data['snapshot']['model']
+        order.case_material = data['snapshot'].get('caseMaterial', '')
         order.revision += 1
-        order.save(update_fields=['snapshot','model_name','revision','updated_at'])
+        order.save(update_fields=['snapshot','model_name','case_material','revision','updated_at'])
         log(order, 'revise')
         return Response(order_data(order))
     def post(self, request, reference):
         return Response(status=405)
+
+class StoreOrderProgress(StoreOrders):
+    http_method_names = ['get', 'head', 'options']
+
+    def get(self, request, reference):
+        from .order_progress import with_order_progress, progress_payload
+        order = get_object_or_404(with_order_progress(PrintOrder.objects.all()).defer('snapshot'),
+                                 reference=reference, owner_hash=owner(request))
+        return Response(progress_payload(order))
+
+
+class OrderFulfillment(StoreOrders):
+    """Explicitly classify an untouched historical order; never move a supplier job."""
+    http_method_names = ['post', 'options']
+
+    @transaction.atomic
+    def post(self, request, reference):
+        if customer_for(request):
+            SessionAuthentication().enforce_csrf(request)
+        order = get_object_or_404(PrintOrder.objects.select_for_update(), reference=reference, owner_hash=owner(request))
+        class Selection(StrictSerializer):
+            fulfillment_type = serializers.ChoiceField(choices=['pickup', 'courier', 'air'])
+            confirmed = serializers.BooleanField()
+        serializer = Selection(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        if data['confirmed'] is not True:
+            raise serializers.ValidationError('Confirm your delivery method first.')
+        if data['fulfillment_type'] == order.fulfillment_type:
+            return Response(order_data(order))
+        if data['fulfillment_type'] != PrintOrder.Fulfillment.PICKUP:
+            from .fulfillment import SHIPPING_UNAVAILABLE
+            raise Conflict(SHIPPING_UNAVAILABLE)
+        from .models import SupplierOrder, PrintRefund
+        if (order.fulfillment_type != PrintOrder.Fulfillment.UNSPECIFIED
+                or order.status not in ('pending', 'paid') or order.station_id
+                or SupplierOrder.objects.filter(order=order).exists()
+                or PrintRefund.objects.filter(order=order).exclude(status='failed').exists()):
+            raise Conflict('This order needs staff review before changing its delivery method.')
+        order.fulfillment_type = PrintOrder.Fulfillment.PICKUP
+        order.revision += 1
+        order.save(update_fields=['fulfillment_type', 'revision', 'updated_at'])
+        AuditLog.objects.create(actor_name='顾客', action='fulfillment', resource='management_api.printorder',
+            object_id=str(order.pk), summary=f'{order.reference} · 确认设备现场自取')
+        return Response(order_data(order))
+
 
 class StoreOrderAction(StoreOrder):
     http_method_names = ['post','options']
     @transaction.atomic
     def post(self, request, reference):
         order = get_object_or_404(PrintOrder.objects.select_for_update(), reference=reference, owner_hash=owner(request))
+        from .fulfillment import require_pickup
+        require_pickup(order)
         serializer = Action(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data

@@ -1,4 +1,4 @@
-import {phoneTemplates,phoneTemplate} from './phone-templates.js';
+import {phoneTemplates,phoneTemplate,isKnownDesignModel} from './phone-templates.js';
 import {validatePersonalPass} from './simple-personalize.js';
 // A code identifies a versioned preset or locally saved custom design, not payment.
 export const designs = [
@@ -29,7 +29,7 @@ export function createPass(designId, model) {
   return {version:1, designId, model, code:`POP-${body}${check}`};
 }
 export function createPersonalPass(selection) {
-  if(!phoneModels.includes(selection.model))throw Error('Choose your phone model first.');
+  if(!phoneModels.includes(selection.model)&&!isKnownDesignModel(selection.model)&&!phoneTemplate(selection.model,selection.phoneTemplateId))throw Error('Choose your phone model first.');
   if(selection.source!=='photo'&&!designs.some(d=>d.id===selection.designId))throw Error('Choose a design from the collection.');
   const code='POP-C-'+crypto.randomUUID().replaceAll('-','').slice(0,16).toUpperCase();
   const template=phoneTemplate(selection.model,selection.phoneTemplateId);
@@ -39,7 +39,7 @@ export function readPass(input, personalPass) {
   const code = String(input || '').trim().toUpperCase();
   if(/^POP-C-[A-F0-9]{16}$/.test(code)) {
     if(!personalPass||personalPass.code!==code)throw Error('This custom pass is saved in its original browser. Open the station demo there.');
-    if(!phoneModels.includes(personalPass.model)||!designs.some(d=>d.id===personalPass.designId))throw Error('The phone model or design in this pass is unavailable.');
+    if((!phoneModels.includes(personalPass.model)&&!isKnownDesignModel(personalPass.model)&&!phoneTemplate(personalPass.model,personalPass.phoneTemplateId))||!designs.some(d=>d.id===personalPass.designId))throw Error('The phone model or design in this pass is unavailable.');
     return validatePersonalPass(personalPass);
   }
   const match = /^POP-1([1-6])([1-5])([0-9])$/.exec(code);
@@ -52,7 +52,7 @@ export function stationAvailability(stationId, pass) {
   const station = stations.find(item => item.id === stationId);
   if (!station) return {ok:false,message:'Choose a valid demo station.'};
   if (!station.online) return {ok:false,message:'This station is offline. Try another station.'};
-  if (!station.models.includes(pass.model)) return {ok:false,message:'This phone case is out of stock here. Try demo station 01.'};
+  if (!station.models.includes(pass.model) && !(station.id==='DEMO-01'&&phoneTemplate(pass.model,pass.phoneTemplateId))) return {ok:false,message:'This phone case is out of stock here. Try demo station 01.'};
   return {ok:true,message:'Your phone case is available at this demo station.'};
 }
 export function startPrint(pass, stationId) {

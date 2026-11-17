@@ -110,6 +110,55 @@ class StoreOrderTests(TestCase):
         for private in ('snapshot','owner_hash','request_key','customer_email','code'):
             self.assertNotIn(private,listed)
         self.assertNotIn('example@example.com',str(list(AuditLog.objects.values())))
+    def test_order_list_reports_refund_status_consistently_with_detail(self):
+        from .models import PrintRefund
+        order = self.create()
+        PrintRefund.objects.create(order=PrintOrder.objects.get(reference=order['reference']),
+                                   status='succeeded', amount='10.00', currency='USD', reason='test')
+        detail = self.client.get(self.endpoint(order)).json()
+        listed = self.client.get('/api/v1/store/orders/').json()['results'][0]
+        self.assertEqual(detail['refund']['status'], 'succeeded')
+        self.assertEqual(listed.get('refund', {}).get('status'), 'succeeded',
+                         'The order list must display the actual refund state')
+    def test_order_list_refunds_are_public_read_only_and_owned_without_per_order_queries(self):
+        from .models import PrintRefund
+        for status in (None, 'requested', 'pending', 'succeeded', 'failed'):
+            self.payload['request_key'] = str(uuid.uuid4())
+            order = self.create()
+            if status:
+                PrintRefund.objects.create(order=PrintOrder.objects.get(reference=order['reference']),
+                                           status=status, amount='10.00', currency='USD',
+                                           reason='private support note', provider_id='private-provider-id')
+        orders_before = list(PrintOrder.objects.order_by('pk').values())
+        refunds_before = list(PrintRefund.objects.order_by('pk').values())
+        # A list read must neither reconcile external refunds nor write state;
+        # one query counts statuses, one loads the owned page and refund states.
+        with self.assertNumQueries(2):
+            response = self.client.get('/api/v1/store/orders/')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('no-store', response['Cache-Control'])
+        rows = response.json()['results']
+        self.assertEqual(len(rows), 5)
+        self.assertFalse(response.json()['has_more'])
+        self.assertEqual([row['refund']['status'] if row['refund'] else None for row in rows],
+                         ['failed', 'succeeded', 'pending', 'requested', None])
+        for row in rows:
+            detail = self.client.get(self.endpoint(row)).json()
+            self.assertEqual(row['refund'], detail['refund'])
+            self.assertEqual(row['status'], 'paid')  # Preserve historical order status.
+            for private in ('snapshot', 'owner_hash', 'request_key', 'customer_email', 'code'):
+                self.assertNotIn(private, row)
+            if row['refund']:
+                self.assertEqual(set(row['refund']), {'reference', 'status', 'amount', 'currency', 'created_at', 'completed_at'})
+        self.assertNotIn('private support note', response.content.decode())
+        self.assertNotIn('private-provider-id', response.content.decode())
+        self.assertEqual(list(PrintOrder.objects.order_by('pk').values()), orders_before)
+        self.assertEqual(list(PrintRefund.objects.order_by('pk').values()), refunds_before)
+        self.client.credentials(HTTP_X_ORDER_KEY='b'*64)
+        self.assertEqual(self.client.get('/api/v1/store/orders/').json()['results'], [])
+        self.assertEqual(self.client.get(self.endpoint(rows[0])).status_code, 404)
+        self.client.credentials()
+        self.assertEqual(self.client.get('/api/v1/store/orders/').status_code, 403)
     def test_repeat_checkout_returns_same_order_even_after_price_change(self):
         order=self.create()
         PricingPlan.objects.filter(kind='print').update(price='15.00')
@@ -211,3 +260,107 @@ class StoreOrderTests(TestCase):
     def test_non_object_payload_returns_validation_error(self):
         self.assertEqual(self.client.post('/api/v1/store/orders/', [], format='json').status_code,400)
         self.assertEqual(self.client.post('/api/v1/store/orders/', {}, format='json').status_code,400)
+
+    def test_single_quantity_is_strict_on_create_and_idempotent_retry(self):
+        invalid = [0, 2, -1, True, False, '1', 1.0, None, [], {}]
+        for quantity in invalid:
+            with self.subTest(quantity=quantity):
+                response = self.client.post('/api/v1/store/orders/', {**self.payload, 'quantity': quantity}, format='json')
+                self.assertEqual(response.status_code, 400, response.data)
+        self.assertFalse(PrintOrder.objects.exists())
+        self.payload['quantity'] = 1
+        order = self.create()
+        before = list(PrintOrder.objects.values())
+        for quantity in invalid:
+            response = self.client.post('/api/v1/store/orders/', {**self.payload, 'quantity': quantity}, format='json')
+            self.assertEqual(response.status_code, 400)
+        for patch in ({'count': 2}, {'copies': 2}, {'amount': '20.00'},
+                      {'snapshot': {**self.payload['snapshot'], 'quantity': 2}}):
+            self.assertEqual(self.client.post('/api/v1/store/orders/', {**self.payload, **patch}, format='json').status_code, 400)
+        self.assertEqual(list(PrintOrder.objects.values()), before)
+        self.assertEqual(self.client.post('/api/v1/store/orders/', self.payload, format='json').data['reference'], order['reference'])
+
+    def test_single_quantity_revision_cannot_override_frozen_amount(self):
+        order = self.create()
+        snapshot = {**order['snapshot'], 'code': 'POP-C-FEDCBA9876543210'}
+        payload = {'revision': 1, 'accepted': True, 'snapshot': snapshot, 'quantity': 2}
+        self.assertEqual(self.client.patch(self.endpoint(order), payload, format='json').status_code, 400)
+        payload['quantity'] = 1
+        response = self.client.patch(self.endpoint(order), payload, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(str(response.data['amount']), '10.00')
+        payload['quantity'] = 2
+        self.assertEqual(self.client.patch(self.endpoint(order), payload, format='json').status_code, 400)
+        self.assertEqual(PrintOrder.objects.get().revision, 2)
+
+    def test_qa_revision_rejects_quantity_types_aliases_and_nested_bypasses(self):
+        order = self.create()
+        before = list(PrintOrder.objects.values())
+        base = {'revision': 1, 'accepted': True,
+                'snapshot': {**self.payload['snapshot'], 'code': 'POP-C-FEDCBA9876543210'}}
+        patches = [{'quantity': value} for value in
+                   (0, 2, -1, True, False, '1', 1.0, None, [], {})]
+        patches += [{'copies': 2}, {'count': 2},
+                    {'snapshot': {**base['snapshot'], 'quantity': 2}},
+                    {'snapshot': {**base['snapshot'], 'copies': 2}}]
+        for patch in patches:
+            with self.subTest(patch=patch):
+                response = self.client.patch(self.endpoint(order), {**base, **patch}, format='json')
+                self.assertEqual(response.status_code, 400, response.data)
+                self.assertEqual(list(PrintOrder.objects.values()), before)
+
+    def test_historical_multi_snapshot_reads_and_retry_never_recalculate(self):
+        order = self.create()
+        original = PrintOrder.objects.get()
+        original.snapshot = {**original.snapshot, 'quantity': 3}
+        original.amount = '30.00'
+        original.save()
+        for status in ('pending', 'paid', 'printing', 'completed', 'cancelled'):
+            PrintOrder.objects.filter(pk=original.pk).update(status=status)
+            before = list(PrintOrder.objects.values())
+            detail = self.client.get(self.endpoint(order))
+            self.assertEqual(detail.data['snapshot']['quantity'], 3)
+            self.assertEqual(str(detail.data['amount']), '30.00')
+            self.client.get('/api/v1/store/orders/')
+            retry = self.client.post('/api/v1/store/orders/', self.payload, format='json')
+            self.assertEqual(retry.status_code, 200)
+            self.assertEqual(retry.data['snapshot']['quantity'], 3)
+            self.assertEqual(list(PrintOrder.objects.values()), before)
+            revision = {'revision': original.revision, 'accepted': True, 'quantity': 1,
+                        'snapshot': {**self.payload['snapshot'], 'code': 'POP-C-FEDCBA9876543210'}}
+            self.assertEqual(self.client.patch(self.endpoint(order), revision, format='json').status_code, 409)
+            self.assertEqual(list(PrintOrder.objects.values()), before)
+
+    def test_photo_fit_is_frozen_in_order_snapshot_and_unknown_modes_rejected(self):
+        stream=BytesIO(); Image.new('RGB',(40,20),'red').save(stream,format='PNG')
+        photo='data:image/png;base64,'+base64.b64encode(stream.getvalue()).decode()
+        self.payload['snapshot'].update(source='photo',photo=photo)
+        for fit in ('cover','contain','blur'):
+            self.payload['request_key']=str(uuid.uuid4())
+            self.payload['snapshot']['photoPlacement']={'x':50,'y':50,'scale':100,'rotation':0,'fit':fit}
+            order=self.create()
+            self.assertEqual(order['snapshot']['photoPlacement']['fit'],fit)
+            self.assertEqual(self.client.get(self.endpoint(order)).data['snapshot']['photoPlacement']['fit'],fit)
+        self.payload['request_key']=str(uuid.uuid4())
+        self.payload['snapshot']['photoPlacement']['fit']='remote-image'
+        self.assertEqual(self.client.post('/api/v1/store/orders/',self.payload,format='json').status_code,400)
+        self.assertEqual(PrintOrder.objects.count(),3)
+
+    def test_history_filters_search_and_counts_are_owned_and_precede_pagination(self):
+        import hashlib
+        owner_hash = hashlib.sha256(('a'*64).encode()).hexdigest()
+        pending = [PrintOrder(owner_hash=owner_hash, amount='0.00', model_name='Search phone', mode='stripe_live', status='pending') for _ in range(22)]
+        PrintOrder.objects.bulk_create(pending)
+        paid = PrintOrder.objects.create(owner_hash=owner_hash, amount='0.00', model_name='Paid phone', mode='free_test', status='paid', paid_at=timezone.now())
+        PrintOrder.objects.create(owner_hash=owner_hash, amount='0.00', model_name='Cancelled phone', status='cancelled')
+        private = PrintOrder.objects.create(owner_hash='another-browser', amount='0.00', model_name='Private phone', mode='stripe_live', status='paid', paid_at=timezone.now())
+        result = self.client.get('/api/v1/store/orders/?status=pending&page=2').json()
+        self.assertEqual(result['counts'], {'all':24, 'pending':22, 'paid':1, 'printed':0})
+        self.assertEqual(len(result['results']),2)
+        self.assertFalse(result['has_more'])
+        self.assertEqual(self.client.get('/api/v1/store/orders/?status=paid').json()['results'][0]['reference'],str(paid.reference))
+        self.assertEqual(self.client.get('/api/v1/store/orders/', {'q':str(paid.reference)[9:18]}).json()['results'][0]['reference'],str(paid.reference))
+        self.assertEqual(self.client.get('/api/v1/store/orders/', {'q':'paid PHONE'}).json()['results'][0]['reference'],str(paid.reference))
+        self.assertEqual(self.client.get('/api/v1/store/orders/', {'q':str(private.reference)}).json()['results'],[])
+        self.assertEqual(self.client.get('/api/v1/store/orders/?status=invalid').status_code,400)
+        self.assertEqual(self.client.get('/api/v1/store/orders/', {'q':'x'*121}).status_code,400)

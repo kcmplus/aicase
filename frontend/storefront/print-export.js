@@ -1,4 +1,5 @@
 import {phoneTemplate} from './phone-templates.js';
+import {frozenPhoneColor} from './phone-colors.js';
 import {photoEffect} from './beautify-core.js';
 import {fonts} from './editor-model.js';
 import {stickers} from './catalog.js';
@@ -7,6 +8,11 @@ import {stickers} from './catalog.js';
 // the full template canvas, including its non-printing camera/frame margins.
 export function coverRect(iw,ih,w,h,x=50,y=50){
  const scale=Math.max(w/iw,h/ih),width=iw*scale,height=ih*scale;
+ return {x:(w-width)*x/100,y:(h-height)*y/100,width,height,scale};
+}
+export function photoRect(iw,ih,w,h,x=50,y=50,fit='cover'){
+ if(fit==='cover')return coverRect(iw,ih,w,h,x,y);
+ const scale=Math.min(w/iw,h/ih),width=iw*scale,height=ih*scale;
  return {x:(w-width)*x/100,y:(h-height)*y/100,width,height,scale};
 }
 export function textLines(text,maxWidth,measure){
@@ -47,8 +53,8 @@ function filter(ctx,value){
  if(value!=='none'&&!('filter' in ctx))throw Error('This browser cannot export photo effects. Try Chrome.');
  ctx.filter=value;
 }
-function drawCover(ctx,img,w,h,x,y){
- const box=coverRect(img.naturalWidth,img.naturalHeight,w,h,x,y);
+function drawCover(ctx,img,w,h,x,y,fit='cover'){
+ const box=photoRect(img.naturalWidth,img.naturalHeight,w,h,x,y,fit);
  ctx.save();ctx.beginPath();ctx.rect(0,0,w,h);ctx.clip();ctx.drawImage(img,box.x,box.y,box.width,box.height);ctx.restore();
  return box.scale;
 }
@@ -59,9 +65,13 @@ async function drawArtwork(design,w,h){
  bg.fillStyle=design.background||'#fef4e8';bg.fillRect(0,0,w,h);
  if(design.image){
   const img=await loadImage(design.image),p=design.photoPlacement;
+  if(p?.fit==='blur'){
+   bg.save();filter(bg,`blur(${w*.04}px)`);bg.translate(-w*.06,-h*.06);
+   drawCover(bg,img,w*1.12,h*1.12,50,50);bg.restore();
+  }
   bg.save();
   if(p){bg.translate(w*p.x/100,h*p.y/100);bg.rotate(p.rotation*Math.PI/180);bg.scale(p.scale/100,p.scale/100);bg.translate(-w/2,-h/2);}
-  const factor=drawCover(bg,img,w,h,design.photoX??50,design.photoY??50);
+  const factor=drawCover(bg,img,w,h,design.photoX??50,design.photoY??50,p?.fit||'cover');
   effectiveDpi=300/(factor*(p?p.scale/100:1)*(design.zoom||100)/100);
   bg.restore();
  }else if(design.art&&design.art!=='solid'){
@@ -127,15 +137,21 @@ export function pngWithDpi(bytes,dpi=300){
 export async function exportCase(design,model,kind='print'){
  const template=phoneTemplate(model,design.phoneTemplateId);
  if(!template)throw Error('A print template is not available for this model yet.');
- if(!['print','preview'].includes(kind))throw Error('Invalid export type.');
+ if(template.previewOnly&&kind==='print')throw Error('This template is available for preview. Print dimensions have not been confirmed.');
+ // Supplier contract consumes its native pixel canvas. This does not assert
+ // physical DPI or turn a preview template into a calibrated local-print file.
+ if(kind==='supplier-print'&&!template.id.startsWith('supplier-'))throw Error('A supplier print template is required.');
+ if(!['print','preview','supplier-print'].includes(kind))throw Error('Invalid export type.');
+ const frozen=kind==='preview'&&design.phoneColor?frozenPhoneColor(design.phoneColor):null;
+ const color=frozen?.resource&&frozen.resource.templateId===template.id&&frozen.resource.width===template.sourceWidth&&frozen.resource.height===template.sourceHeight?frozen:null;
  const {printWidth:w,printHeight:h}=template;
- const [{output,effectiveDpi},mask]=await Promise.all([drawArtwork(design,w,h),loadImage(template.mask)]);
+ const [{output,effectiveDpi},mask]=await Promise.all([drawArtwork(design,w,h),loadImage(color?.resource.mask||template.mask)]);
  const ctx=output.getContext('2d');ctx.globalCompositeOperation='destination-in';ctx.drawImage(mask,0,0,w,h);ctx.globalCompositeOperation='source-over';
  if(kind==='preview'){
-  ctx.drawImage(await loadImage(template.previewOverlay),0,0,w,h);
+  ctx.drawImage(await loadImage(color?.resource.overlay||template.previewOverlay),0,0,w,h);
   ctx.globalCompositeOperation='destination-over';ctx.fillStyle='white';ctx.fillRect(0,0,w,h);ctx.globalCompositeOperation='source-over';
  }
  const raw=await new Promise((resolve,reject)=>output.toBlob(b=>b?resolve(b):reject(Error('Image export failed. Try again.')),'image/png'));
- const blob=new Blob([pngWithDpi(new Uint8Array(await raw.arrayBuffer()),template.dpi)],{type:'image/png'});
- return {blob,filename:`${template.id}-${kind}-${template.dpi}dpi.png`,template,effectiveDpi};
+ const blob=template.dpi?new Blob([pngWithDpi(new Uint8Array(await raw.arrayBuffer()),template.dpi)],{type:'image/png'}):raw;
+ return {blob,filename:`${template.id}-${kind}${template.dpi?'-'+template.dpi+'dpi':''}.png`,template,effectiveDpi};
 }

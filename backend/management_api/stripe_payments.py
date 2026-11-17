@@ -21,10 +21,11 @@ from rest_framework.views import APIView
 from .ai_service import SuperuserOnly, cipher, encryption_ready, CredentialStorageUnavailable
 from .audit import audit
 from .models import StripeConfig, PrintOrder, AuditLog
-from .orders import StrictSerializer, StoreOrders, owner, order_data, Conflict
+from .orders import StrictSerializer, StoreOrders, owner, order_data, Conflict, require_single_print_payment
 
 WEBHOOK_EVENTS = ('checkout.session.completed', 'checkout.session.async_payment_succeeded',
-                  'checkout.session.async_payment_failed', 'checkout.session.expired')
+                  'checkout.session.async_payment_failed', 'checkout.session.expired',
+                  'refund.created', 'refund.updated', 'refund.failed')
 
 
 class PaymentUnavailable(APIException):
@@ -130,7 +131,8 @@ class StripeSettings(APIView):
         serializer = ConfigUpdate(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        config, _ = StripeConfig.objects.select_for_update().get_or_create(pk=1)
+        from .payments import lock_configs, disable_other
+        config, other = lock_configs()
         if data['revision'] != config.revision:
             raise Conflict('配置已更新，请刷新后重试。')
         changed = []
@@ -155,20 +157,13 @@ class StripeSettings(APIView):
                 raise serializers.ValidationError('启用前请填写网站地址及当前模式的 Secret Key、Webhook 签名密钥。')
             if config.mode == 'live' and not config.storefront_url.startswith('https://'):
                 raise serializers.ValidationError('正式收款必须使用 HTTPS 网站地址。')
+        if config.enabled:
+            disable_other(request, other)
         if changed:
             config.revision += 1
             config.save()
             audit(request, 'update', 'management_api.stripeconfig', config, '修改 Stripe 配置：' + '、'.join(changed))
         return Response(safe_config(config))
-
-
-@method_decorator(never_cache, name='dispatch')
-class PublicPaymentConfig(APIView):
-    permission_classes = [AllowAny]
-    authentication_classes = []
-
-    def get(self, request):
-        return Response(payment_config())
 
 
 @sensitive_variables()
@@ -222,6 +217,9 @@ class StripeCheckout(StoreOrders):
         order = get_object_or_404(PrintOrder.objects.select_for_update(), reference=reference, owner_hash=owner(request))
         if order.mode not in ('stripe_test', 'stripe_live') or order.status != 'pending':
             raise Conflict('This order is not awaiting Stripe payment. Refresh its status.')
+        from .fulfillment import require_checkout
+        require_checkout(order)
+        require_single_print_payment(order)
         if expiry(order) <= timezone.now().timestamp():
             raise Conflict('This checkout expired. Create a new order to pay.')
         if not order.stripe_session_id:
@@ -253,6 +251,9 @@ class StripeWebhook(APIView):
         # data is returned or changed until the SDK verifies the raw body.
         try:
             untrusted = json.loads(payload)
+            from .refunds import STRIPE_EVENTS, refund_webhook
+            if untrusted.get('type') in STRIPE_EVENTS:
+                return refund_webhook(request, payload, 'stripe')
             reference = uuid.UUID(untrusted['data']['object']['metadata']['order_reference'])
         except (ValueError, KeyError, TypeError, AttributeError):
             return Response({'detail': 'Invalid checkout event.'}, status=400)

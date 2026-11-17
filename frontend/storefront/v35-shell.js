@@ -1,0 +1,78 @@
+import {homeAI,handleHomeControl} from './v35-home.js';
+// V35 presentation only. Identity, inventory, uploads and orders stay in their services.
+const text=(lang,en,zh)=>lang==='zh-CN'?zh:en;
+const mark='<span>POPOM<span class="v35-logo-o">O</span></span><sup>®</sup>';
+const symbols={user:'<circle cx="12" cy="8" r="3.5"/><path d="M4.5 21v-2a7.5 7.5 0 0 1 15 0v2"/>',menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',upload:'<path d="M12 16V3m-5 5 5-5 5 5M4 15v5h16v-5"/>',grid:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',spark:'<path d="m12 3 2.3 6.7L21 12l-6.7 2.3L12 21l-2.3-6.7L3 12l6.7-2.3z"/>'};
+const svg=name=>`<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${symbols[name]}</svg>`;
+export function shellHeader({lang='en-US',authenticated=false,language='',route='home'}={}){
+ const say=(en,zh)=>text(lang,en,zh);
+ const link=(href,en,zh)=>`<a href="${href}" ${route===href.slice(1)?'aria-current="page"':''}>${say(en,zh)}</a>`;
+ const links=()=>`${link('#home','Home','首页')}${link('#designs','Works center','作品中心')}<details class="v35-nav-group"><summary>${say('How to use','如何使用')}</summary><div>${link('#how-it-works','Tutorial','使用教程')}<button type="button" data-shell-info="ai">${say('AI guide','AI 说明')}</button></div></details><details class="v35-nav-group"><summary>${say('About us','关于我们')}</summary><div>${link('#about','About POPOMO','关于 POPOMO')}<button type="button" data-shell-info="contact">${say('Contact us','联系我们')}</button><button type="button" data-shell-info="partners">${say('Partner with us','合作咨询')}</button></div></details>`;
+ return `<div class="v35-topbar"><span>Your moments. Made yours.</span><div>${link('#orders','My orders','我的订单')}${link('#my-designs','My designs','我的设计')}${language}</div></div><header class="v35-header"><a class="v35-wordmark" href="#home" aria-label="${say('POPOMO home','POPOMO 首页')}">${mark}</a><nav class="v35-desktop-nav" aria-label="${say('Main navigation','主导航')}">${links()}</nav><a class="v35-account" href="#account" aria-label="${say(authenticated?'My account':'Sign in',authenticated?'我的账户':'登录')}">${authenticated?'<img class="v35-account-avatar" src="./assets/v35/avatar-popomo.svg" alt="" width="28" height="28">':svg('user')}</a><button class="v35-menu-button" type="button" data-shell-menu aria-controls="v35-menu" aria-expanded="false" aria-label="${say('Open menu','打开菜单')}">${svg('menu')}</button><button class="v35-contact" type="button" data-shell-info="contact">${say('Contact us','联系我们')} ↗</button></header><dialog id="v35-menu" class="v35-menu" aria-labelledby="v35-menu-title"><div class="v35-dialog-head"><h2 id="v35-menu-title" class="v35-wordmark">${mark}</h2><button type="button" data-shell-close aria-label="${say('Close menu','关闭菜单')}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><nav aria-label="${say('Mobile navigation','手机导航')}">${links()}</nav><div class="v35-menu-bottom"><div class="v35-menu-language"><span>${say('Language','语言')}</span><div class="v35-language-options" role="group" aria-label="${say('Language','语言')}"><button type="button" data-shell-language="zh-CN" aria-pressed="${lang==='zh-CN'}">中文</button><button type="button" data-shell-language="en-US" aria-pressed="${lang==='en-US'}">English</button></div></div><p>A little more you.</p></div></dialog>`;
+}
+export function shellFooter(lang='en-US',home=false){
+ if(home)return `<footer class="v35-footer v35-home-footer"><a class="v35-wordmark" href="#home" aria-label="POPOMO">${mark}</a><p>${text(lang,'A little more you.','多一点你的风格。')}</p><div class="v35-socials"><a href="https://www.facebook.com/share/19dHLK9ieE/?mibextid=wwXIfr" aria-label="POPOMO Facebook" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14 22v-9h3l.5-4H14V7c0-1.2.3-2 2-2h2V1.5c-.6-.1-1.8-.3-3-.3-3 0-5 1.9-5 5.3V9H7v4h3v9z"/></svg></a><a href="https://www.instagram.com/popomo_customs" aria-label="POPOMO Instagram" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg></a></div></footer>`;
+ return `<footer class="v35-footer"><a class="v35-wordmark" href="#home" aria-label="POPOMO">${mark}</a><p>${text(lang,'A little more you.','多一点你的风格。')}</p><div><a href="#orders">${text(lang,'My orders','我的订单')}</a><button type="button" data-shell-info="station">${text(lang,'Print locations','打印网点')}</button><button type="button" data-shell-info="contact">${text(lang,'Contact us','联系我们')}</button></div></footer>`;
+}
+export function homePresentation({lang='en-US',busy=false,gallery='',station=''}={}){
+ const say=(en,zh)=>text(lang,en,zh);
+ const busyAttrs=`aria-busy="${busy}" ${busy?'disabled':''}`;
+ const names=[['Cosmic dreams','星空幻想'],['Anime portrait','动漫人像'],['Pet pop','宠物波普'],['Travel watercolor','旅行水彩'],['Garden inspiration','花园灵感'],['Ocean inspiration','海洋灵感'],['Retro collage','复古星星拼贴'],['Cherry days','樱桃日常'],['Travel collage','旅行照片拼贴']];
+ return `<div class="v35-home"><section class="v35-hero" aria-labelledby="v35-hero-title"><div class="v35-orbit" aria-hidden="true"><i></i><b></b><em></em></div><div class="v35-hero-copy"><p class="v35-kicker"><span aria-hidden="true">${svg('spark')}</span> YOUR IMAGINATION. YOUR CASE.</p><h1 id="v35-hero-title">${say('A little imagination.<br>A case like no other.','把你的<em>奇思妙想</em>，<br>变成手心的独一无二。')}</h1><p class="v35-intro">${say('A photo. An idea. An everyday case, made entirely yours.','一张照片，一点灵感。让日常的手机壳，成为你的创作。')}</p><div class="v35-entries" role="group" aria-label="${say('Choose your creative starting point','选择你的创作方式')}"><button class="v35-entry v35-primary" type="button" data-action="home-photo" ${busyAttrs}>${svg('upload')}<span>${busy?say('Reading your photo…','正在读取照片…'):say('Photo design','相册照片设计')}</span><i>↗</i></button><a class="v35-entry v35-secondary" href="#home" data-home-collection>${svg('grid')}<span>${say('Curated templates','精选模板')}</span><i>↗</i></a><a class="v35-entry v35-tertiary" data-action="home-ai" href="#choose?source=photo&studio=1">${svg('spark')}<span>${say('AI design studio','AI 创作设计')}</span><i>↗</i></a></div><p class="v35-journey">${say('From photo to phone case','从相册到手心')} <span aria-hidden="true">↗</span><br>${say('Pick a photo · Design · Print','选照片 · 设计 · 打印')}</p></div><div class="v35-fan" role="region" aria-label="${say('Case inspiration examples','手机壳灵感示例')}">${names.map(([en,zh],i)=>`<a class="v35-fan-case" data-action="home-ai" style="--fan-index:${i}" href="#choose?source=photo&studio=1" aria-label="${say('Explore AI creation: '+en,'探索 AI 创作：'+zh)}"><div class="v35-demo-phone"><img src="./assets/v35/inspiration/${i}.webp" alt="${say(en,zh)}" ${i===2?'fetchpriority="high"':'loading="lazy"'} width="210" height="400"><span class="v35-demo-camera" aria-hidden="true"><i></i><i></i><i></i><b></b></span></div></a>`).join('')}<span class="v35-fan-note">MADE BY YOU.<br>FOR YOU.</span><div class="v35-fan-controls"><button type="button" data-shell-fan="-1" aria-label="${say('Previous inspiration','上一款灵感')}">←</button><span>${say('Drag to explore','拖动探索')}</span><button type="button" data-shell-fan="1" aria-label="${say('Next inspiration','下一款灵感')}">→</button></div><span class="v35-fan-spark" aria-hidden="true">✳</span></div><div class="v35-curve" aria-hidden="true"></div></section>${station}<section class="v35-studio v35-wrap"><div><p class="v35-kicker">A LITTLE MORE YOU.</p><h2>${say('Your life.<br>Your <em>inspiration.</em>','你的生活，<br>就是<em>灵感库。</em>')}</h2></div><div><p>${say('A favorite trip. Your favorite companion.<br>Or an idea that just came to mind.','留住一次旅行、一只毛孩子，<br>或一个突然冒出来的念头。')}</p><p class="v35-small">${say('Start with a photo, a template, or a little AI.<br>Add stickers and words. Make every detail your own.','照片、模板、AI，自由选择你的创作起点。<br>再加贴图和文字，把每个细节变成你的风格。')}</p><a class="v35-tutorial" href="#how-it-works"><span class="v35-tutorial-image"><img src="./assets/v35/tutorial-poster.jpg" alt="" loading="lazy" width="140" height="90"></span><span>${say('Watch how it works','看看如何创作')}<small>${say('From an idea to your phone case','从灵感，到你的手机壳')}</small></span> ↗</a></div></section>${gallery}${homeAI(lang)}<section class="v35-faq"><div class="v35-wrap"><div><p class="v35-kicker">A FEW THINGS TO KNOW</p><h2>${say('A few things before you start.','开始前，你可能想知道。')}</h2></div><div>${[['What kind of photo works best?','用什么照片，效果会更好？','Use a clear original and leave space around your subject. Check the camera cutout when previewing.','建议使用清晰原图，主体周围留有空间，预览时检查镜头开孔是否遮挡。'],['Can I preview before deciding?','可以先看效果，再决定吗？','Yes. Upload a photo and adjust the composition before continuing to your order.','可以。先上传照片调整构图，确认效果后再继续下单。'],['Is my phone model supported?','我的手机型号支持定制吗？','Before scanning, you can design any published model. Scan a station to check its stock and templates. Choose the exact model in your phone settings.','未扫码可设计全部已发布机型；扫码后按该设备的库存和模板筛选。请按手机设置中的准确型号选择。']].map(([en,zh,answer,zhAnswer])=>`<details><summary>${say(en,zh)}</summary><p>${say(answer,zhAnswer)}</p></details>`).join('')}</div></div></section></div>`;
+}
+export function shellInfo(kind,lang='en-US'){
+ const say=(en,zh)=>text(lang,en,zh);
+ const content={
+  ai:[say('AI guide','AI 说明'),say('Choose a photo and an available AI style in the editor. Sign in to view your actual credits. Generation and charges are confirmed by the server; previews here are examples.','在编辑页选择照片和可用 AI 风格，登录后查看实际额度。生成结果和计费由服务端确认，首页图片仅为灵感示例。'),'#choose?source=photo&studio=1',say('Explore AI creation','探索 AI 创作')],
+  tutorial:[say('Quick guide','操作指引'),say('Choose a photo, select an available model, and adjust the composition. Review and save your design before ordering. At the printer, scan its station QR code and confirm the paid order on your phone.','选择照片和可用机型，调整构图，预览并保存设计后再下单。到设备前扫描设备屏二维码，在手机上确认已付订单。'),'#how-it-works?section=steps',say('Read all steps','阅读完整教程')],
+  about:[say('About POPOMO','关于 POPOMO'),say('Your moments. Made yours. Start with your own photo, explore a design, and make a case that feels like you.','把喜欢，带在身边。从自己的照片和灵感出发，设计专属手机壳。'),'#home',say('Start creating','开始创作')],
+  contact:[say('Contact us','联系我们'),say('Contact details are not available here yet. Keep your order number when requesting help through your purchase channel.','联系资料暂未提供。如需订单协助，请保留订单号并通过购买渠道联系。')],
+  partners:[say('Partner with us','合作咨询'),say('Partner applications are not open here yet.','合作申请入口暂未开放。')],
+  station:[say('Print locations','打印网点'),say('Nearby search is not available yet. Scan the QR code on the printer screen to verify its actual details. Scanning selects a station; it does not authorize payment or printing.','附近搜索暂未开放。请扫描设备屏上的二维码，核实实际设备资料。扫码仅选择设备，不代表付款或打印授权。'),'#locations',say('View print locations','查看打印网点')]
+ };
+ return content[kind]||content.contact;
+}
+// Native dialogs supply focus trapping, Escape and background inertness.
+export function mountShell(root,{lang='en-US',onLanguage=()=>{}}={}){
+ const menu=root.querySelector('#v35-menu'),opener=root.querySelector('[data-shell-menu]');
+ if(!menu)return;
+ let focusTarget=opener;
+ const fan=root.querySelector('.v35-fan');
+ const rotateFan=direction=>{
+  const items=[...fan.querySelectorAll('.v35-fan-case')];
+  const step=((Number(fan.dataset.step)||0)+direction+items.length)%items.length;fan.dataset.step=step;
+  for(let i=0;i<items.length;i++)items[i].style.setProperty('--fan-index',(i-step+items.length)%items.length);
+ };
+ let start=null,suppressClick=false;
+ const down=e=>{if(e.button!==0||e.target.closest('button'))return;start={x:e.clientX,y:e.clientY};suppressClick=false;};
+ const up=e=>{if(!start)return;const x=e.clientX-start.x,y=e.clientY-start.y;start=null;if(Math.abs(x)>35&&Math.abs(x)>Math.abs(y)){rotateFan(x<0?1:-1);suppressClick=true;}};
+ const cancel=()=>{start=null;};
+ const click=e=>{if(suppressClick){suppressClick=false;e.preventDefault();e.stopImmediatePropagation();}};
+ const drag=e=>e.preventDefault();
+ if(fan?.querySelectorAll){fan.addEventListener('pointerdown',down);fan.addEventListener('pointerup',up);fan.addEventListener('pointercancel',cancel);fan.addEventListener('click',click,true);fan.addEventListener('dragstart',drag);}
+
+ const closeMenu=()=>{if(menu.open)menu.close();};
+ const reset=()=>{opener.setAttribute('aria-expanded','false');document.body.classList.remove('v35-menu-open');};
+ menu.addEventListener('close',()=>{reset();if(focusTarget?.isConnected)focusTarget.focus({preventScroll:true});});
+ root.addEventListener('click',handle);
+ function handle(event){
+  const el=event.target.closest('[data-shell-menu],[data-shell-close],[data-shell-info],[data-shell-language],[data-shell-fan],[data-home-filter],[data-home-look],[data-home-collection],#v35-menu a');if(!el)return;
+  if(el.matches('[data-home-filter],[data-home-look],[data-home-collection]')){event.preventDefault();handleHomeControl(root,el,lang);}
+  else if(el.matches('[data-shell-menu]')){menu.showModal();document.body.classList.add('v35-menu-open');opener.setAttribute('aria-expanded','true');menu.querySelector('[data-shell-close]').focus();}
+  else if(el.matches('[data-shell-close],#v35-menu a'))closeMenu();
+  else if(el.dataset.shellLanguage){closeMenu();onLanguage(el.dataset.shellLanguage);}
+  else if(el.dataset.shellFan){
+   rotateFan(Number(el.dataset.shellFan));
+  }else if(el.dataset.shellInfo){
+   focusTarget=menu.open?opener:el;closeMenu();
+   const [title,description,href,label]=shellInfo(el.dataset.shellInfo,lang);
+   const dialog=document.createElement('dialog');dialog.className='v35-info';dialog.setAttribute('aria-labelledby','v35-info-title');
+   dialog.innerHTML=`<div class="v35-dialog-head"><h2 id="v35-info-title"></h2><button type="button" aria-label="${text(lang,'Close','关闭')}">×</button></div><p></p>`;
+   dialog.querySelector('h2').textContent=title;dialog.querySelector('p').textContent=description;
+   if(href){const link=document.createElement('a');link.className='v35-entry v35-primary';link.href=href;link.textContent=label+' ↗';link.addEventListener('click',()=>dialog.close());dialog.append(link);}
+   root.append(dialog);dialog.querySelector('button').addEventListener('click',()=>dialog.close());
+   dialog.addEventListener('close',()=>{dialog.remove();if(focusTarget?.isConnected)focusTarget.focus({preventScroll:true});},{once:true});dialog.showModal();
+  }
+ }
+ return ()=>{root.removeEventListener('click',handle);if(fan?.querySelectorAll){fan.removeEventListener('pointerdown',down);fan.removeEventListener('pointerup',up);fan.removeEventListener('pointercancel',cancel);fan.removeEventListener('click',click,true);fan.removeEventListener('dragstart',drag);}reset();};
+}

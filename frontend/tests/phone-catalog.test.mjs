@@ -1,9 +1,10 @@
+import {phoneModelChoices} from '../storefront/phone-model-dialog.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {phoneBrands,findPhoneModels} from '../storefront/phone-catalog.js';
 import {selectablePhoneModels as phoneModels} from '../storefront/simple-core.js';
 
-test('the storefront offers only the two supplied case templates',()=>{
+test('the bundled fallback retains its two historical templates independently of stock choices',()=>{
  const before=[...phoneModels];
  assert.deepEqual(phoneModels,['iPhone 17','iPhone 16e']);
  assert.deepEqual(phoneBrands(phoneModels),['Apple']);
@@ -22,4 +23,24 @@ test('large model catalogs stay separated by brand and handle empty and unmatche
  assert.deepEqual(findPhoneModels(models,'Google','pixel 9'),['Google Pixel 9']);
  assert.deepEqual(findPhoneModels(models,'Samsung','no such phone'),[]);
  assert.deepEqual(findPhoneModels(models,'Unknown',''),[]);
+});
+
+
+test('model sheet groups the supplied catalog without inventing models or changing its order',()=>{
+ const models=['iPhone 17 Pro Max','iPhone 17','Samsung S26','Xiaomi 16'];
+ const html=phoneModelChoices({models,brand:'Apple',selected:'iPhone 17'});
+ assert.ok(html.indexOf('data-picker-model="iPhone 17 Pro Max"')<html.indexOf('data-picker-model="iPhone 17"'));
+ assert.match(html,/data-picker-brand="Samsung"/);assert.match(html,/data-picker-model="iPhone 17" aria-pressed="true"/);
+ assert.doesNotMatch(html,/data-picker-model="Samsung S26"/);
+ const scoped=phoneModelChoices({models:['Samsung S26'],brand:'Apple'});
+ assert.doesNotMatch(scoped,/iPhone|Xiaomi/);assert.match(scoped,/data-picker-model="Samsung S26"/);
+ for(const status of ['loading','unavailable','updating'])assert.doesNotMatch(phoneModelChoices({models,status}),/data-picker-model=/);
+ assert.match(phoneModelChoices({models:[],lang:'zh-CN'}),/重新加载/);
+ assert.match(phoneModelChoices({models:['Brand <script>'],brand:'Brand'}),/Brand &lt;script&gt;/);
+});
+
+
+test('model sheet uses the server brand for model names without a brand prefix',()=>{
+ const html=phoneModelChoices({models:['Galaxy test'],brand:'Samsung',selection:()=>({brand:'Samsung'})});
+ assert.match(html,/data-picker-brand="Samsung"/);assert.match(html,/data-picker-model="Galaxy test"/);assert.doesNotMatch(html,/data-picker-brand="Galaxy"/);
 });

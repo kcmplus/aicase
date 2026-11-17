@@ -52,6 +52,39 @@ class StripeTests(TestCase):
     def checkout(self, order):
         return self.client.post(f'/api/v1/store/orders/{order.reference}/checkout/', {}, format='json')
 
+    @patch('management_api.stripe_payments.create_session')
+    def test_legacy_quantity_payment_guard_preserves_unknown_and_existing_sessions(self, create_session):
+        order = self.create()
+        for quantity in (3, 0, -1, True, '1', 1.0, None):
+            for provider_id in ('', 'cs_test_existing'):
+                with self.subTest(quantity=quantity, provider_id=bool(provider_id)):
+                    order.snapshot = {**order.snapshot, 'quantity': quantity}
+                    order.amount = '30.00'
+                    order.stripe_session_id = provider_id
+                    order.save()
+                    before = PrintOrder.objects.filter(pk=order.pk).values().get()
+                    response = self.checkout(order)
+                    self.assertEqual(response.status_code, 409, response.data)
+                    create_session.assert_not_called()
+                    self.assertEqual(PrintOrder.objects.filter(pk=order.pk).values().get(), before)
+
+    @patch('management_api.stripe_payments.create_session')
+    def test_legacy_unpaid_multi_print_requires_review_before_payment(self, create_session):
+        """An old unpaid multi-copy snapshot must not go straight to payment."""
+        order = self.create()
+        order.snapshot = {**order.snapshot, 'quantity': 3}
+        order.amount = '30.00'
+        order.save()
+        create_session.return_value = {
+            'id': 'cs_test_legacy_multi',
+            'url': 'https://checkout.stripe.com/c/pay/legacy-multi',
+            'livemode': False,
+        }
+        response = self.checkout(order)
+        self.assertFalse(create_session.called,
+            f'Unreviewed legacy multi-print reached payment: HTTP {response.status_code}')
+        self.assertIn(response.status_code, (400, 409), response.data)
+
     def event(self, order, **changes):
         obj = {'id': 'cs_test_example', 'object': 'checkout.session', 'mode': 'payment', 'status': 'complete',
                'payment_status': 'paid', 'livemode': False, 'amount_total': 1000, 'currency': 'usd',
@@ -60,6 +93,51 @@ class StripeTests(TestCase):
         obj.update(changes)
         return {'id': 'evt_example', 'object': 'event', 'type': 'checkout.session.completed', 'livemode': False,
                 'data': {'object': obj}}
+
+    @patch('management_api.stripe_payments.create_session')
+    def test_qa_missing_legacy_quantity_can_reuse_single_print_session(self, create_session):
+        order = self.create()
+        order.snapshot.pop('quantity', None)
+        order.stripe_session_id = 'cs_test_existing'
+        order.stripe_checkout_url = 'https://checkout.stripe.com/c/pay/existing'
+        order.save()
+        before = PrintOrder.objects.values().get(pk=order.pk)
+        self.assertEqual(self.checkout(order).status_code, 200)
+        create_session.assert_not_called()
+        self.assertEqual(PrintOrder.objects.values().get(pk=order.pk), before)
+
+    @patch('management_api.stripe_payments.create_session')
+    def test_qa_live_multi_print_never_reuses_checkout_url(self, create_session):
+        order = self.create()
+        order.mode = 'stripe_live'
+        order.snapshot = {**order.snapshot, 'quantity': 2}
+        order.amount = '20.00'
+        order.stripe_session_id = 'cs_live_existing'
+        order.stripe_checkout_url = 'https://checkout.stripe.com/c/pay/existing'
+        order.save()
+        before = PrintOrder.objects.values().get(pk=order.pk)
+        response = self.checkout(order)
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertNotIn('checkout_url', response.data)
+        create_session.assert_not_called()
+        self.assertEqual(PrintOrder.objects.values().get(pk=order.pk), before)
+
+    def test_qa_delayed_legacy_multi_payment_preserves_frozen_snapshot(self):
+        order = self.create()
+        order.snapshot = {**order.snapshot, 'quantity': 3}
+        order.amount = '30.00'
+        order.stripe_session_id = 'cs_test_example'
+        order.save()
+        snapshot = copy.deepcopy(order.snapshot)
+        event = self.event(order, amount_total=3000)
+        for _ in range(2):
+            self.assertEqual(self.deliver(event).status_code, 200)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'paid')
+        self.assertEqual(order.snapshot, snapshot)
+        self.assertEqual(str(order.amount), '30.00')
+        self.assertEqual(order.revision, 2)
+        self.assertEqual(AuditLog.objects.filter(actor_name='Stripe', action='payment').count(), 1)
 
     def deliver(self, event, secret=WEBHOOK, timestamp=None):
         payload = json.dumps(event)

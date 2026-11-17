@@ -2,11 +2,16 @@
 import {computed} from 'vue';
 import {phoneTemplates} from '../../storefront/phone-templates.js';
 const props=defineProps({model:{type:String,default:''}});
-const templates=computed(()=>phoneTemplates.filter(t=>!props.model||t.model===props.model));
+// Bundle these shared files with the admin app so previews do not depend on
+// the separate storefront development server or its /assets proxy.
+const assets=import.meta.glob('../../storefront/assets/phone-templates/*.png',{eager:true,query:'?url',import:'default'});
+const assetUrl=path=>assets[`../../storefront${path}`]||path;
+const templates=computed(()=>phoneTemplates.filter(t=>!props.model||t.model===props.model)
+ .map(t=>({...t,overlay:assetUrl(t.overlay),mask:assetUrl(t.mask)})));
 </script>
 <template>
  <section v-if="templates.length" class="phone-template-info" aria-label="已接入的机型模板">
-  <p class="template-help">已接入供应商底图，用户端按机型预览并导出 300 DPI 样片。打印范围由底图提取，出血、偏移和设备接口尚待确认。</p>
+  <p class="template-help">以下为当前用户端使用的本地模板；下方供应商底图单独保留，不自动覆盖已接入版本。</p>
   <div class="template-grid">
    <article v-for="item in templates" :key="item.id" class="template-card">
     <div class="template-images"><figure><img :src="item.overlay" :alt="item.model+' 供应商底图'"/><figcaption>供应商底图</figcaption></figure><figure><span class="mask-preview" :style="{aspectRatio:item.printWidth+'/'+item.printHeight,maskImage:`url(${item.mask})`,WebkitMaskImage:`url(${item.mask})`}"></span><figcaption>打印范围</figcaption></figure></div>

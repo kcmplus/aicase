@@ -20,7 +20,8 @@ export function setAIComparison(root,value){
 export function mountAIStudio(root,job,ui={}){
  const flow=root.querySelector('.studio-flow'),dock=flow?.querySelector('.studio-controls');
  if(!flow)return ()=>{};
- const dialog=flow.querySelector('.studio-photo-dialog');
+ const dialog=flow.querySelector('.studio-photo-dialog'),resultDialog=flow.querySelector('.studio-render-dialog');
+ if(resultDialog&&!resultDialog.open)resultDialog.showModal();
  const measure=()=>flow.style.setProperty('--studio-dock-height',`${dock?.getBoundingClientRect().height||0}px`);
  const observer=new ResizeObserver(measure);
  if(dock)observer.observe(dock);
@@ -58,5 +59,5 @@ export function mountAIStudio(root,job,ui={}){
   if(event.target===dialog){const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)dialog.close();}
  };
  flow.addEventListener('click',click);
- return ()=>{clearInterval(waitTimer);observer.disconnect();flow.removeEventListener('click',click);if(dialog?.open)dialog.close();};
+ return ()=>{clearInterval(waitTimer);observer.disconnect();flow.removeEventListener('click',click);if(dialog?.open)dialog.close();if(resultDialog?.open)resultDialog.close();};
 }

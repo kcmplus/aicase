@@ -17,7 +17,11 @@ concurrency:
 
 jobs:
   build:
-    name: Test and build
+    name: Test and build (without deployment)
+    if: >-
+      github.ref != 'refs/heads/dev' ||
+      github.event_name == 'pull_request' ||
+      vars.DEV_DEPLOY_ENABLED != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
@@ -43,69 +47,51 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: frontend/admin/package-lock.json
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
-        with:
-          python-version: '3.13'
-          cache: pip
-          cache-dependency-path: backend/requirements.txt
-      - name: Install dependencies
-        run: |
-          python -m pip install -r backend/requirements.txt
-          npm --prefix frontend/admin ci
-      - name: Check deployment scripts
-        run: |
-          bash -n deploy/dev/deploy.sh
-          bash -n deploy/dev/bootstrap.sh
-          shellcheck deploy/dev/*.sh
-          python -m unittest discover -s deploy/dev/tests -v
-      - name: Test storefront and backend
-        run: |
-          npm test
-          python backend/manage.py check
-          python backend/manage.py makemigrations --check --dry-run
-          python backend/manage.py test management_api
-      - name: Build admin and release package
-        run: |
-          npm run build:admin
-          python deploy/dev/package.py
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: aicase-dev-${{ github.sha }}
-          path: dist-release/
-          if-no-files-found: error
-          retention-days: 7
-          compression-level: 0
+      - uses: ./.github/actions/build-dev
       - name: Deployment setup reminder
         if: github.ref == 'refs/heads/dev' && vars.DEV_DEPLOY_ENABLED != 'true'
         run: echo 'Build passed. Configure deployment secrets, then set repository variable DEV_DEPLOY_ENABLED=true.' >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
-    name: Deploy dev
-    needs: build
+    name: Test, build and deploy dev
     if: >-
       github.ref == 'refs/heads/dev' &&
       github.event_name != 'pull_request' &&
       vars.DEV_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 45
     environment:
       name: dev
       url: https://aicase.chunpat.cc
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: aicase_ci
+          POSTGRES_USER: aicase_ci
+          POSTGRES_PASSWORD: ci-only-password
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U aicase_ci -d aicase_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     env:
+      DJANGO_DEBUG: '1'
+      DJANGO_SECRET_KEY: ci-only-not-a-deployment-secret
+      POSTGRES_DB: aicase_ci
+      POSTGRES_USER: aicase_ci
+      POSTGRES_PASSWORD: ci-only-password
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: '5432'
       DEPLOY_HOST: 177.3.42.128
       DEPLOY_USER: root
       DEPLOY_PORT: '22'
       RELEASE_ID: ${{ github.run_number }}-${{ github.run_attempt }}-${{ github.sha }}
     steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          name: aicase-dev-${{ github.sha }}
-          path: release
+          persist-credentials: false
+      # Build and deploy on the same runner; no Actions artifact storage needed.
+      - uses: ./.github/actions/build-dev
       - name: Refuse an outdated dev commit
         env:
           GH_TOKEN: ${{ github.token }}
@@ -132,7 +118,7 @@ jobs:
           chmod 600 ~/.ssh/dev_deploy ~/.ssh/known_hosts
       - name: Upload and deploy verified release
         run: |
-          cd release
+          cd dist-release
           sha256sum --check SHA256SUMS
           target="$DEPLOY_USER@$DEPLOY_HOST"
           incoming="/tmp/aicase-dev-$RELEASE_ID"

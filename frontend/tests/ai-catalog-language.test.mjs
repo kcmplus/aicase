@@ -5,7 +5,7 @@ import {applyCatalog} from '../storefront/runtime-catalog.js';
 import {aiGroups} from '../storefront/ai-examples.js';
 import {groupAIExamples} from '../storefront/ai-example-groups.js';
 import {stylePanel} from '../storefront/ai-view.js';
-import {activeLook} from '../storefront/ai-look-browser.js';
+import {activeLook,lookBrowserContent} from '../storefront/ai-look-browser.js';
 import {locale,setLocale,t,localized} from '../storefront/simple-i18n.js';
 import {composePrompt,promptTemplates} from '../admin/src/prompt-templates.js';
 
@@ -60,4 +60,19 @@ test('all built-in generation prompts and composition headings are English',asyn
  const recipes=JSON.parse(await readFile(new URL('../../backend/management_api/seed/ai-recipes.json',import.meta.url),'utf8'));
  const texts=[...promptTemplates.map(p=>p.text),...recipes.styles.flatMap(s=>[s.name,s.description,s.prompt]),...recipes.cases.flatMap(c=>[c.name,c.subject,c.prompt]),...recipes.legacy_prompts.map(p=>p.prompt),composePrompt({name:'Gouache',prompt:'Keep the dog.'},{name:'iPhone 15 Pro',adaptation_prompt:'Keep the camera area clear.'})];
  for(const text of texts)assert.doesNotMatch(text,/[\u3400-\u9fff]/);
+});
+
+
+test('prototype AI Studio puts styles before the full preview and requires a photo before continuing',()=>{
+ applyCatalog({version:2,plans:[{kind:'ai_monthly',currency:'USD',price:'9.90',monthly_credits:20,trial_credits:1}],ai_styles:[{code:'paint',name:'Paint',image_path:'/assets/ai-styles/anime.png'}],ai_examples:[{code:'portrait',name:'Portrait',subject:'Portrait',original_path:'/assets/ai-styles/original.png',results:[{style_code:'paint',image_path:'/assets/ai-styles/anime.png'}]}]});
+ setLocale('en-US');
+ const state={source:'photo',photo:'',aiExample:'portrait',aiStyle:'paint'};
+ const empty=lookBrowserContent(state,null);
+ assert(empty.indexOf('look-filmstrip')<empty.indexOf('class="look-preview"'));
+ assert(empty.indexOf('look-title-row')<empty.indexOf('class="look-preview"'));
+ assert.match(empty,/data-ai-action="upload"/);assert.match(empty,/data-ai-action="create" disabled/);
+ assert.match(empty,/Style example/);assert.doesNotMatch(empty,/Detail preview|View full image|Use this look/);
+ const ready=lookBrowserContent({...state,photo:'data:image/png;base64,c3ludGhldGlj'},null);
+ assert.doesNotMatch(ready,/data-ai-action="create" disabled/);assert.match(ready,/Change photo/);
+ setLocale('zh-CN');assert.match(lookBrowserContent(state,null),/选择创作分类与风格/);setLocale('en-US');
 });

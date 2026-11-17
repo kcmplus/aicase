@@ -16,24 +16,25 @@ export function activeLook(state){
 export function lookBrowserContent(state,job,ui={}){
  const {groups,group,look,index}=activeLook(state);if(!look)return '';
  const hasPhoto=state.source==='photo'&&Boolean(state.photo),mode=ui.lookMode==='compare'?'compare':'effect',reveal=Math.max(0,Math.min(100,Number.isFinite(ui.lookCompare)?ui.lookCompare:50));
- return `<header class="look-header"><div><span class="look-mark" aria-hidden="true">${icon('spark',21)}</span><h2 id="look-browser-title">AI Studio</h2></div><button type="button" class="look-close" data-look-action="close" aria-label="Close AI Studio" autofocus>${icon('close',21)}</button></header>
- <div class="look-subjects" role="group" aria-label="Choose an example photo">${groups.map(g=>`<button type="button" data-ai-group="${esc(g.example.id)}" aria-pressed="${g===group}">${esc(localized(g.example))}</button>`).join('')}</div>
- <section class="look-preview" aria-label="Style example preview"><div class="look-preview-top"><div class="look-view-switch" role="group" aria-label="Example view"><button type="button" data-look-mode="compare" aria-pressed="${mode==='compare'}">Compare</button><button type="button" data-look-mode="effect" aria-pressed="${mode==='effect'}">AI effect</button></div><button type="button" class="look-enlarge" data-look-action="zoom" aria-label="Enlarge style example" aria-pressed="false">${icon('scan',18)}</button></div>
+ return `<header class="look-header"><div><h2 id="look-browser-title">AI Studio</h2></div><button type="button" class="look-close" data-look-action="close" aria-label="Close AI Studio" autofocus>${icon('close',21)}</button></header>
+ <div class="look-body"><h3 class="look-selection-title">${t('Choose a creative category and style')}</h3><div class="look-subjects" role="group" aria-label="Choose an example photo">${groups.map(g=>`<button type="button" data-ai-group="${esc(g.example.id)}" aria-pressed="${g===group}">${esc(localized(g.example))}</button>`).join('')}</div>
+ <section class="look-choices" aria-label="Choose your AI look">  <div class="look-filmstrip">${group.looks.map(({example,style,image})=>`<button type="button" class="look-thumb" data-ai-look-example="${esc(example.id)}" data-ai-look-style="${esc(style.id)}" aria-pressed="${look.example.id===example.id&&look.style.id===style.id}" aria-label="${esc(localized(style))} · ${esc(localized(example))}">${imageTag(image,{alt:'',sizes:'(max-width: 760px) 96px, 120px'})}<span>${esc(localized(style))}</span><i aria-hidden="true">${icon('check',12)}</i></button>`).join('')}</div>
+<div class="look-title-row"><div><span class="look-example-label">${esc(localized(group.example))} · ${group.looks.length} <span>AI looks</span></span><h3>${esc(localized(look.style))}</h3></div><div class="look-arrows"><span>${index+1} / ${group.looks.length}</span><button type="button" data-ai-look-step="-1" aria-label="Previous AI look">${icon('back',17)}</button><button type="button" data-ai-look-step="1" aria-label="Next AI look">${icon('arrow',17)}</button></div></div>
+ </section>
+ <section class="look-preview" aria-label="Style example preview">
   <div class="look-comparison" data-look-view="${mode}" style="--look-reveal:${reveal}%">
    ${imageTag(look.image,{alt:`${localized(look.style)} · ${localized(look.example)}`,sizes:'(max-width: 760px) 100vw, 700px',loading:'eager'})}
    <div class="look-before">${imageTag(group.original,{alt:`${t('Original photo')} · ${localized(group.example)}`,sizes:'(max-width: 760px) 100vw, 700px',loading:'eager'})}</div>
-   <span class="look-before-label">Original</span><span class="look-after-label">AI effect</span><span class="look-divider" aria-hidden="true"><span>↔</span></span>
+<div class="look-preview-top"><div class="look-view-switch" role="group" aria-label="Example view"><button type="button" data-look-mode="effect" aria-pressed="${mode==='effect'}">AI effect</button><button type="button" data-look-mode="compare" aria-pressed="${mode==='compare'}">Compare</button></div><button type="button" class="look-enlarge" data-look-action="zoom" aria-label="Enlarge style example" aria-pressed="false">${icon('scan',18)}</button></div>
+   <span class="look-before-label">Original</span><span class="look-after-label">Style example</span><span class="look-divider" aria-hidden="true"><span>↔</span></span>
    <input class="look-wipe" type="range" min="0" max="100" value="${reveal}" aria-label="Compare original and AI example" aria-valuetext="${reveal}%" ${mode==='effect'?'hidden':''}>
-   <button type="button" class="look-photo-open" data-look-action="zoom" aria-label="View full style image"><span>${icon('scan',13)} View full image</span></button>
+
    <div class="look-load-note" role="status"><i class="studio-spinner" aria-hidden="true"></i><span>Loading preview…</span></div>
-  </div><p class="look-preview-note">${mode==='compare'?'Drag across the photo to compare':'Detail preview · Tap to view the full image'}</p>
+  </div><p class="look-preview-note">${mode==='compare'?'Drag across the photo to compare':'Example preview · Select Compare to see the original'}</p>
  </section>
- <section class="look-choices" aria-label="Choose your AI look"><div class="look-title-row"><div><span class="look-example-label">${esc(localized(group.example))} · ${group.looks.length} <span>AI looks</span></span><h3>${esc(localized(look.style))}</h3></div><div class="look-arrows"><span>${index+1} / ${group.looks.length}</span><button type="button" data-ai-look-step="-1" aria-label="Previous AI look">${icon('back',17)}</button><button type="button" data-ai-look-step="1" aria-label="Next AI look">${icon('arrow',17)}</button></div></div>
-  <div class="look-filmstrip">${group.looks.map(({example,style,image})=>`<button type="button" class="look-thumb" data-ai-look-example="${esc(example.id)}" data-ai-look-style="${esc(style.id)}" aria-pressed="${look.example.id===example.id&&look.style.id===style.id}" aria-label="${esc(localized(style))} · ${esc(localized(example))}">${imageTag(image,{alt:'',sizes:'(max-width: 760px) 96px, 120px'})}<span>${esc(localized(style))}</span><i aria-hidden="true">${icon('check',12)}</i></button>`).join('')}</div>
- </section>
- <footer class="look-dock"><div class="look-photo-receipt">${hasPhoto?imageTag(state.photo,{alt:'Your photo',sizes:'40px'}):icon('image',18)}<p>${hasPhoto?'Your photo is ready':'Choose a look, then add your photo'}</p>${hasPhoto?'<button type="button" data-ai-action="upload">Change</button>':''}</div>
-  <button type="button" class="button look-cta full" data-ai-action="${hasPhoto?'create':'upload'}" ${AI_AVAILABLE?'':'disabled'}>${AI_AVAILABLE?(hasPhoto?'Use this look':'Upload your photo'):'AI generation is currently unavailable.'} ${icon(hasPhoto?'arrow':'upload',18)}</button>
-  <p class="look-disclaimer">Examples show the style. Generation starts after confirmation.</p>
+
+ </div><footer class="look-dock"><div class="look-dock-actions"><button type="button" class="look-upload" data-ai-action="upload">${hasPhoto?imageTag(state.photo,{alt:'',sizes:'36px'}):'<span aria-hidden="true">＋</span>'}<span>${hasPhoto?t('Change photo'):t('Upload your photo')}</span></button><button type="button" class="button look-cta" data-ai-action="create" ${AI_AVAILABLE&&hasPhoto?'':'disabled'}>${t('Generate AI effect')} ${icon('arrow',18)}</button></div>
+  ${!AI_AVAILABLE?`<p class="look-disclaimer" role="status">${t('AI generation is currently unavailable.')}</p>`:`<p class="look-disclaimer">${t('Generation starts after confirmation.')}</p>`}
   ${job?'<a class="look-latest" href="#ai">My latest render →</a>':''}
  </footer>`;
 }
@@ -50,7 +51,7 @@ export function setLookMode(root,value){
  root.querySelector('.look-comparison').dataset.lookView=mode;
  root.querySelector('.look-wipe').hidden=mode==='effect';
  root.querySelectorAll('[data-look-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.lookMode===mode)));
- root.querySelector('.look-preview-note').textContent=t(mode==='compare'?'Drag across the photo to compare':'Detail preview · Tap to view the full image');
+ root.querySelector('.look-preview-note').textContent=t(mode==='compare'?'Drag across the photo to compare':'Example preview · Select Compare to see the original');
  return mode;
 }
 

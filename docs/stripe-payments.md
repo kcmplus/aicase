@@ -1,6 +1,6 @@
 # 手机壳 Stripe 支付
 
-实现范围是当前首页使用的 `simple-app.js` 手机壳订单。使用 Stripe 托管 Checkout，一次购买一个手机壳，USD 定价，信用卡付款。AI 订阅、历史展示站购物车、真实打印设备、退款和物流不在此接入范围。
+实现范围是当前首页使用的 `simple-app.js` 手机壳订单。使用 Stripe 托管 Checkout，一次购买一个手机壳，USD 定价，信用卡付款。AI 订阅、历史展示站购物车、真实打印设备和物流不在此接入范围。后台整单原路退款参见 [退款操作](payment-refunds.md)。
 
 ## 注册账号后配置
 
@@ -10,7 +10,7 @@
    backend/.venv/bin/python backend/manage.py migrate
    npm run build:admin
    ```
-2. 超级管理员打开后台 **Stripe 支付配置**（`/admin/stripe`）。默认关闭，保留已有演示订单流程。
+2. 超级管理员打开后台 **支付配置 → Stripe**（`/admin/payments/stripe`）。默认关闭，保留已有演示订单流程。
 3. 填写顾客访问的用户端根地址，例如 `https://shop.example.com/`。必须与顾客使用的网站一致，浏览器订单访问密钥保存在该站点。本机测试可用 `http://localhost:4173/`。
 4. 从 Stripe 测试环境复制 Secret Key（`sk_test_…`）；在 Stripe Workbench → Webhooks 创建当前账号的事件接收地址：
    ```text
@@ -21,6 +21,9 @@
    - `checkout.session.async_payment_succeeded`
    - `checkout.session.async_payment_failed`
    - `checkout.session.expired`
+   - `refund.created`
+   - `refund.updated`
+   - `refund.failed`
 6. 选择测试环境，启用并保存。前台确认壳单会跳转 Stripe；测试后返回并等待订单显示已付款。
 7. 账号可正式收款后，另填正式环境 `sk_live_…` 和正式 Webhook 签名密钥，再选择正式收款保存。测试与正式配置分开保存。托管 Checkout 不需要 Publishable Key、预建 Product 或 Price。
 
@@ -29,7 +32,7 @@
 本机转发示例（Stripe CLI 登录到你的测试账号后）：
 
 ```sh
-stripe listen --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,checkout.session.expired --forward-to localhost:8000/api/v1/payments/stripe/webhook/
+stripe listen --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,checkout.session.expired,refund.created,refund.updated,refund.failed --forward-to localhost:8000/api/v1/payments/stripe/webhook/
 ```
 
 使用 CLI 输出的签名密钥填写后台测试配置，再通过网站创建一笔订单。CLI 通用示例事件不含本网站订单标识，不能代替完整下单测试。
@@ -53,3 +56,7 @@ stripe listen --events checkout.session.completed,checkout.session.async_payment
 目前本地通过模拟 Stripe API 响应、真实 SDK 签名验证和页面检查验证；未配置真实账号，尚未完成 Stripe Sandbox 端到端付款验收。上线前应验证：测试成功付款、收银台返回、刷新重试、Webhook 重发、卡片拒绝、Session 过期、正式与测试配置隔离。
 
 参考：[Stripe Checkout Session](https://docs.stripe.com/api/checkout/sessions/create)、[幂等请求](https://docs.stripe.com/api/idempotent_requests)、[Webhook 验签](https://docs.stripe.com/events/manage-webhook-endpoints#signature-errors)。
+
+## 与 Airwallex 共存
+
+启用 Stripe 会原子关闭 Airwallex 的新订单开关；启用 Airwallex 反之。已有订单保留原渠道和环境，不跟随配置切换。两个渠道都关闭时才使用原有演示付款。详见 [Airwallex 接入说明](airwallex-payments.md)。

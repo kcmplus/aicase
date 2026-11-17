@@ -1,4 +1,5 @@
 import {phoneTemplate} from './phone-templates.js';
+import {frozenPhoneColor} from './phone-colors.js';
 import {aiStyles} from './ai-core.js';
 import {designFor,stickers,templates} from './catalog.js';
 import {createBeautyPreview} from './beautify-core.js';
@@ -13,6 +14,14 @@ const clamp=(v,min,max,fallback)=>Number.isFinite(Number(v))?Math.max(min,Math.m
 export function validatePlacement(value){
  if(!value||![value.x,value.y,value.scale,value.rotation].every(Number.isFinite)||value.x<0||value.x>100||value.y<0||value.y>100||value.scale<25||value.scale>200||value.rotation< -180||value.rotation>180)throw Error('This artwork placement is invalid.');
  return {x:value.x,y:value.y,scale:value.scale,rotation:value.rotation};
+}
+export function validatePhotoPlacement(value){
+ const placement=validatePlacement(value);
+ if(value.fit!==undefined){
+  if(!['cover','contain','blur'].includes(value.fit))throw Error('This photo fit is invalid.');
+  placement.fit=value.fit;
+ }
+ return placement;
 }
 export function validateText(value){
  if(typeof value.text!=='string'||value.text.length>80||!['sans','serif','mono','hand'].includes(value.font)||!/^#[0-9a-f]{6}$/i.test(value.color))throw Error('This text style is invalid.');
@@ -46,7 +55,7 @@ export function collectionForPhoto(selection,photoArtwork=[]){
  const addedArtwork=validateAddedArtwork([...existing,...validateAddedArtwork(selection.addedArtwork).filter(a=>!ids.has(a.id))]);
  return {collectionLayout,addedArtwork};
 }
-export function makePersonalDesign({source='collection',designId='bloom',photo='',effect='original',intensity=65,zoom=100,x=50,y=50,artworkEdits={},addedArtwork=[],photoPlacement,collectionLayout,phoneTemplateId},original=false) {
+export function makePersonalDesign({source='collection',designId='bloom',photo='',effect='original',intensity=65,zoom=100,x=50,y=50,artworkEdits={},addedArtwork=[],photoPlacement,collectionLayout,phoneTemplateId,phoneColor},original=false) {
   if(!effects.some(e=>e.id===effect))throw Error('Choose an available effect.');
   if(source==='photo'&&!isPhoto(photo))throw Error('Upload a JPG, PNG or WebP photo first.');
   let design=source==='photo'?{art:'solid',image:photo,background:'#fef4e8',style:'original',zoom:clamp(zoom,100,180,100),photoX:clamp(x,0,100,50),photoY:clamp(y,0,100,50),layers:[],caption:'',enhance:false}:designFor(designId);
@@ -59,9 +68,10 @@ export function makePersonalDesign({source='collection',designId='bloom',photo='
   }
   if(source==='photo'&&collectionLayout){design.layers=makePersonalDesign({source:'collection',designId,...validateCollectionLayout(designId,collectionLayout)}).layers;}
   design.layers.push(...validateAddedArtwork(addedArtwork).map(a=>({...a,size:(a.type==='text'?75:45)*a.scale/100})));
-  if(source==='photo'&&photoPlacement){design.photoPlacement=validatePlacement(photoPlacement);design.zoom=100;}
+  if(source==='photo'&&photoPlacement){design.photoPlacement=validatePhotoPlacement(photoPlacement);design.zoom=100;}
   if(effect!=='original'&&!original)design=createBeautyPreview(design,{preset:effect,intensity:clamp(intensity,0,100,65)});
   if(phoneTemplateId)design.phoneTemplateId=phoneTemplateId;
+  if(phoneColor)design.phoneColor=frozenPhoneColor(phoneColor);
   return design;
 }
 export function validatePersonalPass(pass) {
@@ -71,9 +81,11 @@ export function validatePersonalPass(pass) {
   if(![pass.zoom,pass.x,pass.y].every(Number.isFinite)||pass.zoom<(pass.source==='collection'?50:100)||pass.zoom>180||pass.x<0||pass.x>100||pass.y<0||pass.y>100)throw Error('This photo crop is invalid.');
   const artworkEdits=pass.source==='collection'?validateCollectionLayout(pass.designId,pass).artworkEdits:{};
   const collectionLayout=pass.source==='photo'&&pass.collectionLayout!==undefined?validateCollectionLayout(pass.designId,pass.collectionLayout):undefined;
-  const addedArtwork=validateAddedArtwork(pass.addedArtwork),photoPlacement=pass.source==='photo'&&pass.photoPlacement?validatePlacement(pass.photoPlacement):undefined;
+  const addedArtwork=validateAddedArtwork(pass.addedArtwork),photoPlacement=pass.source==='photo'&&pass.photoPlacement?validatePhotoPlacement(pass.photoPlacement):undefined;
+  if(pass.caseMaterial!==undefined&&!['standard','magnetic'].includes(pass.caseMaterial))throw Error('Choose your case style first.');
   if(pass.phoneTemplateId!==undefined)phoneTemplate(pass.model,pass.phoneTemplateId);
+  const phoneColor=pass.phoneColor?frozenPhoneColor(pass.phoneColor):null;
   // Store declarative selections, then reconstruct with trusted local renderers.
-  return structuredClone({version:2,...(pass.phoneTemplateId?{phoneTemplateId:pass.phoneTemplateId}:{}),code:pass.code,source:pass.source,designId:pass.designId,model:pass.model,photo:pass.source==='photo'?pass.photo:'',effect:pass.effect,intensity:pass.intensity,zoom:pass.zoom,x:pass.x,y:pass.y,...(addedArtwork.length?{addedArtwork}:{}),...(photoPlacement?{photoPlacement}:{}),...(collectionLayout?{collectionLayout}:{}),...(Object.keys(artworkEdits).length?{artworkEdits}:{}),...(pass.source==='photo'&&['demo','live'].includes(pass.ai?.mode)&&/^[a-zA-Z0-9_-]{1,80}$/.test(pass.ai.styleId||'')?{ai:{styleId:pass.ai.styleId,jobId:String(pass.ai.jobId||'').slice(0,50),mode:pass.ai.mode}}:{})});
+  return structuredClone({version:2,...(pass.caseMaterial?{caseMaterial:pass.caseMaterial}:{}),...(phoneColor?{phoneColor}:{}),...(pass.phoneTemplateId?{phoneTemplateId:pass.phoneTemplateId}:{}),code:pass.code,source:pass.source,designId:pass.designId,model:pass.model,photo:pass.source==='photo'?pass.photo:'',effect:pass.effect,intensity:pass.intensity,zoom:pass.zoom,x:pass.x,y:pass.y,...(addedArtwork.length?{addedArtwork}:{}),...(photoPlacement?{photoPlacement}:{}),...(collectionLayout?{collectionLayout}:{}),...(Object.keys(artworkEdits).length?{artworkEdits}:{}),...(pass.source==='photo'&&['demo','live'].includes(pass.ai?.mode)&&/^[a-zA-Z0-9_-]{1,80}$/.test(pass.ai.styleId||'')?{ai:{styleId:pass.ai.styleId,jobId:String(pass.ai.jobId||'').slice(0,50),mode:pass.ai.mode}}:{})});
 }
 export function personalPassName(pass,designs) {return pass.source==='photo'?'Your photo':designs.find(d=>d.id===pass.designId)?.name||'Your design';}

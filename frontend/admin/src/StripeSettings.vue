@@ -3,6 +3,7 @@ import {computed,onMounted,onBeforeUnmount,reactive,ref} from 'vue';
 import {onBeforeRouteLeave} from 'vue-router';
 import {ElMessage,ElMessageBox} from 'element-plus';
 import {api} from './api.js';
+defineProps({embedded:Boolean});
 const config=ref(null),busy=ref(false),error=ref('');
 const form=reactive({enabled:false,mode:'test',storefront_url:''});
 const keys=reactive({test:{secret_key:'',webhook_secret:'',clear:false},live:{secret_key:'',webhook_secret:'',clear:false}});
@@ -20,16 +21,16 @@ onBeforeRouteLeave(discard);
 </script>
 <template>
  <section>
-  <div class="page-heading"><div><p class="eyebrow">PAYMENTS</p><h1>Stripe 支付配置<span class="greeting-dot">.</span></h1><p class="muted">手机壳订单使用 Stripe 收银台付款。仅超级管理员可以管理。</p></div><el-button :disabled="busy" @click="load">刷新配置</el-button></div>
+  <div :class="embedded?'payment-section-heading':'page-heading'"><div><p v-if="!embedded" class="eyebrow">PAYMENTS</p><h2 v-if="embedded">Stripe</h2><h1 v-else>Stripe 支付配置<span class="greeting-dot">.</span></h1><p class="muted">手机壳订单使用 Stripe 收银台付款。仅超级管理员可以管理。</p></div><el-button :disabled="busy" @click="load">刷新配置</el-button></div>
   <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="notice"/>
   <el-skeleton v-if="!config&&!error" :rows="8" animated/>
   <template v-if="config">
    <el-alert v-if="!config.encryption_ready" title="服务端密钥加密尚未就绪，请配置 AI_CONFIG_ENCRYPTION_KEY 后保存支付密钥。" type="error" :closable="false" class="notice"/>
    <div class="stripe-layout">
     <el-form class="panel stripe-form" label-position="top" :disabled="busy" @submit.prevent="save">
-     <el-form-item label="启用 Stripe 壳单支付"><el-switch v-model="form.enabled"/><span class="switch-note">{{form.enabled?'新壳单通过 Stripe 付款':'保留现有演示付款，不实际扣款'}}</span></el-form-item>
-     <el-form-item label="付款环境"><el-radio-group v-model="form.mode"><el-radio-button value="test">测试环境</el-radio-button><el-radio-button value="live">正式收款</el-radio-button></el-radio-group></el-form-item>
-     <el-alert :title="form.mode==='live'?'正式模式会实际扣款，请先完成测试和 Stripe 账号激活。':'测试模式不实际扣款。注册 Stripe 后可先使用测试密钥联调。'" :type="form.mode==='live'?'warning':'info'" :closable="false" class="notice"/>
+     <el-form-item label="启用 Stripe 壳单支付"><el-switch v-model="form.enabled"/><span class="switch-note">{{form.enabled?'保存后新壳单通过 Stripe 付款，并停用 Airwallex':'未启用 Stripe；所有渠道关闭时使用演示付款'}}</span></el-form-item>
+     <el-form-item label="收款环境"><el-radio-group v-model="form.mode"><el-radio-button value="test">测试环境</el-radio-button><el-radio-button value="live">正式收款</el-radio-button></el-radio-group></el-form-item>
+     <el-alert :title="form.mode==='live'?'正式模式将向顾客收取实际订单款项，请先完成测试和 Stripe 商户收款激活。':'测试模式仅模拟收款，不向顾客收取实际款项。注册 Stripe 后可先使用测试密钥联调。'" :type="form.mode==='live'?'warning':'info'" :closable="false" class="notice"/>
      <el-form-item label="用户端网站地址"><el-input v-model="form.storefront_url" placeholder="https://你的域名"/><p class="help">填写顾客当前访问的网站根地址，用于支付后返回订单。本机测试可填 http://localhost:4173。</p></el-form-item>
      <section v-for="mode in ['test','live']" :key="mode" class="credentials">
       <h2>{{labels[mode]}}密钥 <el-tag v-if="mode===form.mode" size="small">当前选择</el-tag></h2>

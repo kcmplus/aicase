@@ -5,10 +5,12 @@
   "scripts": {
     "start": "node server.mjs",
     "images:build": "backend/.venv/bin/python scripts/optimize-images.py",
-    "test": "node --test frontend/tests/core.test.mjs frontend/tests/editor.test.mjs frontend/tests/shop.test.mjs frontend/tests/marketing.test.mjs frontend/tests/creator.test.mjs frontend/tests/social.test.mjs frontend/tests/simple.test.mjs frontend/tests/ai.test.mjs frontend/tests/membership.test.mjs frontend/tests/artwork-drag.test.mjs frontend/tests/phone-catalog.test.mjs frontend/tests/runtime-catalog.test.mjs frontend/tests/order-service.test.mjs frontend/tests/image-view.test.mjs frontend/tests/ai-catalog-language.test.mjs frontend/tests/phone-templates.test.mjs frontend/tests/ai-service.test.mjs frontend/tests/device.test.mjs frontend/tests/customer-account.test.mjs",
+    "test": "node --test frontend/tests/order-history.test.mjs frontend/tests/order-success.test.mjs frontend/tests/ui-v35.test.mjs frontend/tests/ui-v35-startup.test.mjs frontend/tests/case-styles.test.mjs frontend/tests/pickup-stations.test.mjs frontend/tests/order-progress.test.mjs frontend/tests/fulfillment.test.mjs frontend/tests/core.test.mjs frontend/tests/editor.test.mjs frontend/tests/shop.test.mjs frontend/tests/marketing.test.mjs frontend/tests/creator.test.mjs frontend/tests/social.test.mjs frontend/tests/simple.test.mjs frontend/tests/ai.test.mjs frontend/tests/membership.test.mjs frontend/tests/artwork-drag.test.mjs frontend/tests/phone-catalog.test.mjs frontend/tests/runtime-catalog.test.mjs frontend/tests/order-service.test.mjs frontend/tests/image-view.test.mjs frontend/tests/ai-catalog-language.test.mjs frontend/tests/phone-templates.test.mjs frontend/tests/ai-service.test.mjs frontend/tests/device.test.mjs frontend/tests/customer-account.test.mjs frontend/tests/stock-catalog.test.mjs frontend/tests/device-info.test.mjs frontend/tests/local-database.test.mjs",
     "admin": "npm --prefix frontend/admin run dev",
     "build:admin": "npm --prefix frontend/admin run build",
-    "backend": "backend/.venv/bin/python backend/manage.py runserver 127.0.0.1:8000",
-    "test:backend": "backend/.venv/bin/python backend/manage.py test management_api"
+    "backend": "backend/.venv/bin/python scripts/run-backend-dev.py",
+    "backend:direct": "backend/.venv/bin/python scripts/run-direct-debug.py",
+    "test:backend": "backend/.venv/bin/python backend/manage.py test management_api",
+    "inventory:watch": "backend/.venv/bin/python -u backend/manage.py sync_device_inventory --all --watch"
   }
 }

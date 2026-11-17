@@ -10,10 +10,12 @@
 - PR 尚未合并：只检查和构建，不读取部署密钥，不部署。
 - `main` 的普通推送不部署 dev。
 - 手动重试：仓库 **Actions → Dev · build and deploy → Run workflow → 选择 dev**。
-- 每次发布保留构建包 7 天；连续发布串行执行，不中断已开始的迁移。
+- 测试、构建和上传在同一个 runner 完成，构建包直接经 SSH 上传服务器，不再上传或下载 GitHub Actions Artifact；连续发布串行执行，不中断已开始的迁移。
 - 旧提交的运行不能覆盖当前 dev 分支的新版本。需要回退时，将修复或 revert 提交推送到 dev。
 
-工作流：[`dev.yml`](../../.github/workflows/dev.yml)。触发方式遵循 [GitHub push / pull_request 事件](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows)。
+工作流：[`dev.yml`](../../.github/workflows/dev.yml)，共用验证与打包步骤位于 [build-dev/action.yml](../../.github/actions/build-dev/action.yml)。部署作业仍绑定 `dev` Environment；PR 和关闭部署开关时使用无部署权限的构建作业。GitHub 不再提供该流程的构建包下载；失败后需重新运行完整作业，服务器的版本目录和回滚机制保持不变。此调整不免除 Actions 运行时长额度，也不改变正式环境工作流。
+
+触发方式遵循 [GitHub push / pull_request 事件](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows)。
 
 ## GitHub 配置
 
@@ -43,6 +45,7 @@ OpenAI Key、数据库密码、Django 密钥不进入 GitHub 构建包。应用�
 | 代码发布 | `/opt/aicase-dev/releases/<运行号>-<重试号>-<commit>/` |
 | 当前版本 | `/opt/aicase-dev/current` 软链接 |
 | 后端服务 | `aicase-dev.service`，仅监听 `127.0.0.1:18011` |
+| 库存与机型同步 | `aicase-dev-inventory.timer`，每 5 分钟同步已启用设备，并自动新增、关联机型；新机型默认停用，底图另行导入 |
 | 图片清理 | `aicase-dev-ai-cleanup.timer`，部署时自动启用，每小时清理到期生成图片，保留任务与费用 |
 | 后端配置 | `/etc/aicase-dev/backend.env`，仅 root 可读 |
 | 数据库 | PostgreSQL 17，数据库和用户均为 `aicase_dev` |
