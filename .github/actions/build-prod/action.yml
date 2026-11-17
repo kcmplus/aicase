@@ -1,0 +1,48 @@
+name: Test and build production release
+description: Validate the application and create the production package on the current runner.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+      with:
+        node-version: '22'
+        cache: npm
+        cache-dependency-path: frontend/admin/package-lock.json
+    - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+      with:
+        python-version: '3.11'
+        cache: pip
+        cache-dependency-path: backend/requirements.txt
+    - name: Only main can be released
+      if: github.event_name == 'workflow_dispatch'
+      shell: bash
+      run: test "$GITHUB_REF" = refs/heads/main
+    - name: Install dependencies
+      shell: bash
+      run: |
+        python -m pip install -r backend/requirements.txt
+        npm --prefix frontend/admin ci
+    - name: Check deployment scripts
+      shell: bash
+      run: |
+        bash -n deploy/dev/deploy.sh
+        bash -n deploy/dev/bootstrap.sh
+        shellcheck deploy/dev/*.sh
+        python -m unittest discover -s deploy/dev/tests -v
+        bash -n deploy/prod/deploy.sh
+        bash -n deploy/prod/bootstrap.sh
+        bash -n deploy/prod/backup.sh
+        shellcheck deploy/prod/*.sh
+        python -m unittest discover -s deploy/prod/tests -v
+    - name: Test storefront and backend
+      shell: bash
+      run: |
+        npm test
+        python backend/manage.py check
+        python backend/manage.py makemigrations --check --dry-run
+        python backend/manage.py test management_api
+    - name: Build admin and release package
+      shell: bash
+      run: |
+        npm run build:admin
+        python deploy/dev/package.py --environment prod

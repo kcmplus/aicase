@@ -74,6 +74,8 @@ certbot certonly --webroot -w /var/lib/aicase-prod/acme \
 3. 等待检查、构建、备份、迁移、上线和 HTTPS 检查全部成功。
 
 合并或推送 `main` **不会自动上线**。面向 main 的 PR 只测试和构建，不接触生产 secrets。
+PR 检查不上传 Actions Artifact；手动发布在通过 `prod` 环境保护后，于同一 runner 测试、构建并通过 SSH 上传已校验的发布包，不依赖 GitHub Artifact 存储配额。
+工作流修改后需对新提交重新发起运行；重跑旧任务仍使用旧版工作流。
 手动选择其他分支会失败；发布前还会检查 main 最新提交，拒绝旧运行覆盖新代码。
 工作流按生产环境串行，服务器同时用文件锁避免手工发布和定时备份冲突。
 
