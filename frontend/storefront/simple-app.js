@@ -766,12 +766,12 @@ function schedulePaymentPoll(){
  if(!paymentOrder)return;
  const hash=location.hash,id=paymentOrder.id;
  stopPaymentPolling=startVisiblePolling({interval:5000,
-  enabled:()=>location.hash===hash&&!passBusy&&!photoBusy&&!aiBusy&&(paymentOrder?.status==='pending'||!['dispensed','cancelled','closed','refunded','test','delivery','unspecified'].includes(paymentOrder?.progress?.code)||['requested','pending'].includes(paymentOrder?.refund?.status)),
+  enabled:()=>location.hash===hash&&!stationPicker&&!passBusy&&!photoBusy&&!aiBusy&&(paymentOrder?.status==='pending'||!['dispensed','cancelled','closed','refunded','test','delivery','unspecified'].includes(paymentOrder?.progress?.code)||['requested','pending'].includes(paymentOrder?.refund?.status)),
   refresh:async alive=>{const before=paymentOrder;try{
    const data=await orderRequest(id+'/progress/');
-   if(!alive()||location.hash!==hash||passBusy||paymentOrder!==before||paymentOrder?.id!==id)return;
+   if(!alive()||location.hash!==hash||stationPicker||passBusy||paymentOrder!==before||paymentOrder?.id!==id)return;
    paymentOrder=mergeOrderProgress(paymentOrder,data);syncStationFinder();paymentPollCount++;paymentError='';render(true);confirmOrderSuccess(paymentOrder);
-  }catch{if(alive()&&location.hash===hash){paymentError=locale()==='zh-CN'?'进度暂时无法刷新，已保留上次结果。':'Progress could not be refreshed. Showing the last known result.';render(true);}}}
+  }catch{if(alive()&&location.hash===hash&&!stationPicker){paymentError=locale()==='zh-CN'?'进度暂时无法刷新，已保留上次结果。':'Progress could not be refreshed. Showing the last known result.';render(true);}}}
  });
 }
 startVisiblePolling({interval:15000,enabled:()=>location.hash.split('?')[0]==='#orders'&&!passBusy&&!photoBusy&&!aiBusy,
@@ -1245,7 +1245,7 @@ if(selectedArtwork==='all'){const layout=artworkLayout();layout.zoom=100;layout.
       try{await navigator.clipboard.writeText(state.pass.code);notify('Design code copied.');}
       catch{notify('Your design code: '+state.pass.code);}
     }
-    if(el.dataset.action==='view-order'){const target=await savedOrderRoute(el.dataset.id);go(target+(el.dataset.orderSection==='printer'?(target.includes('?')?'&':'?')+'section=printer':''));}
+    if(el.dataset.action==='view-order'){const target=await savedOrderRoute(el.dataset.id);go(target+(['printer','nearby'].includes(el.dataset.orderSection)?(target.includes('?')?'&':'?')+'section='+el.dataset.orderSection:''));}
     if(el.dataset.action==='cancel-order'){const order=orderForCode(orderBook,state.pass.code);if(order?.server){await orderAction(order,'cancel');notify('Test order cancelled. No money was charged.');render(true);}}
     if(el.dataset.action==='filter-orders'){orderFilter=el.dataset.filter;orderPage=1;entryOrders=null;await navigate();}
     if(el.dataset.action==='orders-page'){orderPage=Number(el.dataset.page);await navigate();}
@@ -1327,6 +1327,7 @@ async function navigate(){
  if(verifiedNoticeOrder)confirmOrderSuccess(verifiedNoticeOrder,{returned:params.get('result')==='success'});
  if(route==='choose'&&params.get('studio')==='1')openAIStudio();
  if(route==='choose'&&params.get('step')==='model')openModelPicker();
+ if(route==='payment'&&params.get('section')==='nearby')showStationPicker();
  if(['payment','pass'].includes(route)&&params.get('section')==='printer')(document.querySelector('.device-fulfillment')||document.querySelector('#pickup-station-panel'))?.scrollIntoView({block:'start'});
 }
 const entryHash=location.hash;

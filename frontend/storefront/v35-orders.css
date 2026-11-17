@@ -183,9 +183,6 @@ body.order-success-open{overflow:hidden}
 .v35-orders .order-card-actions .text-button{font-size:15px;font-weight:400;color:#100519;text-decoration:underline;text-underline-offset:5px;min-height:36px;padding:0}
 .v35-orders .order-card-next{grid-column:1/-1;margin-top:-6px}
 .v35-orders .order-card-next .button{padding:11px 13px;font-size:14px;font-weight:400;min-height:44px}
-.v35-orders .order-card-progress{border-top:1px solid #eee3f5;padding:0 16px}
-.v35-orders .order-card-progress summary{font-size:12px;color:#786785;padding:10px 0;cursor:pointer}
-.v35-orders .order-card-progress .order-progress{margin:0 0 15px}
 .v35-orders .orders-empty{padding:35px 20px;text-align:center;border:1px solid #dfcceb;border-radius:14px;background:white}
 .v35-orders .orders-empty h2{font-size:23px}.v35-orders .orders-empty p{font-size:14px;line-height:1.7;color:#786785}
 .v35-orders .pass-actions{display:flex;justify-content:space-between;margin-top:20px}

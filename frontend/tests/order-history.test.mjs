@@ -36,17 +36,20 @@ test('missing counts no longer disables history tabs or search',()=>{
  assert.match(orderListPage({loading:true,statusLabel:()=>''}),/disabled/);
 });
 
-test('prototype card offers directions only for a bound pickup order and preserves payment states',()=>{
+test('prototype card shows Paid for confirmed free orders and direct pickup buttons without progress panels',()=>{
  const render=patch=>orderListPage({rows:[{...free,mode:'free_test',currency:'USD',amount:'0.00',fulfillment_type:'pickup',created_at:'2026-11-17T00:00:00Z',...patch}],statusLabel:status=>status});
  const bound={payment:'free',code:'awaiting_confirmation',device:{device_id:'station-1'}};
  const html=render({progress:bound});
- assert.match(html,/No-charge order confirmed/);assert.match(html,/Zero-payment test/);
+ assert.match(html,/>Paid</);assert.match(html,/\$0\.00/);assert.doesNotMatch(html,/No-charge order confirmed|Zero-payment test|order-card-progress|<details/);
  assert.match(html,/Printer &amp; directions|Printer & directions/);
  assert.match(html,/data-action="view-order" data-order-section="printer" data-id="free-order"/);
  assert.doesNotMatch(html,/data-action="(?:send-device-order|confirm-device-print|pay-provider)"/);
- assert.doesNotMatch(render({}),/data-order-section="printer"/);
- assert.doesNotMatch(render({progress:bound,fulfillment_type:'courier'}),/data-order-section="printer"/);
- assert.doesNotMatch(render({progress:{...bound,payment:'test',code:'test'}}),/data-order-section="printer"/);
+ assert.match(render({}),/Find a nearby printer/);assert.match(render({}),/data-order-section="nearby"/);
+ assert.doesNotMatch(render({status:'cancelled'}),/data-order-section=/);
+ assert.doesNotMatch(render({refund:{status:'succeeded'}}),/data-order-section=/);
+ assert.doesNotMatch(render({status:'pending',progress:{payment:'unpaid',code:'awaiting_payment'}}),/class="order-status-badge">Paid</);
+ assert.doesNotMatch(render({progress:bound,fulfillment_type:'courier'}),/data-order-section=/);
+ assert.doesNotMatch(render({progress:{...bound,payment:'test',code:'test'}}),/data-order-section=/);
  assert.match(render({progress:{...bound,code:'printed'}}),/>Printed</);
  const pending=render({status:'pending',progress:{payment:'unpaid',code:'awaiting_payment'}});
  assert.match(pending,/Pay now/);assert.doesNotMatch(pending,/data-order-section="printer"/);
