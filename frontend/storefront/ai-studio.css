@@ -232,3 +232,12 @@ body:has(.studio-photo-dialog[open]){overflow:hidden}
 @media(min-width:761px){.studio-flow:is([data-render-status=queued],[data-render-status=generating]) .studio-receipt>.studio-controls{margin-top:24px}}
 @media(max-width:760px){.studio-generation-meter{padding:14px 15px;margin-bottom:12px;border-radius:14px}.studio-meter-heading{margin-bottom:12px;gap:10px}.studio-meter-heading h2{font-size:15px}.studio-meter-number{font-size:29px}.studio-meter-label{font-size:10px;margin-bottom:4px}.studio-meter-track{height:10px}.studio-meter-steps{font-size:10px;gap:8px;margin:11px 0}.studio-meter-steps li{gap:4px;align-items:flex-start}.studio-meter-steps li svg,.studio-meter-steps li i{margin-top:3px}.studio-meter-message{font-size:12px;min-height:3.3em;margin:9px 0 4px}.studio-meter-note{font-size:10px;line-height:1.6}.studio-generation-meter.is-complete{padding-block:12px}.is-complete .studio-meter-label{display:none}}
 @media(prefers-reduced-motion:reduce){.studio-meter-track>span{transition:none}.studio-meter-track>span:after{animation:none;display:none}}
+
+/* Native model selection remains usable in the compact AI confirmation layout. */
+.studio-phone-picker{margin:0 0 20px;min-width:0}
+.studio-phone-picker label{display:block;font-size:13px;font-weight:600;margin-bottom:8px}
+.studio-phone-picker #ai-phone-model{display:block;width:100%;max-width:100%;min-height:44px;padding:10px 12px;border:1px solid #d9c5e8;border-radius:10px;background:#fff;color:#100519;font:inherit;font-size:16px}
+.studio-phone-picker #ai-phone-model:focus-visible{outline:2px solid #a234fd;outline-offset:3px}
+.studio-phone-picker p{font-size:12px;line-height:1.5;margin-top:8px}
+
+.studio-phone-picker #ai-phone-model{display:flex;justify-content:space-between;align-items:center;text-align:left;cursor:pointer}

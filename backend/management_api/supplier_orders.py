@@ -79,7 +79,11 @@ def public_state(order):
         return None
     from .device_info import public_device_identity
     identity = public_device_identity(row.device)
+    from .direct_terminal import enabled_for
+    direct = row.transport == 'direct_debug'
+    release_available = enabled_for(row.device_id) if direct else cloud_release_available()
     return {'state': row.state, 'device_id': identity['device_id'],
+            'simulated': direct,
             'can_retry_dispatch': can_retry_dispatch(row, order), 'submitted_at': row.submitted_at,
             'shop_id': identity['shop_id'], 'device_name': identity['name'],
             'device_location': identity['location'], 'device_number': identity['number'],
@@ -87,8 +91,8 @@ def public_state(order):
             'message': row.message, 'print_confirmed': bool(row.print_confirmed_at),
             'release_state': row.release_state, 'print_status': row.native_print_status,
             'cloud_status': row.cloud_status, 'status_updated_at': row.cloud_synced_at,
-            'enabled': settings.SUPPLIER_ORDER_ENABLED,
-            'release_available': cloud_release_available(),
+            'enabled': enabled_for(row.device_id) if direct else settings.SUPPLIER_ORDER_ENABLED,
+            'release_available': release_available,
             'zero_release_unconfirmed': False,
             'can_confirm_print': (order.fulfillment_type == PrintOrder.Fulfillment.PICKUP
                                   and row.state == 'submitted' and row.release_state == 'idle' and not row.print_confirmed_at
@@ -96,7 +100,8 @@ def public_state(order):
                                   and row.cloud_status.get('pay_money', '0.00') == '0.00'
                                   and row.cloud_status.get('status') != 4
                                   and row.cloud_status.get('phase') != 'cancelled'
-                                  and cloud_release_available()
+                                  and release_available
+                                  and (not direct or (order.mode == 'free_test' and order.amount == 0))
                                   and row.device.active and row.device.connection.active and can_dispatch_payment(order))}
 
 
@@ -158,6 +163,7 @@ class OrderTarget(StoreOrders):
                 order.revision += 1
                 order.save(update_fields=['snapshot', 'revision', 'updated_at'])
             row = SupplierOrder.objects.create(order=order, device=stock.device, inventory_item=stock,
+                transport='direct_debug' if settings.DIRECT_DEBUG_ENABLED else 'supplier',
                 business_number=str(time.time_ns() // 1_000_000) + f'{secrets.randbelow(1_000_000):06d}',
                 goods_id=int(stock.product.goods_id), order_revision=order.revision,
                 snapshot_sha256=digest(order.snapshot))
@@ -270,8 +276,9 @@ class FulfillmentConfig(StoreOrders):
     http_method_names = ['get', 'options']
 
     def get(self, request):
-        return Response({'enabled': settings.SUPPLIER_ORDER_ENABLED,
-                         'release_enabled': cloud_release_available()})
+        return Response({'enabled': settings.SUPPLIER_ORDER_ENABLED or settings.DIRECT_DEBUG_ENABLED,
+                         'release_enabled': cloud_release_available() or settings.DIRECT_DEBUG_ENABLED,
+                         'simulated': settings.DIRECT_DEBUG_ENABLED})
 
 
 def file_url(row, kind, origin):
@@ -321,6 +328,9 @@ class SupplierFile(StoreOrders):
 
 def dispatch_order(pk):
     """Claim before I/O; a crashed or ambiguous POST must be reconciled manually."""
+    if SupplierOrder.objects.only('transport').get(pk=pk).transport == 'direct_debug':
+        from .direct_terminal import dispatch
+        return dispatch(pk)
     if not settings.SUPPLIER_ORDER_ENABLED:
         return False
     origin = settings.SUPPLIER_ORDER_PUBLIC_URL.rstrip('/')

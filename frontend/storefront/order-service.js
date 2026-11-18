@@ -1,4 +1,5 @@
 import {readPass} from './simple-core.js';
+import {colorSelection} from './phone-colors.js';
 import {esc} from './art.js';
 import {registerSupplierTemplates} from './phone-templates.js';
 import {retryUnavailableRead} from './request-retry.js';
@@ -10,6 +11,7 @@ export function orderAccessKey(storage=localStorage){
  return key;
 }
 export async function orderRequest(path='',{method='GET',body,fetcher=fetch,key=orderAccessKey()}={}){
+ if(body?.snapshot?.phoneColor)body={...body,snapshot:{...body.snapshot,phoneColor:colorSelection(body.snapshot.phoneColor)}};
  const multipart=typeof FormData!=='undefined'&&body instanceof FormData;
  const headers={...(!multipart?{'Content-Type':'application/json'}:{}),'X-Order-Key':key};
  if(!['GET','HEAD'].includes(method)){
@@ -27,9 +29,21 @@ export function savedOrder(data,previous){
  const pass=readPass(data.snapshot.code,{...data.snapshot,...(data.case_material?{caseMaterial:data.case_material}:{})});
  return {id:data.reference,...(data.phone_template?{phoneTemplate:data.phone_template}:{}),server:true,progress:data.progress||null,fulfillmentType:data.fulfillment_type||'unspecified',fulfillment:data.fulfillment||null,refund:data.refund||null,mode:data.mode,status:data.status==='completed'?'collected':data.status,priceCents:Math.round(Number(data.amount)*100),currency:data.currency,revision:data.revision,stationId:data.station_id,customerEmail:data.customer_email,pass,oldCodes:[...new Set([...(previous?.oldCodes||[]),...(previous&&previous.pass.code!==pass.code?[previous.pass.code]:[])])],createdAt:Date.parse(data.created_at),updatedAt:Date.parse(data.updated_at)};
 }
+// Only local, unsubmitted drafts are normalized. Never rewrite a server order
+// or rotate its request key: an interrupted write may already have succeeded.
+export function singlePrintDraft(draft){
+ if(!draft||draft.editId)return draft;
+ const changed=draft.quantity!==undefined&&draft.quantity!==1;
+ return {...draft,quantity:1,...(changed?{quantityAdjusted:true}: {})};
+}
+export function singlePrintNotice(draft,lang='en'){
+ if(!draft?.quantityAdjusted)return '';
+ return `<p class="delivery-notice" role="status">${lang==='zh-CN'?'原草稿份数已调整为 1 份，设计保持不变。金额按下方当前单份价格重新确认；若此前已提交，原订单金额与状态以服务端为准。':'This draft now contains one print; your design is unchanged. Review the current single-print price below and confirm again. If previously submitted, the server retains the original order amount and status.'}</p>`;
+}
 export function checkoutBody(draft,{accepted,email='',account,amount,provider='demo',mode='demo'}){
  const customer=account?.authenticated?account.customer:null;
- return {request_key:draft.requestKey,fulfillment_type:draft.fulfillmentType||'pickup',payment_provider:provider,payment_mode:mode,accepted,
+ if(draft.quantity!==undefined&&draft.quantity!==1)throw Error('Review your single-print draft before checkout.');
+ return {quantity:1,request_key:draft.requestKey,fulfillment_type:draft.fulfillmentType||'pickup',payment_provider:provider,payment_mode:mode,accepted,
   customer_id:customer?.id||null,...(customer?{}:{customer_email:email}),expected_amount:amount,snapshot:draft.pass};
 }
 export function checkoutEmailField(account){

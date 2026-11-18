@@ -1,6 +1,6 @@
 # 顾客登录、邮箱注册与 AI 注册赠送
 
-用户端入口：`/#account`。后台入口：`/admin/mail`（邮件与注册），仅超级管理员可访问。
+用户端入口：`/#account`。后台入口：「设置 → 邮件与登录」(`/admin/settings/mail`)，仅超级管理员可访问；旧 `/admin/mail` 自动跳转。
 
 ## 用户流程
 
@@ -49,7 +49,7 @@ Google 登录通过服务端校验签名、颁发者、客户端、有效期与 
 
 授权采用服务端 code 流程，Google 同时使用 PKCE；一次性 state 绑定发起授权的浏览器，有效期 10 分钟。重放、换浏览器、配置变更和超时均不能继续登录。密钥使用现有加密配置保存，不返回前端；不保存平台 access token。新注册只发放一次赠送，不自动合并旧匿名任务、历史订单或其他浏览器的草稿。
 
-部署需安装新增 PyJWT 依赖并执行迁移 `0034_social_login`，同步前后台。**启用平台前**，将 `deploy/dev/nginx.locations.conf`（生产用 prod 对应文件）的 OAuth callback 专用 location 合入实际 Nginx 配置，检查并重载，关闭回调 URL 的访问日志；同时使用新的 Gunicorn 日志配置，只记录路径、状态和耗时，不记录查询参数及 Referer。已有发布流程不会自动替换已安装的 Nginx include 或 systemd 单元，需显式核对；`backend/gunicorn.conf.py` 为旧单元提供默认日志配置。外层代理的日志也应移除回调参数。
+部署需安装新增 PyJWT 依赖并执行迁移 `0036_social_login`，同步前后台。**启用平台前**，将 `deploy/dev/nginx.locations.conf`（生产用 prod 对应文件）的 OAuth callback 专用 location 合入实际 Nginx 配置，检查并重载，关闭回调 URL 的访问日志；同时使用新的 Gunicorn 日志配置，只记录路径、状态和耗时，不记录查询参数及 Referer。已有发布流程不会自动替换已安装的 Nginx include 或 systemd 单元，需显式核对；`backend/gunicorn.conf.py` 为旧单元提供默认日志配置。外层代理的日志也应移除回调参数。
 
 本地测试覆盖授权替身、真实 RSA 签名校验、回调幂等、权限与赠送；不等于已通过平台真实账号验收。未填写真实应用凭据时保持关闭。
 

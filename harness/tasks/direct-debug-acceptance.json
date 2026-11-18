@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "id": "direct-debug-acceptance",
+  "title": "完善本地直连模拟打印流程并完成端到端验收（示例任务）",
+  "goal": "在已有本地直连模拟实现上，补齐可重复执行的端到端验收，修复验收发现的本仓库内缺陷。以合成图片及隔离的本地数据验证手机创建零元自取订单、设备展示、手机确认、串行模拟及刷新恢复；准确记录已验证和仍受阻的部分。",
+  "scope": [
+    "先核对 AGENTS.md、docs/direct-terminal-debug.md、TODO.md 与现有代码，建立已有能力和缺口清单；不得将已经存在的直连传输、零元确认、权限校验和模拟状态重新包装为新增功能。",
+    "可改本仓库的直连调试启动器、调试配置、相关 Django 业务和测试、frontend/storefront 用户端及测试、相关说明文档；仅修复本次验收必要的问题。",
+    "新增 scripts/test-direct-debug-e2e.mjs 作为最小、可重复的本地浏览器验收入口，自动创建合成图片与完整的临时设备/机型/模板数据，自动启动和清理本地测试服务，生成可核对的运行记录和手机/设备屏截图；复用已有实现与依赖。该入口当前尚不存在，是本候选任务的交付物。",
+    "../aicase-terminal 仅作为只读参照和已有本地页面来源；不修改其源码、配置、依赖、锁文件或生成文件。如完成验收必须修改终端仓库，记录阻塞及建议，不越界实施。"
+  ],
+  "constraints": [
+    "用户本轮仅要求交付通用 harness 和示例任务；本文件不表示已授权启动业务开发。后续只有用户选择或明确启动本任务后，才执行其中的业务开发与验收。",
+    "禁止真实供应商调用，包括只读查单、库存同步和模板下载；禁止收款、退款、供应商推单、支付登记、真实打印、硬件控制、部署、提交和推送。模型调用本身不属于业务供应商调用。",
+    "自动验收必须自给合成图片和临时测试数据库，不依赖用户现有数据库或人工准备的订单；测试后清理临时服务与数据。不得修改 backend/db.sqlite3、已有 backend/.direct-debug.sqlite3、服务器数据库、真实客户记录或真实库存。不得读取或输出商家密钥、支付密钥、Cookie、客户原图和认证文件内容。",
+    "启动本地业务服务必须确认使用 config.direct_debug、供应商写入开关关闭、transport=direct_debug，使用独立端口。自动验收对外部业务请求实施阻断或显式 mock；不得依赖线上接口补齐测试资料。",
+    "本地 Django 测试使用 config.settings 和 Django 创建的测试数据库，由用例 override_settings 启用模拟；不要把固定测试 gate 改为直接操作调试副本或真实数据库。",
+    "保留已有未提交改动，不自动 stash、reset、checkout 覆盖、commit 或 push；不修改历史 sites/ 发布副本，不修改默认部署开关，不做与直连验收无关的业务重构。",
+    "快递/空运、历史 demo/渠道测试单和 supplier 传输订单不得进入模拟队列；重复手机确认不得启动第二次执行；已出货不能自动标记已领取。",
+    "固定 gate 只能证明相应单元/集成回归。手工步骤、截图、mock 返回及测试进程退出 0 都不能单独充当端到端或真实硬件验收通过证据。缺少浏览器、终端依赖或合适本地数据时如实阻塞，不放宽验收标准。"
+  ],
+  "acceptance": [
+    {
+      "id": "isolation",
+      "description": "node scripts/test-direct-debug-e2e.mjs 可自动准备合成图片、完整的隔离fixture并运行验收，无需用户数据库或人工操作；运行时核对临时测试数据库、调试端口、零元模式和业务外网阻断，结束后清理所启动服务。证据表明原数据库、已有调试副本、默认部署配置、真实库存和终端仓库未因验收改变，且未发出真实供应商或支付请求。"
+    },
+    {
+      "id": "browser-flow",
+      "description": "实际运行浏览器端到端路径：手机窄屏使用合成图片完成选择机型、确认预览、创建新的 free_test 零元自取订单，设备页显示同一订单和预览；手机确认前不模拟打印，点击立即打印后显示模拟打印及模拟出货完成。保留浏览器运行日志、订单关联证据及手机/设备页截图；不得仅调用 API 构造订单后宣称通过完整手机流程。"
+    },
+    {
+      "id": "repeat-and-recovery",
+      "description": "以自动测试验证同一订单重复确认保持单次执行、两个已确认订单按现有模拟器串行处理、页面刷新或重新打开后读取已保存进度。记录断言与执行结果，模拟完成后订单仍不成为真实已打印/已领取，不记录真实供应商付款成功，不扣真实库存。"
+    },
+    {
+      "id": "access-and-transport",
+      "description": "回归验证错误/缺失设备凭证、其他订单访问者、错误目标设备、有效退款或取消、非零元/配送订单及 supplier 历史订单被拒绝；关闭直连模式后 direct_debug 订单不回退供应商。相关幂等、越权、超时和状态转换用例全部通过，mock 不能漏出真实业务请求。"
+    },
+    {
+      "id": "visual-clarity",
+      "description": "检查并留存至少 390px 宽手机页与现有设备页窄屏的实际截图。手机明确显示本地零元模拟及完成（仅模拟）；设备页保持只读，二维码、订单和预览可见，不显示确认/付款/立即打印操作；未知硬件状态不伪装在线。"
+    },
+    {
+      "id": "reviewable-handoff",
+      "description": "固定回归 gate 全部通过；更新 docs/direct-terminal-debug.md，写明复现命令、实际结果、证据位置和尚未验证部分。产品和测试按每项 acceptance 给出可核对证据，区分本地代码、本地模拟浏览器验收、部署与真机验收；不声称已经推送、部署或物理打印。"
+    }
+  ],
+  "gates": [
+    {
+      "id": "backend-regression",
+      "argv": [
+        "backend/.venv/bin/python",
+        "backend/manage.py",
+        "test",
+        "management_api.test_direct_terminal",
+        "management_api.test_supplier_orders",
+        "management_api.test_supplier_payments",
+        "management_api.test_fulfillment",
+        "--settings=config.settings",
+        "--noinput"
+      ],
+      "cwd": ".",
+      "timeout_seconds": 300
+    },
+    {
+      "id": "storefront-regression",
+      "argv": [
+        "node",
+        "--test",
+        "frontend/tests/fulfillment.test.mjs",
+        "frontend/tests/order-service.test.mjs",
+        "frontend/tests/device-info.test.mjs"
+      ],
+      "cwd": ".",
+      "timeout_seconds": 120
+    },
+    {
+      "id": "direct-debug-browser-e2e",
+      "argv": [
+        "node",
+        "scripts/test-direct-debug-e2e.mjs"
+      ],
+      "cwd": ".",
+      "timeout_seconds": 300
+    }
+  ],
+  "models": {
+    "product": "gpt-6-astra",
+    "developer": "gpt-6-astra",
+    "tester": "gpt-6.1-sol"
+  }
+}

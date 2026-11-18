@@ -21,7 +21,7 @@ from rest_framework.views import APIView
 from .ai_service import SuperuserOnly, cipher, encryption_ready, CredentialStorageUnavailable
 from .audit import audit
 from .models import StripeConfig, PrintOrder, AuditLog
-from .orders import StrictSerializer, StoreOrders, owner, order_data, Conflict
+from .orders import StrictSerializer, StoreOrders, owner, order_data, Conflict, require_single_print_payment
 
 WEBHOOK_EVENTS = ('checkout.session.completed', 'checkout.session.async_payment_succeeded',
                   'checkout.session.async_payment_failed', 'checkout.session.expired',
@@ -217,6 +217,7 @@ class StripeCheckout(StoreOrders):
         order = get_object_or_404(PrintOrder.objects.select_for_update(), reference=reference, owner_hash=owner(request))
         if order.mode not in ('stripe_test', 'stripe_live') or order.status != 'pending':
             raise Conflict('This order is not awaiting Stripe payment. Refresh its status.')
+        require_single_print_payment(order)
         if expiry(order) <= timezone.now().timestamp():
             raise Conflict('This checkout expired. Create a new order to pay.')
         if not order.stripe_session_id:

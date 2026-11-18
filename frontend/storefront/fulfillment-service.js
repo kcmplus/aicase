@@ -17,7 +17,8 @@ export async function fulfillmentConfig(fetcher=fetch){
  try{
   const r=await fetcher('/api/v1/store/fulfillment-config/',{cache:'no-store',credentials:'omit',signal:AbortSignal.timeout(10000)});
   const data=await r.json();
-  return {enabled:r.ok&&data.enabled===true,release_enabled:r.ok&&data.release_enabled===true};
+  return {enabled:r.ok&&data.enabled===true,release_enabled:r.ok&&data.release_enabled===true,
+   ...(r.ok&&data.simulated===true?{simulated:true}:{})};
  }catch{return {enabled:false,release_enabled:false};}
 }
 export function scanScope(value,base){
@@ -54,6 +55,7 @@ export function fulfillmentView(order){
  if(!/_(live)$/.test(order.mode)&&order.mode!=='free_test')return {state:'test'};
  if(order.status==='ready')return {state:'delivered'};
  const cloud=f?.cloud_status;
+ if(f?.simulated===true&&f.print_confirmed)return {state:'simulation',phase:cloud?.phase||'queued'};
  if(cloud?.phase==='cancelled'||cloud?.status===4)return {state:'station_cancelled'};
  if(Number(cloud?.pay_money)>0&&cloud?.payment_recorded!==true)return {state:'unknown'};
  if(cloud?.phase_verified&&['print_failed','delivery_failed'].includes(cloud?.phase))return {state:'failed'};

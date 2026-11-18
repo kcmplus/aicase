@@ -1,3 +1,7 @@
+import {openPhoneModelDialog} from './phone-model-dialog.js';
+import {openHomePhoneDialog} from './home-phone-dialog.js';
+import {worksPage,workDetailPage,tutorialPage,aboutPage,locationsPage,membershipInfoPage} from './v35-pages.js';
+import {shellHeader,shellFooter,homePresentation,mountShell} from './v35-shell.js';
 import {caseStylePicker,caseMaterialLabel} from './case-styles.js';
 import {createStationFinder,stationFinderPanel,locateUser} from './pickup-stations.js';
 import {progressPanel,progressPaymentText} from './order-progress.js';
@@ -11,32 +15,36 @@ import {paymentState} from './payment-state.js';
 import {openAirwallexCheckout} from './airwallex-checkout.js';
 import {t,locale,setLocale,localized,languageControl,localize} from './simple-i18n.js';
 import {imageTag} from './image-view.js';
-import {orderRequest,savedOrder,checkoutBody,checkoutEmailField,getPaymentConfig,stripeCheckoutUrl} from './order-service.js';
-import {phoneBrand,phoneBrands,findPhoneModels} from './phone-catalog.js';
+import {orderRequest,savedOrder,checkoutBody,singlePrintDraft,singlePrintNotice,checkoutEmailField,getPaymentConfig,stripeCheckoutUrl} from './order-service.js';
 import {stockedPhoneModels as phoneModels,stockCatalogStatus,stockSelection,loadStockCatalog,deviceScope} from './stock-catalog.js';
 import {registerSupplierTemplates,phoneTemplate,selectSupplierTemplate} from './phone-templates.js';
 import {fonts} from './editor-model.js';
+import {frozenPhoneColor,reconcilePhoneColor,colorPicker} from './phone-colors.js';
 import {dragPlacement,scaleFromPointer,rotationFromPointer,rotateGroup} from './artwork-drag.js';
-import {freshOrders,orderForCode,currentOrder,commitPrintOrder,beginOrderPrint} from './print-orders.js';
+import {freshOrders,orderForCode,currentOrder,commitPrintOrder} from './print-orders.js';
 import {freshMembership,refreshMembership,migrateRender} from './ai-membership.js';
 import {PRINT_PRICE,PRINT_PRICE_CENTS,PRINT_AVAILABLE,money} from './simple-pricing.js';
 import {loadCatalog,catalogStatus,AI_GENERATION_CONNECTED} from './runtime-catalog.js';
 import {aiExamples,exampleFor} from './ai-examples.js';
 import {designFor,stickers} from './catalog.js';
-import {phone, icon, brandLogo, esc} from './art.js';
-import {designs, stations, readPass, stationAvailability, advancePrint, createPersonalPass} from './simple-core.js';
+import {phone, icon, esc} from './art.js';
+import {designs, stations, readPass, createPersonalPass} from './simple-core.js';
 
 import {effects, validateAddedArtwork, validatePlacement, isPhoto, makePersonalDesign, personalPassName} from './simple-personalize.js';
 import {readDesign, writeDesign, updateDesign} from './simple-storage.js';
-import {stylePanel, aiPage, membershipPage} from './ai-view.js';
+import {stylePanel, aiPage} from './ai-view.js';
 import {setAIView,setAIComparison,mountAIStudio} from './ai-interactions.js';
 import {activeLook,lookBrowserContent,setLookMode,setLookComparison,updateLookImageState} from './ai-look-browser.js';
 import {aiStyles,refreshAIOrder,canApplyAIOrder} from './ai-core.js';
 import {createLiveRender,getAIAccount,changeAIAccount,submitLiveRender,refreshLiveRender,cancelLiveRender} from './ai-service.js';
 import {importPhoto} from './simple-upload.js';
 import {customerPage,sendEmailCode,verifyEmailCode,signOutCustomer,updateCustomerName,getCustomerCredits,startSocialLogin,socialReturnMessage} from './customer-account.js';
+import {createDesignWorkspace,createDesignLibrary,designOwner} from './design-workspace.js';
+import {myDesignsPage,designReview,designSteps} from './v35-designs.js';
+import {showStorageStartupError} from './v35-startup.js';
 
-const KEY = 'popomo-simple-v1';
+async function startStorefront(){
+let colorNotice=false;
 const app = document.querySelector('#app');
 app.textContent=t('Loading POPOMO…');
 const stockScope=deviceScope();
@@ -45,20 +53,42 @@ const scannedIds=scopeIds(stockScope);
 let stationError='',lastScannedStation=null;
 async function readScannedStation(){if(!scannedIds)return null;try{const data=await loadDeviceInfo({deviceId:scannedIds.device_id,shopId:scannedIds.shop_id});stationError='';lastScannedStation=data;return data;}catch(error){stationError=error.message||'connection';if(stationError!=='connection')lastScannedStation=null;return null;}}
 let scannedStation=null;
-const initialData=await Promise.all([loadCatalog(),loadStockCatalog(undefined,stockScope),fulfillmentConfig(),readScannedStation()]);
+const initialData=await Promise.all([loadCatalog(),loadStockCatalog(undefined,stockScope),fulfillmentConfig(),readScannedStation(),getAIAccount().catch(()=>null)]);
 const devicePrinting=initialData[2];scannedStation=initialData[3];
+const workspace=createDesignWorkspace(initialData[4],{read:readDesign,write:writeDesign,update:updateDesign});
+const KEY=workspace.active?workspace.key('editor'):null;
+// Orders retain their existing browser access contract. Private design/AI data
+// has its own namespace and cannot be restored from an old unassigned cache.
+const privateRead=name=>workspace.active?workspace.read(name):Promise.resolve(undefined);
+const privateWrite=(name,value)=>workspace.write(name,value);
+const privateUpdate=(name,transform,initial)=>workspace.update(name,transform,initial);
+const library=createDesignLibrary(workspace,{validate:pass=>readPass(pass.code,pass)});
+let localDesigns=[],localDesignError='',localDesignBusy=false,reviewPass=null,reviewSaved=false,noticeTimer;
 let state = {designId:'bloom',model:'',caseMaterial:'',pass:null,stationId:'DEMO-01',job:null,source:'collection',photo:'',effect:'original',intensity:65,zoom:100,x:50,y:50,aiStyle:'anime',aiExample:'portrait',artworkLayouts:{},photoArtwork:[],keepCollection:false,photoPlacement:null,photoOrigin:'upload',ai:null,aiJobId:null};
 let storageWarning = false;
 let aiJob=null,aiBusy=false;
 const aiUi={mode:'pair',compare:50,lookMode:'effect',lookCompare:50,accepted:false,error:'',reconnecting:false};
 let cleanupAIStudio=()=>{};
+let cleanupShell=()=>{};
+let cleanupHomePhone=()=>{};
+let cleanupPhoneModels=()=>{};
 const customerUI={email:'',codeSent:false,busy:false,error:'',success:'',ledger:[],ledgerNext:null,ledgerOpen:false,ledgerBusy:false,ledgerError:'',resendAt:0,next:'choose'};
 let resendTimer;
-let membership=await updateDesign('ai-membership-v1',a=>({...refreshMembership(a),server:true,authenticated:false,customer:null,trialRemaining:0,subscription:null}),freshMembership());
-let orderBook=await updateDesign('print-orders-v1',v=>v,freshOrders());
-let checkoutDraft=await readDesign('checkout-draft');
+let membership={...freshMembership(),server:true,authenticated:false,customer:null,...(initialData[4]||{})};
+const stopForStorage=()=>{
+ app.textContent='Browser storage is unavailable. Allow site storage, then reload to try again. Existing designs have not been deleted.';
+ return 'storage-unavailable';
+};
+try{if(workspace.active)membership=await privateUpdate('ai-membership-v1',a=>({...a,...membership,jobs:a.jobs||{}}),freshMembership());}
+catch{return stopForStorage();}
+let orderBook=await updateDesign('print-orders-v1',v=>v,freshOrders()).catch(()=>null);
+if(!orderBook)return stopForStorage();
+let checkoutDraft;
+try{checkoutDraft=singlePrintDraft(await privateRead('checkout-draft'));if(checkoutDraft)await privateWrite('checkout-draft',checkoutDraft);}
+catch{return stopForStorage();}
 for(const order of Object.values(orderBook.orders||{}))if(order.phoneTemplate)try{registerSupplierTemplates([order.phoneTemplate]);}catch{}
 if(checkoutDraft?.phoneTemplate)try{registerSupplierTemplates([checkoutDraft.phoneTemplate]);}catch{}
+let orderLoading=false;
 let orderRows=[],orderPage=1,orderHasMore=false,orderError='',entryOrders=null,entryOrderError='';
 let paymentConfig=null,paymentError='',orderActionError='',paymentOrder=null,stopPaymentPolling=()=>{},paymentPollCount=0,paymentLoading=false,navigationId=0;
 let userPosition=null,locatingStations=false,stationLocationError='';
@@ -90,14 +120,16 @@ function renderStationFinder(){
  const panel=document.querySelector('#pickup-station-panel');if(panel)panel.innerHTML=pickupStationPanel();
  const button=document.querySelector('#print-checkout-form button');if(button&&!checkoutDraft?.editId)button.disabled=passBusy||!pickupCheckoutReady();
 }
-startVisiblePolling({interval:60000,enabled:()=>Boolean(pickupContext())&&!passBusy&&!stationFinder.state.busy,refresh:()=>stationFinder.refresh()});
 
 try {
-  const saved = JSON.parse(localStorage.getItem(KEY));
+  const saved = KEY?JSON.parse(localStorage.getItem(KEY)):null;
   if (saved) {
     if (designs.some(d=>d.id===saved.designId)) state.designId=saved.designId;
-    if (phoneModels.includes(saved.model)) state.model=saved.model;
-    if(['standard','magnetic'].includes(saved.caseMaterial)&&stockSelection(state.model,saved.caseMaterial))state.caseMaterial=saved.caseMaterial;
+    // An unreadable/refreshing catalog cannot establish that this saved model
+    // disappeared. Keep the draft identity, without adding it to sale choices.
+    if (typeof saved.model==='string'&&saved.model.length<=120&&(phoneModels.includes(saved.model)||stockCatalogStatus!=='ready')) state.model=saved.model;
+    if (saved.phoneColor)try{state.phoneColor=frozenPhoneColor(saved.phoneColor);}catch{/* Invalid cached previews cannot be restored. */}
+    if(['standard','magnetic'].includes(saved.caseMaterial)&&(stockSelection(state.model,saved.caseMaterial)||stockCatalogStatus!=='ready'))state.caseMaterial=saved.caseMaterial;
     if (stations.some(s=>s.id===saved.stationId)) state.stationId=saved.stationId;
     if(aiStyles.some(s=>s.id===saved.aiStyle))state.aiStyle=saved.aiStyle;
     state.aiExample=exampleFor(saved.aiExample).id;
@@ -105,7 +137,7 @@ try {
     state.photoOrigin=aiExamples.some(e=>e.origin===saved.photoOrigin)?saved.photoOrigin:'upload';
     if(typeof saved.editOrderId==='string')state.editOrderId=saved.editOrderId;
     if(saved.ai&&/^[a-zA-Z0-9_-]{1,80}$/.test(saved.ai.styleId||''))state.ai=saved.ai;
-    if(typeof saved.aiJobId==='string'){try{aiJob=await updateDesign('ai-job:'+saved.aiJobId,refreshAIOrder);state.aiJobId=aiJob.id;}catch{}
+    if(typeof saved.aiJobId==='string'){try{aiJob=await privateUpdate('ai-job:'+saved.aiJobId,refreshAIOrder);state.aiJobId=aiJob.id;}catch{}
       if(membership.jobs[saved.aiJobId]){aiJob=membership.jobs[saved.aiJobId];state.aiJobId=aiJob.id;}}
     if(saved.artworkLayouts&&typeof saved.artworkLayouts==='object')for(const [id,layout] of Object.entries(saved.artworkLayouts)){
       try{const p=createPersonalPass({source:'collection',designId:id,model:phoneModels[0]||'iPhone 17',effect:'original',intensity:0,zoom:layout.zoom,x:layout.x,y:layout.y,artworkEdits:layout.artworkEdits,addedArtwork:layout.addedArtwork});state.artworkLayouts[id]={zoom:p.zoom,x:p.x,y:p.y,artworkEdits:p.artworkEdits||{},addedArtwork:p.addedArtwork||[]};}catch{}
@@ -115,7 +147,7 @@ try {
     state.keepCollection=saved.keepCollection===true;
     if(effects.some(e=>e.id===saved.effect))state.effect=saved.effect;
     for(const [key,min,max] of [['intensity',0,100],['zoom',100,180],['x',0,100],['y',0,100]])if(Number.isFinite(saved[key]))state[key]=Math.max(min,Math.min(max,saved[key]));
-    try{const photo=await readDesign('draft-photo');if(isPhoto(photo))state.photo=photo;}catch{}
+    try{const photo=await privateRead('draft-photo');if(isPhoto(photo))state.photo=photo;}catch{return stopForStorage();}
     if (saved.pass) {try{state.pass=await resolvePass(saved.pass.code);}catch{}}
     if (saved.job && ['printing','ready','collected'].includes(saved.job.status) && stations.some(s=>s.id===saved.job.stationId)) {
       try{state.job={...saved.job,pass:await resolvePass(saved.job.pass.code)};}catch{}
@@ -123,19 +155,18 @@ try {
   }
 } catch { /* Missing or invalid local data starts a fresh session. */ }
 state.phoneTemplateId=stockSelection(state.model,state.caseMaterial)?.templateId;selectSupplierTemplate(state.model,state.phoneTemplateId);
+if(state.phoneColor||stockSelection(state.model,state.caseMaterial)?.colors?.length)syncDraftColor();
 state.aiExample=exampleFor(state.aiExample).id;
 if(!exampleFor(state.aiExample).results[state.aiStyle])state.aiStyle=Object.keys(exampleFor(state.aiExample).results)[0]||'';
-membership=await updateDesign('ai-membership-v1',a=>migrateRender(a,aiJob),freshMembership());
+try{if(workspace.active)membership=await privateUpdate('ai-membership-v1',a=>migrateRender(a,aiJob),freshMembership());}
+catch{return stopForStorage();}
 if(aiJob)aiJob=membership.jobs[aiJob.id];
 if(aiJob?.status==='awaiting_confirmation')customerUI.next='ai';
 try{if(location.hash.slice(1).split('?')[0]!=='checkout')await syncAIAccount();if(aiJob?.mode==='live')await rememberLiveJob(await refreshLiveRender(aiJob));}catch{/* A saved job can be resumed when the service returns. */}
-let scannedPass = null;
-let noticeTimer;
 let comparing=false,photoBusy=false,passBusy=false;
 let effectPanelOpen=false,cropPanelOpen=false,selectedArtwork=null,libraryExpanded=false;
 const editorPanels={collection:false,graphics:false};
 let canvasExpanded=false,canvasObserver=null,canvasHome=null;
-let modelBrand=phoneBrand(state.model||phoneModels[0]),modelQuery='';
 let textDraft={font:'sans',color:'#242822'},inlineTextId=null;
 function layoutSelection(value){
  if(value.source==='collection'&&value.artworkLayouts)return {...value,zoom:100,x:50,y:50,artworkEdits:{},addedArtwork:[],...value.artworkLayouts[value.designId]};
@@ -159,7 +190,7 @@ function clearPreviousPhotoArtwork(){
 // Saved orders and render snapshots have their own copies and remain resumable.
 async function clearPhotoDraft(){
  finishInlineText();
- await writeDesign('draft-photo','');
+ await privateWrite('draft-photo','');
  Object.assign(state,{photo:'',photoOrigin:'upload',ai:null,effect:'original',intensity:65,zoom:100,x:50,y:50});
  clearPreviousPhotoArtwork();selectedArtwork=null;
  effectPanelOpen=false;cropPanelOpen=false;
@@ -256,19 +287,21 @@ async function resolvePass(code){
  const key=String(code).trim().toUpperCase();orderBook=await readDesign('print-orders-v1')||freshOrders();let order=orderForCode(orderBook,key);
  if(order?.server)order=await refreshOrder(order.id);
  if(order)return currentOrder(orderBook,key).pass;
- return readPass(key,key.startsWith('POP-C-')?await readDesign(key):undefined);
+ return readPass(key,key.startsWith('POP-C-')?await privateRead(key):undefined);
 }
 async function orderAction(order,action,stationId){
  const data=await orderRequest(order.id+'/actions/',{method:'POST',body:{revision:order.revision,action,code:order.pass.code,...(stationId?{station_id:stationId}:{})}});
  return rememberOrder(data);
 }
 function personalizedPreview(selection,model,label,original=false){
- return phone(makePersonalDesign(layoutSelection(selection),original),model).replace(/aria-label="[^"]*"/,`aria-label="${esc(label+' on '+model)}"`).replace('alt="你上传的设计照片"',`alt="Your uploaded photo"`);
+ const changed=selection.phoneColor&&selection.phoneColor.resource.templateId!==phoneTemplate(model,selection.phoneTemplateId)?.id;
+ const note=changed?`<p class="field-note" role="status">${locale()==='zh-CN'?'当前设备模板不适用原机身颜色，已显示基础预览；原订单颜色快照保留。':'The original body color does not match this station template. Showing the base preview; the original order color is preserved.'}</p>`:'';
+ return note+phone(makePersonalDesign(layoutSelection(selection),original),model).replace(/aria-label="[^"]*"/,`aria-label="${esc(label+' on '+model)}"`).replace('alt="你上传的设计照片"',`alt="Your uploaded photo"`);
 }
 const passName=p=>p.version===2?personalPassName(p,designs):currentDesign(p.designId).name;
 const passPreview=p=>p.version===2?personalizedPreview(p,p.model,passName(p)):casePreview(p.designId,p.model);
 const effectCaption=p=>p.source==='photo'&&p.ai?`<span class="effect-caption">✦ ${esc(localized(aiStyles.find(s=>s.id===p.ai.styleId))||t('AI style'))} · ${p.ai.mode==='live'?'AI image':'Demo sample'}</span>`:p.version===2&&p.effect!=='original'&&p.intensity>0?`<span class="effect-caption">${icon('spark',13)} ${effects.find(e=>e.id===p.effect).name} · AI effect preview</span>`:'';
-function updatePreview(){finishInlineText();const note=document.querySelector('#model-preview-note');if(note)note.hidden=!state.model||Boolean(state.phoneTemplateId);const el=document.querySelector('.large-case');if(el&&!(state.source==='photo'&&!state.photo&&!state.keepCollection))el.innerHTML=personalizedPreview(state,state.model||phoneModels[0],state.source==='photo'?'Your photo':currentDesign(state.designId).name,comparing);highlightArtwork();}
+function updatePreview(){finishInlineText();const note=document.querySelector('#model-preview-note');if(note)note.hidden=!state.model||Boolean(state.phoneTemplateId);const el=document.querySelector('.large-case');if(el&&!(state.source==='photo'&&!state.photo&&!state.keepCollection))el.innerHTML=personalizedPreview(state,state.model||phoneModels[0],state.source==='photo'?'Your photo':currentDesign(state.designId).name,comparing);fitCanvasEditor();highlightArtwork();}
 function highlightArtwork(){
  document.querySelector('.artwork-selection-actions')?.remove();
  const canvas=document.querySelector('.artwork-canvas');if(!canvas)return;
@@ -310,10 +343,25 @@ function syncCanvasControls(){
  const value=target?target[selectedArtwork==='all'?'zoom':'scale']:100,slider=dialog.querySelector('#canvas-size');slider.min=selectedArtwork==='all'?50:25;slider.max=selectedArtwork==='all'?180:200;slider.value=value;dialog.querySelector('output').textContent=target?Math.round(value)+'%':'—';
 }
 function fitCanvasEditor(){
- const stage=document.querySelector('.canvas-stage'),canvas=stage?.querySelector('.artwork-canvas'),phone=canvas?.querySelector('.phone-case');if(!canvasExpanded||!phone)return;
- const ratio=phone.offsetWidth/phone.offsetHeight;
- const width=Math.max(45,Math.min(stage.clientWidth-88,(stage.clientHeight-80)*ratio,430));
+ const preview=document.querySelector('.large-preview'),canvas=preview?.querySelector('.artwork-canvas'),phone=canvas?.querySelector('.phone-case');if(!phone)return;
+ const style=getComputedStyle(preview),number=value=>parseFloat(value)||0;
+ const ratioParts=getComputedStyle(phone).aspectRatio.split('/').map(Number);
+ const ratio=ratioParts.length===2&&ratioParts.every(n=>n>0)?ratioParts[0]/ratioParts[1]:phone.offsetWidth/phone.offsetHeight;
+ if(!Number.isFinite(ratio)||ratio<=0)return;
+ const siblings=[...preview.children].filter(el=>el!==canvas&&getComputedStyle(el).position!=='absolute');
+ const reserved=siblings.reduce((sum,el)=>{const cs=getComputedStyle(el);return sum+el.getBoundingClientRect().height+number(cs.marginTop)+number(cs.marginBottom);},0);
+ const extra=Math.max(0,canvas.offsetHeight-phone.offsetHeight);
+ const width=Math.max(1,Math.min(preview.clientWidth-number(style.paddingLeft)-number(style.paddingRight),
+  (preview.clientHeight-number(style.paddingTop)-number(style.paddingBottom)-reserved-extra-8)*ratio,
+  canvasExpanded?430:window.innerWidth<=760?180:225));
  canvas.style.width=width+'px';highlightArtwork();
+}
+function observeCanvasPreview(){
+ canvasObserver?.disconnect();
+ const preview=document.querySelector('.large-preview');if(!preview)return;
+ canvasObserver=new ResizeObserver(fitCanvasEditor);canvasObserver.observe(preview);
+ const tools=preview.querySelector('.template-tools');if(tools)canvasObserver.observe(tools);
+ fitCanvasEditor();
 }
 function openCanvasEditor(){
  const dialog=document.querySelector('.canvas-editor'),preview=document.querySelector('.large-preview');if(!dialog||!preview?.querySelector('.artwork-canvas')||dialog.open)return;
@@ -321,7 +369,7 @@ function openCanvasEditor(){
  canvasHome=document.createComment('editor-preview');preview.before(canvasHome);dialog.querySelector('.canvas-stage').append(preview);
  if(state.source==='photo'&&!selectedArtwork)selectedArtwork='photo';
  document.body.classList.add('canvas-editor-open');dialog.showModal();
- canvasObserver?.disconnect();canvasObserver=new ResizeObserver(fitCanvasEditor);canvasObserver.observe(dialog.querySelector('.canvas-stage'));
+ observeCanvasPreview();
  fitCanvasEditor();
 }
 function closeCanvasEditor({restoreFocus=true}={}){
@@ -329,15 +377,15 @@ function closeCanvasEditor({restoreFocus=true}={}){
  finishInlineText();canvasExpanded=false;canvasObserver?.disconnect();canvasObserver=null;
  const preview=dialog.querySelector('.large-preview');if(preview){canvasHome?.replaceWith(preview);preview.querySelector('.artwork-canvas').style.removeProperty('width');}
  canvasHome=null;dialog.close();document.body.classList.remove('canvas-editor-open');selectedArtwork=null;lastArtworkTap=null;
- document.querySelector('.text-quick-tools')?.remove();updatePreview();save();
+ document.querySelector('.text-quick-tools')?.remove();updatePreview();observeCanvasPreview();save();
  if(restoreFocus)document.querySelector('[data-action="open-canvas"]')?.focus({preventScroll:true});
 }
 const arrow = () => icon('arrow',18);
 const currentDesign = id => designs.find(d=>d.id===id) || designs[0];
 const casePreview = (id,model=phoneModels[0]) => phone(designFor(id),model,'',{loading:'lazy',sizes:'(max-width: 700px) 100px, 180px'}).replace(/aria-label="[^"]*"/,`aria-label="${esc(currentDesign(id).name+' on '+model)}"`);
 function save() {
-  try {const ref=p=>p?.version===2?{code:p.code}:p;localStorage.setItem(KEY,JSON.stringify({...state,photo:undefined,pass:ref(state.pass),job:state.job?{...state.job,pass:ref(state.job.pass)}:null}));storageWarning=false;}
-  catch {storageWarning=true;notify('Your browser could not save this pass. Download the QR code or write down the code.');}
+  try {workspace.check();const ref=p=>p?.version===2?{code:p.code}:p;localStorage.setItem(KEY,JSON.stringify({...state,photo:undefined,pass:ref(state.pass),job:state.job?{...state.job,pass:ref(state.job.pass)}:null}));storageWarning=false;}
+  catch {storageWarning=true;notify('Your design could not be saved on this browser. Please reload and try again.');}
 }
 function notify(message) {
   const el=document.querySelector('#notice');el.textContent=t(message);el.classList.add('visible');
@@ -345,51 +393,49 @@ function notify(message) {
 }
 function go(route) {if(location.hash==='#'+route)render();else location.hash=route;}
 function header() {
-  return `<header class="header wrap"><a class="wordmark" href="#home" aria-label="POPOMO home">${brandLogo()}</a><nav aria-label="Main navigation"><a href="#designs">The designs</a><a href="#orders">My orders</a></nav><a class="account-link" href="#account" aria-label="${membership.authenticated?'My account':'Sign in'}">${icon('user',18)}<span>${membership.authenticated?'My account':'Sign in'}</span></a><a class="saved-link" href="#pass">${icon('scan',18)}<span>My design</span>${state.pass?'<i aria-label="Design saved"></i>':''}</a>${languageControl()}</header>${aiJob&&['queued','generating','ready'].includes(aiJob.status)&&state.ai?.jobId!==aiJob.id?`<div class="ai-resume wrap"><a href="#ai">✦ AI studio · ${aiJob.status==='ready'?'Your AI image is ready':aiJob.status==='queued'?'Waiting in queue':'Rendering'} <span>View render →</span></a></div>`:''}`;
+ const route=location.hash.slice(1).split('?')[0]||'home';
+ return shellHeader({lang:locale(),authenticated:membership.authenticated,language:languageControl(),route})+`${aiJob&&['queued','generating','ready'].includes(aiJob.status)&&state.ai?.jobId!==aiJob.id?`<div class="ai-resume wrap"><a href="#ai">✦ AI studio · ${aiJob.status==='ready'?'Your AI image is ready':aiJob.status==='queued'?'Waiting in queue':'Rendering'} <span>View render →</span></a></div>`:''}`;
 }
-function footer() {
-  if(location.hash.startsWith('#payment')&&paymentOrder)return `<footer class="footer wrap payment-footer"><a href="#home" class="footer-wordmark">POPOMO<span> A little more you.</span></a></footer>`;
-  return `<footer class="footer wrap"><a href="#home" class="footer-wordmark">POPOMO<span> A little more you.</span></a><p>Prototype · Scanning & printing are simulated.</p><a href="#kiosk">Station demo ${arrow()}</a></footer>`;
-}
+function footer() {return shellFooter(locale());}
 function steps(active) {
   return `<ol class="steps" aria-label="Your design journey">${['Pick your design','Confirm & save','Scan & print'].map((label,i)=>`<li ${i===active?'aria-current="step"':''} class="${i===active?'active':i<active?'complete':''}"><span>${i<active?'✓':i+1}</span>${label}</li>`).join('')}</ol>`;
 }
 function home() {
-  const samplePhoto='./assets/ai-styles/pets-original.png';
-  return `<section class="hero photo-home wrap">
-   <div class="hero-scene photo-home-scene"><span class="scene-top">FROM YOUR ALBUM, WITH LOVE.</span><div class="photo-home-art"><figure class="album-snapshot">${imageTag(samplePhoto,{alt:'A pet photo used as a customization example',loading:'eager',sizes:'(max-width: 700px) 55vw, 300px'})}<figcaption>Your favorite photo</figcaption></figure><span class="photo-scene-arrow" aria-hidden="true">${arrow()}</span><div class="hero-case photo-result">${phone({image:samplePhoto},phoneModels[0])}</div><span class="scene-star" aria-hidden="true">✳</span></div><span class="scene-bottom">YOUR PHOTO. YOUR CASE.</span><span class="scene-number">Photo example</span><button type="button" class="photo-upload-target" data-action="home-photo" aria-label="Choose from your album" aria-busy="${photoBusy}" ${photoBusy?'disabled':''}><span class="photo-tap-hint">${icon('upload',15)} ${photoBusy?'Reading your photo…':'Tap the image to choose a photo'}</span></button></div>
-   <div class="photo-home-action"><button type="button" class="photo-up-button" data-action="home-photo" aria-label="Choose from your album" aria-busy="${photoBusy}" ${photoBusy?'disabled':''}>${icon('upload',96)}</button><h1>${photoBusy?'Reading your photo…':'Choose from your album'}</h1><p>Your photo. Your own case.</p><a class="collection-home-link" href="#designs">Browse the gallery ${arrow()}</a></div>
-   <input id="photo-file" data-home-upload type="file" accept="image/jpeg,image/png,image/webp" hidden>
-  </section>
-  <section class="how-section home-how" id="how-it-works"><div class="wrap how-layout"><div><p class="eyebrow">FROM YOUR SCREEN TO YOUR HAND.</p><h2>Your photo.<br>Your case.<br>Your everyday.</h2></div><ol class="how-list"><li><span>01</span><div><h3>Choose a photo you love.</h3><p>Pick a photo from your album, then choose your phone model and adjust the crop. AI effects are optional.</p></div></li><li><span>02</span><div><h3>Keep your code.</h3><p>Preview your design, confirm your ${PRINT_PRICE} print order, then save the QR code.</p></div></li><li><span>03</span><div><h3>Make it real.</h3><p>Show your code to the station scanner. Confirm your prepaid design, then print and collect.</p></div></li></ol></div></section>
-  <section class="collection wrap home-gallery" id="designs"><div class="section-heading"><div><p class="eyebrow">A LITTLE INSPIRATION</p><h2>No photo in mind? Try the gallery.</h2></div><p>Ready-made designs, if you need a starting point.</p></div><div class="design-grid">${designs.map((d,i)=>`<a class="design-card" data-start-design="${d.id}" href="#choose?design=${d.id}" aria-label="Choose ${d.name}"><div class="design-image" style="--card:${d.color}"><span class="card-index">0${i+1}</span><div class="card-case">${casePreview(d.id)}</div><span class="card-arrow">${arrow()}</span></div><div class="card-caption"><div><h3>${d.name}</h3><p>${d.category}</p></div></div></a>`).join('')}</div></section>`;
-}
-function modelResults(){
- const models=findPhoneModels(phoneModels,modelBrand,modelQuery);
- return `<p class="model-result-count" role="status">${models.length} ${models.length===1?'model':'models'} available</p><div class="model-options model-template-options" role="group" aria-label="${esc(modelBrand)} models">${models.map(model=>`<button type="button" data-phone-model="${esc(model)}" aria-label="${esc(model)}" aria-pressed="${model===state.model}"><span class="model-template-preview" aria-hidden="true">${casePreview(state.designId,model)}</span><span class="model-template-name">${esc(model)}</span><span aria-hidden="true">${model===state.model?'✓':'→'}</span></button>`).join('')}</div>${models.length?'':'<p class="model-empty">No matching model. Try another search or brand.</p>'}`;
-}
-function modelPickerBody(){
- if(!phoneModels.length)return `<div class="model-empty" role="status">${stockCatalogStatus==='unavailable'?'Available models could not be loaded. Please try again.':stockCatalogStatus==='updating'?'Inventory is being refreshed. Please try again shortly.':stockScope?'No in-stock models are available at this station.':'No phone models are available right now.'}<button type="button" class="text-button" data-action="refresh-models">Refresh available models</button></div>`;
- return `<div class="model-brand-section"><h2>1. Brand</h2><p class="model-stock-note">${stockScope?'Showing models in stock at the scanned station.':'All phone models are shown. Station stock is checked after scanning.'}</p><div class="model-brands" role="group" aria-label="Phone brand">${phoneBrands(phoneModels).map(brand=>`<button type="button" data-phone-brand="${esc(brand)}" aria-pressed="${brand===modelBrand}">${esc(brand)}</button>`).join('')}</div></div><div class="model-device-section"><label for="model-search">2. Model</label><input id="model-search" type="search" placeholder="Search ${esc(modelBrand)} models" aria-label="Search phone models" aria-describedby="model-first-note" autocomplete="off" value="${esc(modelQuery)}"><div class="model-results">${modelResults()}</div><p id="model-first-note">Choose the exact model in your phone’s settings. Pro and standard cases fit differently.</p></div>`;
+ const gallery=`<section class="collection wrap home-gallery" id="designs"><div class="section-heading"><div><p class="eyebrow">A LITTLE INSPIRATION</p><h2>No photo in mind? Try the gallery.</h2></div><p>Ready-made designs, if you need a starting point.</p><a class="text-button" href="#designs">${locale()==='zh-CN'?'查看全部设计 →':'View all designs →'}</a></div><div class="design-grid">${designs.map((d,i)=>`<a class="design-card" href="#work?id=${d.id}" aria-label="${esc(t('View design')+': '+d.name)}"><div class="design-image" style="--card:${d.color}"><span class="card-index">0${i+1}</span><div class="card-case">${casePreview(d.id)}</div><span class="card-arrow">${arrow()}</span></div><div class="card-caption"><div><h3>${d.name}</h3><p>${d.category}</p></div></div></a>`).join('')}</div></section>`;
+ return homePresentation({lang:locale(),busy:photoBusy,gallery,station:stockScope?`<div class="v35-wrap">${stationContext()}</div>`:''});
 }
 function phonePicker(){
- modelBrand=phoneBrand(state.model||phoneModels[0]);modelQuery='';
- return `<details class="model-first" ${state.model?'':'open'}><summary><span class="model-summary-label">${state.model?'Your phone':'First, choose your phone'}</span><strong class="model-summary-value">${esc(state.model||'')}</strong><span class="model-summary-action">${state.model?'Change':'Choose'}</span><span class="model-summary-chevron" aria-hidden="true">⌄</span></summary><div class="model-first-body">${modelPickerBody()}</div></details><p id="model-preview-note" class="field-note" ${!state.model||state.phoneTemplateId?'hidden':''}>Illustrative preview. The exact case template will be confirmed before printing.</p>`;
+ return `<div class="model-first"><button type="button" class="model-summary-button" data-action="choose-phone" aria-haspopup="dialog"><span class="model-summary-label">${state.model?'Your phone':'First, choose your phone'}</span><strong class="model-summary-value">${esc(state.model||'')}</strong><span class="model-summary-action">${state.model?'Change':'Choose'}</span><span class="model-summary-chevron" aria-hidden="true">⌄</span></button></div><p id="model-preview-note" class="field-note" ${!state.model||state.phoneTemplateId?'hidden':''}>Illustrative preview. The exact case template will be confirmed before printing.</p>`;
+}
+function openModelPicker(forAI=false){
+ cleanupPhoneModels();
+ cleanupPhoneModels=openPhoneModelDialog({root:app,selected:forAI?aiJob?.model:state.model,lang:locale(),catalog:()=>({models:phoneModels,status:stockCatalogStatus,selection:stockSelection}),refresh:refreshStockChoices,
+  onSelect:model=>{if(forAI)void changeAIPhoneModel(model);else selectPhoneModel(model);}});
+}
+function syncDraftColor(reset=false){
+ // Only a current catalog can invalidate a saved color. A transport failure or
+ // pending inventory refresh is not an authoritative empty color list.
+ if(stockCatalogStatus!=='ready')return false;
+ const result=reconcilePhoneColor(reset?null:state.phoneColor,stockSelection(state.model,state.caseMaterial)?.colors||[]);
+ state.phoneColor=result.color;colorNotice=reset?false:colorNotice||result.changed;
+ return result.changed;
+}
+function assertCurrentColor(selection,available){
+ if(!selection.phoneColor&&!available.colors?.length)return;
+ const result=reconcilePhoneColor(selection.phoneColor,available.colors||[]);
+ if(JSON.stringify(result.color)!==JSON.stringify(selection.phoneColor||null))throw Error(locale()==='zh-CN'?'机身颜色已变化，请重新确认预览。':'The phone color changed. Please preview your design again.');
 }
 function selectPhoneModel(model){
  if(!phoneModels.includes(model))return;
- state.model=model;state.caseMaterial='';state.phoneTemplateId=undefined;selectSupplierTemplate(model,undefined);modelBrand=phoneBrand(model);modelQuery='';save();updatePreview();
- for(const button of document.querySelectorAll('[data-design]')){
-  const thumbnail=button.querySelector('.design-thumbnail-case');
-  if(thumbnail)thumbnail.innerHTML=casePreview(button.dataset.design,model);
- }
- const panel=document.querySelector('.model-first');
- panel.querySelector('.model-summary-label').textContent='Your phone';
- panel.querySelector('.model-summary-value').textContent=model;
- panel.querySelector('.model-summary-action').textContent='Change';
- panel.querySelector('.model-first-body').innerHTML=modelPickerBody();
- const styles=document.querySelector('#case-style-panel');if(styles)styles.innerHTML=caseStylePicker(stockSelection(state.model),state.caseMaterial,{lang:locale(),scoped:Boolean(stockScope)});
- localize(panel);panel.open=false;panel.querySelector('summary').focus({preventScroll:true});
+ if(model!==state.model){state.model=model;state.caseMaterial='';state.phoneTemplateId=undefined;selectSupplierTemplate(model,undefined);syncDraftColor(true);reviewPass=null;save();}
+ if(location.hash==='#choose?step=model')history.replaceState(null,'','#choose');
+ render(true);document.querySelector('[data-action="choose-phone"]')?.focus({preventScroll:true});
+}
+function openHomePhone(entry){
+ cleanupHomePhone();
+ cleanupHomePhone=openHomePhoneDialog({root:app,initial:state,lang:locale(),scoped:Boolean(stockScope),
+  catalog:()=>({models:phoneModels,status:stockCatalogStatus,selection:stockSelection}),refresh:refreshStockChoices,
+  onConfirm:choice=>{Object.assign(state,choice);selectSupplierTemplate(state.model,state.phoneTemplateId);colorNotice=false;reviewPass=null;save();if(entry==='photo')openPhotoPicker();else go('choose?source=photo&studio=1');}});
 }
 function openPhotoPicker(){
  // Run inside the click gesture, before any await, so mobile browsers allow it.
@@ -437,7 +483,7 @@ async function receivePhoto(file,{startFresh=false}={}){
  photoBusy=true;render(true);
  try{
   const photo=await importPhoto(file);
-  await writeDesign('draft-photo',photo);
+  await privateWrite('draft-photo',photo);
   Object.assign(state,{photo,photoOrigin:'upload',ai:null,effect:'original',source:'photo',zoom:100,x:50,y:50,intensity:65});
   clearPreviousPhotoArtwork();
   // A homepage upload starts a new design only after the image is safely saved.
@@ -463,7 +509,7 @@ app.addEventListener('drop',async event=>{
 });
 function choose() {
  const d=currentDesign(state.designId),own=state.source==='photo',hasPhoto=Boolean(state.photo);
- return `<section class="flow wrap editor-flow">${stationContext()}${steps(0)}${phonePicker()}<div id="case-style-panel">${caseStylePicker(stockSelection(state.model),state.caseMaterial,{lang:locale(),scoped:Boolean(stockScope)})}</div>
+ return `${designSteps(state.model?1:0,locale())}<section class="flow wrap editor-flow v35-editor">${stationContext()}<div class="v35-editor-heading"><div><p class="v35-kicker">A LITTLE MORE YOU.</p><h1>${locale()==='zh-CN'?'让灵感，成为你的设计。':'Make it yours.'}</h1></div><a class="text-button" href="#my-designs">${locale()==='zh-CN'?'本机保存的设计 →':'Saved on this browser →'}</a></div>${phonePicker()}<div id="case-style-panel">${caseStylePicker(stockSelection(state.model),state.caseMaterial,{lang:locale(),scoped:Boolean(stockScope)})}</div><div id="phone-color-picker">${colorPicker(stockSelection(state.model,state.caseMaterial)?.colors||[],state.phoneColor,locale(),colorNotice)}</div>
  <div class="choose-layout">
   <div class="source-switch editor-sources" role="group" aria-label="Design source"><button type="button" data-source="collection" aria-pressed="${!own}" ${photoBusy?'disabled':''}>The collection</button><button type="button" data-source="photo" aria-pressed="${own}" aria-busy="${photoBusy}" ${photoBusy?'disabled':''}>${photoBusy?'<i class="studio-spinner"></i> Reading your photo…':icon('upload',15)+' Your photo'}</button></div>
   <div class="large-preview" ${own?'data-photo-drop':''} aria-busy="${photoBusy}" style="--card:${own?'#eeece7':d.color}">
@@ -475,35 +521,63 @@ function choose() {
    ${own?'':`<details class="editor-panel" data-editor-panel="collection" ${editorPanels.collection?'open':''}><summary><span class="editor-tool-icon" aria-hidden="true">${icon('image',18)}</span><span>Collection</span><small>${esc(d.name)}</small><span class="editor-chevron" aria-hidden="true">⌄</span></summary><div class="editor-panel-body"><fieldset class="design-choices visual-design-choices"><legend class="sr-only">Pick a design</legend>${designs.map(item=>`<button type="button" data-design="${item.id}" class="design-thumbnail ${d.id===item.id?'selected':''}" aria-label="${item.name}" aria-pressed="${d.id===item.id}" style="--swatch:${designFor(item.id).background}"><span class="design-thumbnail-case">${casePreview(item.id,state.model||phoneModels[0])}</span><span class="design-thumbnail-check" aria-hidden="true">${d.id===item.id?'✓':''}</span></button>`).join('')}</fieldset></div></details>`}
    ${stylePanel(state,aiJob,effectPanelOpen,membership,aiUi)}${creativeLibrary()}
    ${own&&state.ai?'<p class="effect-selection">✓ AI image applied · You can adjust the crop or replace the photo above.</p>':''}
-   <div class="editor-next"><form id="design-form"><button class="button primary full" type="submit" ${photoBusy||passBusy||own&&!hasPhoto||!PRINT_AVAILABLE&&!state.editOrderId?'disabled':''}>${passBusy?'Saving your design…':'Next'} ${arrow()}</button></form></div>
+   <div class="editor-next"><form id="design-form"><button class="button primary full" type="submit" ${photoBusy||passBusy||own&&!hasPhoto?'disabled':''}>${passBusy?(locale()==='zh-CN'?'正在检查设计…':'Checking your design…'):(locale()==='zh-CN'?'预览确认':'Review')} ${arrow()}</button></form><p class="v35-page-note">${locale()==='zh-CN'?'下一步确认机型和设计。':'Next, check your phone model and design.'}</p></div>
   </div>
  </div>${canvasEditor()}</section>`;
 }
+function privateWorkspaceNotice(){
+ const zh=locale()==='zh-CN';
+ return `<section class="v35-page v35-wrap v35-empty"><h1>${zh?'请先核实登录状态。':'Check your sign-in first.'}</h1><p role="alert">${zh?'当前私有视图已清空，设计仍保留在原身份的本机空间。重新载入后从服务端核实身份。':'The private view is cleared. Designs remain in their original local workspace. Reload to verify your session with the server.'}</p><button class="button primary" data-action="reload-private-workspace">${zh?'重新载入':'Reload'}</button><a class="text-button" href="#home">${zh?'返回首页':'Home'}</a></section>`;
+}
+async function loadLocalDesigns(){
+ localDesignBusy=true;localDesignError='';
+ try{
+  // Frozen preview templates can survive their removal from the current catalog.
+  const rows=await privateRead('saved-designs')||[];
+  for(const row of rows)if(row.phoneTemplate?.id?.startsWith('supplier-'))registerSupplierTemplates([row.phoneTemplate]);
+  localDesigns=await library.list();
+ }catch(error){localDesigns=[];localDesignError=error.message;}
+ finally{localDesignBusy=false;}
+}
+async function restoreLocalDesign(pass){
+ const p=readPass(pass.code,pass);
+ if(p.source==='photo')await privateWrite('draft-photo',p.photo);
+ workspace.check();finishInlineText();
+ Object.assign(state,{source:p.source,designId:p.designId,model:phoneModels.includes(p.model)||stockCatalogStatus!=='ready'?p.model:'',caseMaterial:p.caseMaterial||'',phoneTemplateId:p.phoneTemplateId,phoneColor:p.phoneColor||null,photo:p.source==='photo'?p.photo:'',effect:p.effect,intensity:p.intensity,zoom:p.zoom,x:p.x,y:p.y,ai:p.ai||null,aiJobId:null,photoOrigin:'upload',photoArtwork:p.source==='photo'?structuredClone(p.addedArtwork||[]):[],photoPlacement:structuredClone(p.photoPlacement||null),keepCollection:Boolean(p.collectionLayout),artworkLayouts:{},pass:null,job:null,editOrderId:null});
+ if(p.source==='collection')state.artworkLayouts[p.designId]={zoom:p.zoom,x:p.x,y:p.y,artworkEdits:structuredClone(p.artworkEdits||{}),addedArtwork:structuredClone(p.addedArtwork||[])};
+ if(p.collectionLayout)state.artworkLayouts[p.designId]={...structuredClone(p.collectionLayout),addedArtwork:[]};
+ if(stockCatalogStatus==='ready'&&!stockSelection(state.model,state.caseMaterial))state.caseMaterial='';
+ const currentTemplate=stockSelection(state.model,state.caseMaterial)?.templateId;
+ const templateChanged=Boolean(currentTemplate&&currentTemplate!==state.phoneTemplateId);
+ if(currentTemplate)state.phoneTemplateId=currentTemplate;
+ syncDraftColor();aiJob=null;selectedArtwork=null;comparing=false;reviewPass=null;save();go('choose');
+ if(templateChanged)notify(locale()==='zh-CN'?'机型模板已变化，请重新确认预览。':'The phone template changed. Please preview your design again.');
+ if(!state.model)notify('This phone model is out of stock or unavailable. Please choose again.');
+}
+async function prepareDesignReview(submitted){
+ if(!phoneModels.includes(submitted.model))throw Error('Choose your phone model first.');
+ if(submitted.source==='photo'&&!isPhoto(submitted.photo))throw Error('Choose a photo first.');
+ await refreshStockChoices();
+ if(!submitted.caseMaterial)throw Error('Choose your case style first.');
+ const available=stockSelection(submitted.model,submitted.caseMaterial);
+ if(!available)throw Error(stockScope?'This phone model is out of stock or unavailable. Please choose again.':'This phone model is unavailable. Please choose again.');
+ if(submitted.phoneTemplateId&&submitted.phoneTemplateId!==available.templateId){state.phoneTemplateId=available.templateId;throw Error('The phone template changed. Please review your design again.');}
+ assertCurrentColor(submitted,available);
+ const pass=createPersonalPass({...layoutSelection(submitted),phoneTemplateId:available.templateId});
+ return pass;
+}
+function closeDesignReview(){reviewPass=null;reviewSaved=false;go('choose');}
 function passPage() {
  const pass=state.pass,zh=locale()==='zh-CN',say=(en,cn)=>zh?cn:en;
  if(!pass)return `<section class="empty wrap"><h1>${say('Choose your photo first.','先选择你的照片。')}</h1><a class="button primary" href="#choose">${say('Create a design','开始设计')}</a></section>`;
  const order=orderForCode(orderBook,pass.code);
  if(isProviderOrder(order))return `<section class="empty wrap"><p>${say('Opening your order…','正在打开订单…')}</p><a class="button primary" href="#${esc(providerOrderRoute(order))}">${say('Open order','打开订单')}</a></section>`;
  const price=order?money(order.priceCents):PRINT_PRICE;
- return `<section class="flow wrap review-flow payment-flow"><div class="ai-heading"><h1>${say('Your design is saved.','设计已保存。')}</h1><p>${order?say('Demo order — no real payment was taken.','演示订单，未实际收款。'):say('Review your design before placing an order.','请确认设计后下单。')}</p></div><div class="ai-order-layout"><div class="checkout-preview"><div class="checkout-case">${passPreview(pass)}</div><h2>${passName(pass)}</h2><p>${esc(pass.model)}${pass.caseMaterial?' · '+esc(caseMaterialLabel(pass.caseMaterial,locale())):''}</p>${effectCaption(pass)}</div><div class="ai-order-card">${order?`<p class="eyebrow">${esc(orderStatus(order.status,order.refund))} · ${say('DEMO','演示')}</p><h2>${esc(order.currency||'USD')} ${price}</h2>`:''}${previewStationPanel(order,{station:scannedStation,scope:stockScope,lang:locale()})}<a class="button secondary full" href="#choose" data-action="new-order-from-pass">${say('Use this design for a new order','使用此设计重新下单')}</a>${order?.server?`<details class="payment-receipt"><summary>${say('Order details','订单详情')}</summary><p>${esc(order.id)}</p><a class="text-button" href="#orders">${say('View all my orders →','查看全部订单 →')}</a></details>`:''}</div></div></section>`;
+ return `<section class="flow wrap review-flow payment-flow v35-checkout"><div class="ai-heading"><h1>${say('Your design is saved.','设计已保存。')}</h1><p>${order?say('Demo order — no real payment was taken.','演示订单，未实际收款。'):say('Review your design before placing an order.','请确认设计后下单。')}</p></div><div class="ai-order-layout"><div class="checkout-preview"><div class="checkout-case">${passPreview(pass)}</div><h2>${passName(pass)}</h2><p>${esc(pass.model)}${pass.caseMaterial?' · '+esc(caseMaterialLabel(pass.caseMaterial,locale())):''}</p>${effectCaption(pass)}</div><div class="ai-order-card">${order?`<p class="eyebrow">${esc(orderStatus(order.status,order.refund))} · ${say('DEMO','演示')}</p><h2>${esc(order.currency||'USD')} ${price}</h2>`:''}${previewStationPanel(order,{station:scannedStation,scope:stockScope,lang:locale()})}<a class="button secondary full" href="#choose" data-action="new-order-from-pass">${say('Use this design for a new order','使用此设计重新下单')}</a>${order?.server?`<details class="payment-receipt"><summary>${say('Order details','订单详情')}</summary><p>${esc(order.id)}</p><a class="text-button" href="#orders">${say('View all my orders →','查看全部订单 →')}</a></details>`:''}</div></div></section>`;
 }
-function kioskPage() {
-  const job=state.job;
-  if(job && ['printing','ready','collected'].includes(job.status))return printPage(job);
-  const p=scannedPass;
-  const availability=p?stationAvailability(state.stationId,p):null;
-  const order=p?orderForCode(orderBook,p.code):null,paid=order?.mode==='demo'&&order?.status==='paid'&&order.pass.code===p?.code;
- const price=order?money(order.priceCents):PRINT_PRICE;
-  return `<section class="flow wrap station-flow">${steps(2)}<div class="station-top"><span class="station-dot"></span> POPOMO STATION <span class="demo-badge">DEMO</span></div><h1>${p?'Looks like you.':'Hello, good taste.'}</h1><p class="intro">${p?'Confirm your design and phone model before printing.':'Scan your design pass at the machine to get started.'}</p><div class="station-card">${p?`<div class="station-review"><div class="station-case">${passPreview(p)}</div><div><p class="eyebrow">DESIGN RECOGNIZED</p><h2>${passName(p)}</h2><p>${esc(p.model)}</p>${effectCaption(p)}<span class="human-code">${p.code}</span></div></div>`:`<div class="scanner-icon">${icon('scan',58)}</div><form id="scan-form"><label for="design-code">Enter your design code</label><div class="scan-input"><input id="design-code" name="code" placeholder="POP-1117" maxlength="32" required autocomplete="off" autocapitalize="characters" aria-describedby="scan-error"><button class="button primary" type="submit">Find design ${arrow()}</button></div><p id="scan-error" class="error" role="alert"></p></form>${state.pass?'<button class="text-button" data-action="scan-saved">Simulate scanning my saved pass</button>':''}`}
-  <label class="station-label" for="station">Demo machine</label><select id="station">${stations.map(s=>`<option value="${s.id}" ${s.id===state.stationId?'selected':''}>${s.name}</option>`).join('')}</select>${p?`<p class="availability ${availability.ok?'available':'unavailable'}" role="status">${icon(availability.ok?'check':'clock',17)} ${availability.message}</p><div class="price-row station-print-price"><span>${paid?'Print order · Demo paid':'Standard printing'}</span><strong>${price}</strong></div><p class="field-note">${paid?'Already paid in the demo order. No second print charge.':'Confirm a print order before starting.'}</p><button class="button primary full" data-action="start-print" ${availability.ok&&paid?'':'disabled'}>Start prepaid demo print ${arrow()}</button>${!paid?'<a class="text-button" href="#choose">Review a new print order →</a>':''}<button class="text-button" data-action="rescan">Use a different code</button>`:''}</div><p class="demo-note">Station preview · No camera or printer is connected.<br>Printing and collection below are simulated.</p></section>`;
+function publicStationPage(legacy=false){
+ return locationsPage({lang:locale(),station:scannedStation,hasScope:Boolean(stockScope),error:stationError,busy:passBusy,legacy});
 }
-function printPage(job) {
-  const status=job.status;
-  const d=currentDesign(job.pass.designId);
-  const titles={printing:'A little magic in progress.',ready:'Your case is ready.',collected:'Go make it your everyday.'};
-  return `<section class="flow wrap station-flow">${steps(2)}<div class="station-top">POPOMO STATION <span class="demo-badge">DEMO</span></div><div class="completion-icon ${status==='printing'?'working':''}">${icon(status==='printing'?'spark':'check',32)}</div><h1>${titles[status]}</h1><p class="intro">${status==='printing'?'Your design is making itself at home.':status==='ready'?'Take your new case from the collection tray.':'A small thing. A little more you.'}</p><div class="print-summary"><div class="station-case">${passPreview(job.pass)}</div><h2>${passName(job.pass)}</h2>${effectCaption(job.pass)}<p>${esc(job.pass.model)} · ${esc(job.stationId)}</p><ol class="print-progress">${['Design confirmed','Printing','Ready to collect'].map((label,i)=>`<li class="${i<=(status==='printing'?1:2)?'done':''}"><span>${icon('check',14)}</span>${label}</li>`).join('')}</ol>${status==='collected'?'<button class="button primary full" data-action="finish-session">Back to the designs '+arrow()+'</button>':`<button class="button primary full" data-action="advance-print">${status==='printing'?'Finish demo print':'I’ve collected my case'} ${arrow()}</button>`}</div><p class="demo-note">Demo only · No physical item has been printed.</p></section>`;
-}
-function orderStatus(status,refund){if(refund)return ({requested:'Checking refund status.',pending:'Refund processing.',succeeded:'Payment refunded.',failed:'Refund could not be completed.'})[refund.status]||'Checking refund status.';return ({pending:'Awaiting payment',paid:'Paid',printing:'Printing',ready:'Ready to collect',completed:'Collected',collected:'Collected',cancelled:'Cancelled'})[status]||status;}
 function stationContext(){
  if(!scannedIds)return '';
  const zh=locale()==='zh-CN';
@@ -516,7 +590,8 @@ async function savedOrderRoute(id){
  if(isProviderOrder(order))paymentOrder=order;
  save();return isProviderOrder(order)?'payment?order='+order.id:'pass';
 }
-function ordersPage(){return `<section class="flow wrap">${stationContext()}<div class="ai-heading"><p class="eyebrow">YOUR DESIGNS, ALL TOGETHER.</p><h1>My orders.</h1><p>Your orders are saved on the server and accessible from this browser.</p></div><button class="text-button" data-action="refresh-orders">Refresh orders ↻</button>${orderError?`<p class="error" role="alert">${esc(orderError)}</p>`:''}${orderRows.length?`<div class="order-list">${orderRows.map(o=>`<article class="order-row"><div><span class="eyebrow">${esc(progressPaymentText(o.progress,locale()))} · ${paymentLabel(o.mode)}</span><h2>${esc(o.model_name)}</h2>${o.case_material?`<p>${esc(caseMaterialLabel(o.case_material,locale()))}</p>`:''}<p>${deliveryLabel(o.fulfillment_type,locale())}</p>${progressPanel(o.progress,{lang:locale(),compact:true})}${o.refund?`<p>${esc(orderStatus(o.status,o.refund))}</p>`:''}<p>${esc(o.reference)}</p><small>${new Date(o.created_at).toLocaleString(locale())}</small></div><div><strong>${esc(o.currency)} ${Number(o.amount).toFixed(2)}</strong><button class="button secondary" data-action="view-order" data-id="${esc(o.reference)}">${o.status==='pending'?(locale()==='zh-CN'?'继续付款 →':'Continue payment →'):(locale()==='zh-CN'?'查看打印进度 →':'View print progress →')}</button></div></article>`).join('')}</div><div class="pass-actions">${orderPage>1?`<button class="text-button" data-action="orders-page" data-page="${orderPage-1}">← Previous</button>`:''}${orderHasMore?`<button class="text-button" data-action="orders-page" data-page="${orderPage+1}">Next →</button>`:''}</div>`:'<div class="empty"><h2>Your first design is waiting.</h2><p>Confirm a print order to see it here.</p><a class="button primary" href="#choose">Create a design →</a></div>'}<p class="demo-note">Keep this browser’s site data to retain access to your orders. Test payments and demo payments do not charge money.</p></section>`;}
+function ordersPage(){return `<section class="flow wrap v35-orders" aria-busy="${orderLoading}">${stationContext()}<div class="ai-heading"><p class="eyebrow">YOUR DESIGNS, ALL TOGETHER.</p><h1>My orders.</h1><p>Your orders are saved on the server and accessible from this browser.</p></div><button class="text-button" data-action="refresh-orders" ${orderLoading?'disabled':''}>Refresh orders ↻</button>${orderLoading?'<p class="v35-order-notice" role="status">Loading your orders…</p>':orderError?`<p class="error" role="alert">${esc(orderError)}</p>`:orderRows.length?`<div class="order-list">${orderRows.map(o=>`<article class="order-row"><div><span class="eyebrow">${esc(o.progress?progressPaymentText(o.progress,locale()):orderStatus(o.status,o.refund))} · ${paymentLabel(o.mode)}</span><h2>${esc(o.model_name)}</h2>${o.case_material?`<p>${esc(caseMaterialLabel(o.case_material,locale()))}</p>`:''}<p>${deliveryLabel(o.fulfillment_type,locale())}</p>${progressPanel(o.progress,{lang:locale(),compact:true})}${o.refund?`<p>${esc(orderStatus(o.status,o.refund))}</p>`:''}<p>${esc(o.reference)}</p><small>${new Date(o.created_at).toLocaleString(locale())}</small></div><div><strong>${esc(o.currency)} ${Number(o.amount).toFixed(2)}</strong><button class="button secondary" data-action="view-order" data-id="${esc(o.reference)}">${o.status==='pending'?(locale()==='zh-CN'?'继续付款 →':'Continue payment →'):(locale()==='zh-CN'?'查看打印进度 →':'View print progress →')}</button></div></article>`).join('')}</div><div class="pass-actions">${orderPage>1?`<button class="text-button" data-action="orders-page" data-page="${orderPage-1}">← Previous</button>`:''}${orderHasMore?`<button class="text-button" data-action="orders-page" data-page="${orderPage+1}">Next →</button>`:''}</div>`:'<div class="empty"><h2>Your first design is waiting.</h2><p>Confirm a print order to see it here.</p><a class="button primary" href="#choose">Create a design →</a></div>'}<p class="demo-note">Keep this browser’s site data to retain access to your orders. Test payments and demo payments do not charge money.</p></section>`;}
+function orderStatus(status,refund){if(refund)return ({requested:'Checking refund status.',pending:'Refund processing.',succeeded:'Payment refunded.',failed:'Refund could not be completed.'})[refund.status]||'Checking refund status.';return ({pending:'Awaiting payment',paid:'Paid',printing:'Printing',ready:'Ready to collect',completed:'Collected',collected:'Collected',cancelled:'Cancelled'})[status]||status;}
 function isProviderOrder(order){return (/^(stripe|airwallex)_(test|live)$/.test(order?.mode||'')||order?.mode==='free_test');}
 function providerName(provider){return provider==='free'?(locale()==='zh-CN'?'0 元免付联调':'No-charge test'):provider==='airwallex'?'Airwallex':'Stripe';}
 function paymentLabel(mode){return ({free_test:locale()==='zh-CN'?'0 元免付联调':'NO-CHARGE TEST',stripe_test:'STRIPE TEST',stripe_live:'STRIPE',airwallex_test:'AIRWALLEX TEST',airwallex_live:'AIRWALLEX',demo:'DEMO PAYMENT'})[mode]||'ORDER';}
@@ -533,8 +608,9 @@ function deviceFulfillmentPanel(order){
  if(['refund','closed'].includes(v.state))return '';
  if(!f&&!scopeIds(stockScope))return `<section class="device-fulfillment"><h3>${say('Print at a station','设备打印')}</h3>${stationScanPrompt(locale())}</section>`;
  if(!devicePrinting.enabled)return `<section class="device-fulfillment"><h3>${say('Print at a station','设备打印')}</h3>${f?stationIdentity({name:f.device_name,location:f.device_location,number:f.device_number,device_id:f.device_id,coordinates:f.device_coordinates},{lang:locale(),navigation:!pickupContext()}):scannedStation?stationIdentity(scannedStation,{lang:locale(),navigation:!pickupContext()}):''}<p role="status">${say('Sending orders to this station is not available yet. Your order is saved. Please contact staff.','设备推单暂未开放，订单已保存，请联系工作人员。')}</p>${order.status==='paid'?`<button class="button primary full" disabled>${say('I’m at this printer — send order','确认在打印机前并推单')}</button>`:''}</section>`;
+ const simulationNotice=f?.simulated?`<p role="status">${say('Direct backend simulation — no physical printing or dispensing.','服务端直连模拟：不会实际打印或出货。')}</p><p>${say('Simulation progress: ','模拟进度：')}${esc(v.phase||v.state)}</p>`:'';
  const ids=scopeIds(stockScope),selection=stockSelection(order.pass.model,order.pass.caseMaterial);
- return `<section class="device-fulfillment" aria-label="${say('Station printing','设备打印')}"><h3>${say('Print at a station','设备打印')}</h3>${f?`${stationIdentity({name:f.device_name,location:f.device_location,number:f.device_number,device_id:f.device_id,coordinates:f.device_coordinates},{lang:locale(),navigation:!pickupContext()})}${v.releasePending?`<button class="button primary full" disabled>${say('Print now','立即打印')}</button><small role="status">${f.zero_release_unconfirmed?say('Your order was sent. Zero-amount printing is awaiting supplier confirmation.','订单已推送，0 元开印仍待供应商确认支持。'):say('Immediate printing is unavailable at this station. Your order is saved; please contact staff.','此设备暂不能确认开印，订单已保存，请联系工作人员。')}</small>`:''}${v.canPrint?`<button class="button primary full" data-action="confirm-device-print" ${passBusy?'disabled':''}>${say('Print now','立即打印')}</button><small>${say('Confirm that you are at this station before printing.','请确认你已在这台设备前。')}</small>`:''}${(v.state==='draft'||v.canRetry)?`<button class="button primary full" data-action="send-device-order" ${passBusy?'disabled':''}>${order.status==='paid'?say('I’m at this printer — send order','确认在打印机前并推单'):say('Prepare print files','准备打印文件')}</button>`:''}`:
+ return `<section class="device-fulfillment" aria-label="${say('Station printing','设备打印')}"><h3>${say('Print at a station','设备打印')}</h3>${simulationNotice}${f?`${stationIdentity({name:f.device_name,location:f.device_location,number:f.device_number,device_id:f.device_id,coordinates:f.device_coordinates},{lang:locale(),navigation:!pickupContext()})}${v.releasePending?`<button class="button primary full" disabled>${say('Print now','立即打印')}</button><small role="status">${f.zero_release_unconfirmed?say('Your order was sent. Zero-amount printing is awaiting supplier confirmation.','订单已推送，0 元开印仍待供应商确认支持。'):say('Immediate printing is unavailable at this station. Your order is saved; please contact staff.','此设备暂不能确认开印，订单已保存，请联系工作人员。')}</small>`:''}${v.canPrint?`<button class="button primary full" data-action="confirm-device-print" ${passBusy?'disabled':''}>${say('Print now','立即打印')}</button><small>${say('Confirm that you are at this station before printing.','请确认你已在这台设备前。')}</small>`:''}${(v.state==='draft'||v.canRetry)?`<button class="button primary full" data-action="send-device-order" ${passBusy?'disabled':''}>${order.status==='paid'?say('I’m at this printer — send order','确认在打印机前并推单'):say('Prepare print files','准备打印文件')}</button>`:''}`:
  ids?`${scannedStation?stationIdentity(scannedStation,{lang:locale(),navigation:!pickupContext()}):`<p>${esc(deviceInfoErrorMessage(stationError,locale()))}</p><small>${say('Device ID','设备编号')}：${esc(ids.device_id)}</small><button class="text-button" data-action="refresh-device-info" ${passBusy?'disabled':''}>${say('Refresh station details','刷新设备信息')}</button>`}${selection&&scannedStation?`<div class="checkout-case">${passPreview({...order.pass,phoneTemplateId:selection.templateId})}</div><p>${say('Check this station’s template before sending.','请确认此设备的机型预览，再发送订单。')}</p><button class="button primary full" data-action="send-device-order" ${passBusy?'disabled':''}>${order.status==='paid'?say('I’m at this printer — send order','确认在打印机前并推单'):say('Use this printer','使用此打印设备')}</button>`:`<p>${scannedStation?say('This station has no stock for this phone model and case style. Scan another station.','此设备暂无该机型和款式的库存，请扫描其他设备。'):''}</p>`}`:
  stationScanPrompt(locale())}</section>`;
 }
@@ -547,7 +623,7 @@ function providerOrderPage(order){
  const headline=order.progress&&!order.refund&&!view.pending?progressPaymentText(order.progress,locale()):view.title;
  const headingMessage=order.progress&&!order.refund&&!view.pending?(locale()==='zh-CN'?'订单已保存，打印与出货进度见下方。':'Your order is saved. See printing and dispensing progress below.'):view.message;
  const canStartNew=['ready','completed','collected','cancelled'].includes(order.status)||order.refund?.status==='succeeded';
- return `<section class="flow wrap review-flow payment-flow ${view.fulfilled?'payment-fulfilled':''}" data-active-order="${esc(order.id)}"><div class="ai-heading">${view.fulfilled?'':`<p class="eyebrow">${paymentLabel(order.mode)}</p>`}<h1>${esc(headline)}</h1><p role="status">${esc(headingMessage)}</p></div>${progressPanel(order.progress,{lang:locale()})}<div id="pickup-station-panel">${pickupStationPanel()}</div>
+ return `<section class="flow wrap review-flow payment-flow v35-checkout ${view.fulfilled?'payment-fulfilled':''}" data-active-order="${esc(order.id)}"><div class="ai-heading">${view.fulfilled?'':`<p class="eyebrow">${paymentLabel(order.mode)}</p>`}<h1>${esc(headline)}</h1><p role="status">${esc(headingMessage)}</p></div>${progressPanel(order.progress,{lang:locale()})}<div id="pickup-station-panel">${pickupStationPanel()}</div>
  <div class="ai-order-layout"><div class="checkout-preview"><div class="checkout-case">${passPreview(order.pass)}</div><h2>${passName(order.pass)}</h2><p>${esc(order.pass.model)}${order.pass.caseMaterial?' · '+esc(caseMaterialLabel(order.pass.caseMaterial,locale())):''}</p></div>
  <div class="ai-order-card" aria-busy="${passBusy}">${view.fulfilled?'':`<p class="eyebrow">${esc(orderStatus(order.status,order.refund))}</p><h2>${esc(order.currency)} ${money(order.priceCents)}</h2>`}
  ${order.mode==='free_test'?`<p class="payment-environment">${locale()==='zh-CN'?'0 元免付联调，不产生实际收款。':'No-charge test order. No payment was collected.'}</p>`:order.mode.endsWith('_test')?`<p class="payment-environment">${provider} test mode · No real charge.</p>`:view.pending?'<p class="payment-environment">Live payment · Your payment method will be charged.</p>':''}
@@ -560,7 +636,7 @@ function providerOrderPage(order){
  <details class="payment-receipt" data-order="${esc(order.id)}" ${receiptOpen?'open':''}><summary><span>Order details</span><span>${view.fulfilled?`${esc(order.currency)} ${money(order.priceCents)}`:''}</span></summary><div class="payment-receipt-body"><dl><div><dt>Order number</dt><dd>${esc(order.id)}</dd></div><div><dt>Delivery method</dt><dd>${deliveryLabel(order.fulfillmentType,locale())}</dd></div><div><dt>Payment method</dt><dd>${provider}</dd></div><div><dt>Order status</dt><dd>${esc(orderStatus(order.status,order.refund))}</dd></div></dl><a class="text-button" href="#orders">View all my orders →</a><p class="field-note">Keep this browser’s site data to retain access to your order.</p></div></details>
  ${canStartNew?'<a class="button secondary full payment-next-design" href="#choose">Create a new design →</a>':''}</div></div></section>`;
 }
-function paymentPage(){return paymentOrder?providerOrderPage(paymentOrder):`<section class="empty wrap"><h1>Payment status</h1><p class="error" role="alert">${esc(paymentError||'Loading your order…')}</p><button class="text-button" data-action="refresh-payment">Refresh payment status</button><a class="text-button" href="#orders">View all my orders →</a></section>`;}
+function paymentPage(){return paymentOrder?providerOrderPage(paymentOrder):`<section class="empty wrap v35-checkout" aria-busy="${!paymentError}"><h1>Payment status</h1><p class="${paymentError?'error':'v35-order-notice'}" role="${paymentError?'alert':'status'}">${esc(paymentError||'Loading your order…')}</p><button class="text-button" data-action="refresh-payment">Refresh payment status</button><a class="text-button" href="#orders">View all my orders →</a></section>`;}
 function schedulePaymentPoll(){
  stopPaymentPolling();
  if(!paymentOrder)return;
@@ -590,7 +666,7 @@ function quoteBreakdown(pass,price,editing){
   <div><dt>AI image</dt><dd>${hasAI?'Already generated':'Not used'}</dd></div>
   ${editing?`<div><dt>Already paid · Demo</dt><dd>${price}</dd></div><div><dt>Design update</dt><dd>$0.00</dd></div>`:''}
   <div class="quote-total"><dt>${paidCheckout||paymentConfig?.zero_price_test?'Total due':'Total due · Demo'}</dt><dd>${editing?'$0.00':price}</dd></div>
- </dl>${hasAI?'<p class="quote-note">AI generation uses your separate allowance. It is not charged again with this print.</p>':''}<p class="quote-note">${paymentConfig?.zero_price_test?(locale()==='zh-CN'?'0 元免付联调：不扣款，可推单；0 元开印待供应商确认。':'No-charge integration test: orders can be sent; zero-amount printing awaits supplier confirmation.'):paidCheckout?(paymentConfig.mode==='test'?`${provider} test mode · No real charge.`:`Pay securely with ${provider}. Your payment method will be charged.`):'No real payment is taken in this demo.'}</p></section>`;
+ </dl>${hasAI?'<p class="quote-note">AI generation uses your separate allowance. It is not charged again with this print.</p>':''}<p class="quote-note">${devicePrinting.simulated?(locale()==='zh-CN'?'服务端直连模拟：0 元、不扣款、不实际打印。':'Direct backend simulation: no charge and no physical printing.'):paymentConfig?.zero_price_test?(locale()==='zh-CN'?'0 元免付联调：不扣款，可推单；0 元开印待供应商确认。':'No-charge integration test: orders can be sent; zero-amount printing awaits supplier confirmation.'):paidCheckout?(paymentConfig.mode==='test'?`${provider} test mode · No real charge.`:`Pay securely with ${provider}. Your payment method will be charged.`):'No real payment is taken in this demo.'}</p></section>`;
 }
 function checkoutPage(){
  if(!checkoutDraft)return '<section class="empty wrap"><h1>Choose your design first.</h1><a class="button primary" href="#choose">Back to your design</a></section>';
@@ -598,36 +674,45 @@ function checkoutPage(){
  const delivery=order?.fulfillmentType||checkoutDraft.fulfillmentType||'pickup',pickup=delivery==='pickup';
  const price=order?money(order.priceCents):PRINT_PRICE;
  const provider=providerName(paymentConfig?.provider),paidCheckout=['stripe','airwallex'].includes(paymentConfig?.provider)&&!editId;
- return `<section class="flow wrap review-flow">${pickup?steps(1):''}<a class="back-link" href="#choose">← Keep editing</a><div class="ai-heading"><p class="eyebrow">REVIEW YOUR PRINT · ${paymentConfig?.zero_price_test?provider:paidCheckout?provider.toUpperCase():paymentConfig||editId?'DEMO':'CHECKOUT'}</p><h1>${editId?'Make it just right.':'Happy with your design?'}</h1><p>Check your artwork and phone model before confirming.</p></div><div class="ai-order-layout"><div class="checkout-preview"><div class="checkout-case">${passPreview(pass)}</div><h2>${passName(pass)}</h2><p>${esc(pass.model)}${pass.caseMaterial?' · '+esc(caseMaterialLabel(pass.caseMaterial,locale())):''}</p>${effectCaption(pass)}</div><div class="ai-order-card">${!editId?deliveryOptions(delivery,locale(),{pickupDetails:pickupStationPanel()}):''}${pickup&&scannedStation?stationIdentity(scannedStation,{lang:locale(),navigation:false}):''}${pickup&&(paymentConfig||editId)?quoteBreakdown(pass,price,Boolean(editId)):''}${pickup?`<p class="field-note">${paidCheckout||paymentConfig?.zero_price_test?'Check your design carefully. The artwork is locked when the payment order is created.':'You can edit your design until printing starts. Saving a revision updates your design. After printing starts, changes need a new order.'}</p>`:''}${!pickup?`<p class="delivery-notice" role="status">${locale()==='zh-CN'?'快递／空运配送暂未开放，设计已保存，暂不收款。可返回继续编辑，或选择设备现场自取。':'Courier and air delivery are coming soon. Your design is saved and checkout is paused. You can keep editing or choose on-site pickup.'}</p>`:paymentLoading?'<p role="status" aria-live="polite">Loading checkout… If the service is busy, we will retry up to 3 times.</p>':!editId&&(!paymentConfig?.available||paymentError)?`<p class="error" role="alert">${esc(paymentError||'Payment is unavailable. Please try again later.')}</p><button class="text-button" data-action="refresh-payment">Reload checkout</button>`:!PRINT_AVAILABLE&&!editId?'<p class="error">Printing is unavailable. Please reload and try again.</p>':locked?'<p class="error">This order has started printing. Return to My design to create a new order.</p>':`<form id="print-checkout-form">${!editId?checkoutEmailField(membership):''}<label class="ai-consent"><input name="accepted" type="checkbox" required><span>I confirm this design and phone model. ${editId?'Update my existing design at no extra printing charge.':paidCheckout?`Pay ${price} for one case with ${provider}.${paymentConfig.mode==='test'?' Test mode: no real charge.':''}`:paymentConfig?.zero_price_test?'Create a no-charge integration order. Confirm at the station to start a real print.':`Simulate a ${price} payment for one print. No real charge.`} The design and any photo will be securely saved with this order.</span></label><button class="button primary full" ${!editId&&!pickupCheckoutReady()?'disabled':''}>${editId?'Save design changes':paidCheckout?`Pay ${price} with ${provider}`:paymentConfig?.zero_price_test?'Complete free test order':`Confirm ${price} test order`}</button></form>`}</div></div></section>`;
+ return `<section class="flow wrap review-flow v35-checkout">${pickup?steps(1):''}<a class="back-link" href="#choose">← Keep editing</a><div class="ai-heading"><p class="eyebrow">REVIEW YOUR PRINT · ${paymentConfig?.zero_price_test?provider:paidCheckout?provider.toUpperCase():paymentConfig||editId?'DEMO':'CHECKOUT'}</p><h1>${editId?'Make it just right.':'Happy with your design?'}</h1><p>Check your artwork and phone model before confirming.</p></div><div class="ai-order-layout"><div class="checkout-preview"><div class="checkout-case">${passPreview(pass)}</div><h2>${passName(pass)}</h2><p>${esc(pass.model)}${pass.caseMaterial?' · '+esc(caseMaterialLabel(pass.caseMaterial,locale())):''}</p>${effectCaption(pass)}</div><div class="ai-order-card">${singlePrintNotice(checkoutDraft,locale())}${!editId?deliveryOptions(delivery,locale(),{pickupDetails:pickupStationPanel()}):''}${pickup&&scannedStation?stationIdentity(scannedStation,{lang:locale(),navigation:false}):''}${pickup&&(paymentConfig||editId)?quoteBreakdown(pass,price,Boolean(editId)):''}${pickup?`<p class="field-note">${paidCheckout||paymentConfig?.zero_price_test?'Check your design carefully. The artwork is locked when the payment order is created.':'You can edit your design until printing starts. Saving a revision updates your design. After printing starts, changes need a new order.'}</p>`:''}${!pickup?`<p class="delivery-notice" role="status">${locale()==='zh-CN'?'快递／空运配送暂未开放，设计已保存，暂不收款。可返回继续编辑，或选择设备现场自取。':'Courier and air delivery are coming soon. Your design is saved and checkout is paused. You can keep editing or choose on-site pickup.'}</p>`:paymentLoading?'<p role="status" aria-live="polite">Loading checkout… If the service is busy, we will retry up to 3 times.</p>':!editId&&(!paymentConfig?.available||paymentError)?`<p class="error" role="alert">${esc(paymentError||'Payment is unavailable. Please try again later.')}</p><button class="text-button" data-action="refresh-payment">Reload checkout</button>`:!PRINT_AVAILABLE&&!editId?'<p class="error">Printing is unavailable. Please reload and try again.</p>':locked?'<p class="error">This order has started printing. Return to My design to create a new order.</p>':`<form id="print-checkout-form">${!editId?checkoutEmailField(membership):''}<label class="ai-consent"><input name="accepted" type="checkbox" required><span>I confirm this design and phone model. ${editId?'Update my existing design at no extra printing charge.':paidCheckout?`Pay ${price} for one case with ${provider}.${paymentConfig.mode==='test'?' Test mode: no real charge.':''}`:devicePrinting.simulated?(locale()==='zh-CN'?'创建 0 元模拟订单，手机确认后模拟打印，不会操作真实设备。':'Create a no-charge simulation order. Phone confirmation starts simulated printing only.'):paymentConfig?.zero_price_test?'Create a no-charge integration order. Confirm at the station to start a real print.':`Simulate a ${price} payment for one print. No real charge.`} The design and any photo will be securely saved with this order.</span></label><button class="button primary full" ${!editId&&!pickupCheckoutReady()?'disabled':''}>${editId?'Save design changes':paidCheckout?`Pay ${price} with ${provider}`:paymentConfig?.zero_price_test?'Complete free test order':`Confirm ${price} test order`}</button></form>`}</div></div></section>`;
 }
 function render(preserveScroll=false) {
   finishInlineText();
   cleanupAIStudio();
+  cleanupShell();
+  cleanupHomePhone();
+  cleanupPhoneModels();
   const oldY=window.scrollY;
   const [route='home',query='']=location.hash.slice(1).split('?');
+  if(!['choose','review'].includes(route)){reviewPass=null;reviewSaved=false;}
   canvasObserver?.disconnect();canvasObserver=null;canvasHome=null;
   if(route!=='choose')canvasExpanded=false;
   if(route!=='choose')effectPanelOpen=false;
   document.body.classList.toggle('canvas-editor-open',canvasExpanded);
-  const pages={account:()=>customerPage(membership,customerUI),choose,pass:passPage,kiosk:kioskPage,ai:()=>aiPage(aiJob,membership,aiBusy,aiUi),membership:()=>membershipPage(membership),checkout:checkoutPage,orders:ordersPage,payment:paymentPage};
+  const pages={review:()=>designReview({pass:reviewPass,preview:passPreview,lang:locale(),busy:passBusy,saved:reviewSaved}),account:()=>customerPage(membership,customerUI),'my-designs':()=>myDesignsPage({rows:localDesigns,lang:locale(),preview:passPreview,error:localDesignError,busy:localDesignBusy,guest:workspace.owner==='guest'}),choose,pass:passPage,kiosk:()=>publicStationPage(true),designs:()=>worksPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),work:()=>workDetailPage({works:designs,preview:casePreview,lang:locale(),params:new URLSearchParams(query)}),'how-it-works':()=>tutorialPage({lang:locale()}),about:()=>aboutPage({lang:locale()}),locations:publicStationPage,printers:publicStationPage,ai:()=>aiPage(aiJob,membership,aiBusy,{...aiUi,phoneModels,stockCatalogStatus}),membership:()=>membershipInfoPage({account:membership,lang:locale()}),checkout:checkoutPage,orders:ordersPage,payment:paymentPage};
   app.classList.toggle('is-ai-studio',route==='ai'&&aiJob?.mode==='live');
   app.classList.toggle('is-editor',route==='choose');
-  app.innerHTML=header()+`<main id="main" tabindex="-1">${catalogStatus==='unavailable'?'<div class="catalog-warning" role="status">Prices and AI previews could not be loaded. Your saved designs are still available. <button class="text-button" data-action="reload-catalog">Try again</button></div>':''}${(Object.hasOwn(pages,route)?pages[route]:home)()}</main>`+footer();
+  document.body.classList.toggle('v35-home-page',!Object.hasOwn(pages,route));
+  const privateRoute=['choose','review','pass','ai','membership','my-designs','checkout','orders','payment'].includes(route);
+  document.body.dataset.v35Route=route;
+  app.innerHTML=header()+`<main id="main" tabindex="-1">${catalogStatus==='unavailable'?'<div class="catalog-warning" role="status">Prices and AI previews could not be loaded. Your saved designs are still available. <button class="text-button" data-action="reload-catalog">Try again</button></div>':''}${!workspace.active&&privateRoute?privateWorkspaceNotice():(Object.hasOwn(pages,route)?pages[route]:home)()}</main>`+footer();
   if(aiBusy)document.querySelectorAll('[data-ai-action],#ai-credit-form button,#ai-subscription-form button').forEach(el=>el.disabled=true);
-  const title=({account:'My account',choose:'Choose your case',pass:'Your design pass',kiosk:'Station demo',ai:'Your AI render',membership:'AI membership',checkout:'Review print order',orders:'My orders',payment:'Payment status'})[route];
+  const title=({review:locale()==='zh-CN'?'预览确认':'Review & confirm',account:'My account','my-designs':'My designs',choose:'Choose your case',pass:'Your design pass',kiosk:'Print locations',designs:'Works center',work:'Design details','how-it-works':'How to use',about:'About POPOMO',locations:'Print locations',printers:'Print locations',ai:'Your AI render',membership:'AI membership',checkout:'Review print order',orders:'My orders',payment:'Payment status'})[route];
   document.title=title?`${t(title)} · POPOMO`:t('POPOMO — A little more you.');
   localize(app);document.querySelector('.skip-link').textContent=t('Skip to content');
   cleanupAIStudio=mountAIStudio(app,aiJob,aiUi);
+  cleanupShell=mountShell(app,{lang:locale(),onLanguage:value=>{const select=document.querySelector('#language');select.value=value;select.dispatchEvent(new Event('change',{bubbles:true}));document.querySelector('[data-shell-menu]')?.focus({preventScroll:true});}});
   document.querySelector('#language').disabled=aiBusy||photoBusy||passBusy;
   document.querySelectorAll('[data-editor-panel]').forEach(bindEditorPanel);
   document.querySelector('.canvas-editor')?.addEventListener('cancel',event=>{event.preventDefault();closeCanvasEditor();});
   document.querySelector('.look-browser')?.addEventListener('cancel',event=>{event.preventDefault();closeAIStudio();});
+  observeCanvasPreview();
   if(canvasExpanded)openCanvasEditor();
   else if(effectPanelOpen)openAIStudio();
   highlightArtwork();
   document.querySelector('.crop-panel')?.addEventListener('toggle',e=>cropPanelOpen=e.target.open);
   if(preserveScroll)window.scrollTo(0,oldY);
-  else if(['designs','how-it-works'].includes(route))document.getElementById(route)?.scrollIntoView();
+  else if(new URLSearchParams(query).has('section')){const section=new URLSearchParams(query).get('section');if(['steps','save','print','story','our-story'].includes(section))document.getElementById(section)?.scrollIntoView();else window.scrollTo(0,0);}
   else window.scrollTo(0,0);
 }
 // A stable outer canvas retains capture while the selected artwork and handles update.
@@ -723,15 +808,14 @@ app.addEventListener('change',async event=>{
     if(!['pickup','courier','air'].includes(event.target.value))return;
     checkoutDraft.fulfillmentType=event.target.value;checkoutDraft.requestKey=crypto.randomUUID();
     if(event.target.value==='pickup')void requestStationLocation();
-    await writeDesign('checkout-draft',checkoutDraft);syncStationFinder();render(true);return;
+    await privateWrite('checkout-draft',checkoutDraft);syncStationFinder();render(true);return;
   }
   if(event.target.id==='language'){
     if(aiBusy||photoBusy||passBusy)return;
     finishInlineText();
     const fields=[...app.querySelectorAll('input:not([type=file]),textarea,select:not(#language)')].map(el=>({id:el.id,name:el.name,form:el.form?.id,type:el.type,value:el.value,checked:el.checked}));
-    const details=[...app.querySelectorAll('details')].map(el=>el.open),brand=modelBrand,search=modelQuery;
+    const details=[...app.querySelectorAll('details')].map(el=>el.open);
     setLocale(event.target.value);render(true);
-    if(document.querySelector('.model-first-body')){modelBrand=brand;modelQuery=search;document.querySelector('.model-first-body').innerHTML=modelPickerBody();localize(document.querySelector('.model-first-body'));}
     for(const field of fields){const el=[...app.querySelectorAll('input:not([type=file]),textarea,select:not(#language)')].find(el=>field.id?el.id===field.id:field.name&&el.name===field.name&&el.form?.id===field.form&&(field.type!=='radio'||el.value===field.value));if(el){if(el.type!=='radio')el.value=field.value;if('checked' in el)el.checked=field.checked;}}
     [...app.querySelectorAll('details')].forEach((el,i)=>{if(details[i]!==undefined)el.open=details[i];});
     document.querySelector('#language').focus({preventScroll:true});return;
@@ -745,16 +829,15 @@ app.addEventListener('input',event=>{
   if(event.target.matches('.look-wipe')){aiUi.lookCompare=setLookComparison(document.querySelector('.look-browser'),event.target.value);return;}
   if(event.target.id==='canvas-size'&&selectedArtwork){artworkTarget()[selectedArtwork==='all'?'zoom':'scale']=Number(event.target.value);save();updatePreview();return;}
  if(event.target.matches('[data-ai-compare]')){aiUi.compare=setAIComparison(app,event.target.value);return;}
- if(event.target.id==='model-search'){modelQuery=event.target.value;document.querySelector('.model-results').innerHTML=modelResults();localize(document.querySelector('.model-results'));return;}
  if(event.target.matches('[data-inline-text]')){if(!event.isComposing){writeInlineText(event.target);highlightArtwork();}return;}
  if(event.target.dataset.textField){applyTextStyle(event.target.dataset.textField,event.target.value);return;}
 
   if(event.target.dataset.artwork){const key=event.target.dataset.artwork;setArtwork(key,Number(event.target.value));}
   if(event.target.dataset.crop){const key=event.target.dataset.crop;state[key]=Number(event.target.value);document.getElementById(key+'-value').textContent=state[key]+'%';updatePreview();save();}
   if(event.target.id==='effect-strength'){state.intensity=Number(event.target.value);document.getElementById('intensity-value').textContent=state.intensity+'%';document.getElementById('selected-strength').textContent=state.intensity+'%';updatePreview();save();}
-  if(event.target.id==='design-code'){event.target.removeAttribute('aria-invalid');document.getElementById('scan-error').textContent='';}
 });
 app.addEventListener('submit',async event=>{
+  if(sessionCheckBusy){event.preventDefault();return;}
   if(event.target.id==='customer-profile-form'){event.preventDefault();await handleCustomer('profile',new FormData(event.target));return;}
   if(event.target.id==='customer-email-form'){event.preventDefault();const fields=new FormData(event.target);await handleCustomer(customerUI.codeSent?'verify':'send',fields);return;}
   if(event.target.id==='ai-credit-form'||event.target.id==='ai-subscription-form'){
@@ -765,6 +848,7 @@ app.addEventListener('submit',async event=>{
   if(event.target.id==='print-checkout-form'){event.preventDefault();if(passBusy||!checkoutDraft)return;passBusy=true;
     const button=event.target.querySelector('button');button.disabled=true;button.textContent=t('Saving your order…');
     try{
+      await syncAIAccount();workspace.check();
       const values=new FormData(event.target),accepted=values.has('accepted'),existing=orderBook.orders[checkoutDraft.editId];let order;
       if(!existing&&checkoutDraft.fulfillmentType&&checkoutDraft.fulfillmentType!=='pickup')throw Error('Courier and air delivery are not available for checkout yet. Your design is saved; no payment has been taken.');
       if(!existing&&!pickupCheckoutReady())throw Error(locale()==='zh-CN'?'请先刷新并确认有该机型库存的网点。':'Refresh station stock and confirm availability before checkout.');
@@ -772,40 +856,72 @@ app.addEventListener('submit',async event=>{
       if(checkoutDraft.editId&&!existing)throw Error('This order could not be loaded. Open it from My orders and retry.');
       if(existing&&!existing.server){let result;orderBook=await updateDesign('print-orders-v1',b=>{result=commitPrintOrder(b,checkoutDraft.pass,{accepted,editId:existing.id});return result.book;},freshOrders());order=result.order;}
       else{
-        checkoutDraft.requestKey||=crypto.randomUUID();await writeDesign('checkout-draft',checkoutDraft);
-        const data=existing?await orderRequest(existing.id+'/',{method:'PATCH',body:{accepted,revision:checkoutDraft.revision??existing.revision,snapshot:checkoutDraft.pass}}):await orderRequest('',{method:'POST',body:checkoutBody(checkoutDraft,{accepted,email:String(values.get('email')||''),account:membership,amount:(PRINT_PRICE_CENTS/100).toFixed(2),provider:paymentConfig.provider,mode:paymentConfig.mode})});
+        checkoutDraft.requestKey||=crypto.randomUUID();await privateWrite('checkout-draft',checkoutDraft);
+        const data=existing?await orderRequest(existing.id+'/',{method:'PATCH',body:{quantity:1,accepted,revision:checkoutDraft.revision??existing.revision,snapshot:checkoutDraft.pass}}):await orderRequest('',{method:'POST',body:checkoutBody(checkoutDraft,{accepted,email:String(values.get('email')||''),account:membership,amount:(PRINT_PRICE_CENTS/100).toFixed(2),provider:paymentConfig.provider,mode:paymentConfig.mode})});
         order=await rememberOrder(data);
       }
       if(devicePrinting.enabled&&isProviderOrder(order))order=await prepareDeviceOrder(order,stockScope,{save:rememberOrder});
-      state.pass=order.pass;state.job=null;scannedPass=null;state.editOrderId=null;checkoutDraft=null;await writeDesign('checkout-draft',null);save();
+      state.pass=order.pass;state.job=null;state.editOrderId=null;checkoutDraft=null;await privateWrite('checkout-draft',null);save();
       if(isProviderOrder(order)){paymentOrder=order;go('payment?order='+order.id);if(order.status==='pending'){render(true);await openPaymentCheckout(order.id);}}else go('pass');
     }
     catch(error){if(paymentOrder)paymentError=error.message;if(error.message==='Your sign-in changed. Reload checkout to review your email.'){paymentError=error.message;paymentConfig=null;}notify(error.message);}finally{passBusy=false;render(true);}return;
   }
   if(event.target.id==='design-form'){
     event.preventDefault();if(passBusy||photoBusy)return;
-    if(!phoneModels.includes(state.model)){const panel=document.querySelector('.model-first');panel.open=true;panel.scrollIntoView({block:'start',behavior:'smooth'});panel.querySelector('#model-search')?.focus({preventScroll:true});notify('Choose your phone model first.');return;}
-    const submitted={...state};passBusy=true;render(true);
+    if(!phoneModels.includes(state.model)){openModelPicker();notify('Choose your phone model first.');return;}
+    const submitted={...state},submittedHash=location.hash;passBusy=true;render(true);
     try{
-      await refreshStockChoices();
-      if(!submitted.caseMaterial)throw Error('Choose your case style first.');
-      const available=stockSelection(submitted.model,submitted.caseMaterial);
-      if(!available)throw Error(stockScope?'This phone model is out of stock or unavailable. Please choose again.':'This phone model is unavailable. Please choose again.');
-      if(submitted.phoneTemplateId&&submitted.phoneTemplateId!==available.templateId){state.phoneTemplateId=available.templateId;throw Error('The phone template changed. Please review your design again.');}
-      const pass=createPersonalPass({...layoutSelection(submitted),phoneTemplateId:available.templateId});
-      checkoutDraft={pass,fulfillmentType:orderBook.orders[state.editOrderId]?.fulfillmentType||checkoutDraft?.fulfillmentType||'pickup',phoneTemplate:phoneTemplate(pass.model,pass.phoneTemplateId),editId:state.editOrderId||null,requestKey:crypto.randomUUID(),revision:orderBook.orders[state.editOrderId]?.revision};await writeDesign('checkout-draft',checkoutDraft);comparing=false;go('checkout');
+      const pass=await prepareDesignReview(submitted);
+      if(location.hash!==submittedHash)return;
+      reviewPass=pass;reviewSaved=false;comparing=false;go('review');
     }catch(error){notify(error.message||'The design could not be saved. Please try again.');}
     finally{passBusy=false;if(location.hash.startsWith('#choose'))render(true);}
   }
-  if(event.target.id==='scan-form'){
-    event.preventDefault();
-    try{scannedPass=await resolvePass(new FormData(event.target).get('code'));render(true);}
-    catch(error){const el=document.querySelector('#scan-error');if(el){el.textContent=t(error.message);document.querySelector('#design-code').setAttribute('aria-invalid','true');}}
-  }
+  if(event.target.id==='v35-work-search'){event.preventDefault();const fields=new FormData(event.target),params=new URLSearchParams({category:String(fields.get('category')||'all'),q:String(fields.get('q')||'').slice(0,100)});go('designs?'+params);}
 });
 app.addEventListener('click',async event=>{
-  const el=event.target.closest('[data-case-material],[data-phone-brand],[data-phone-model],[data-action],[data-design],[data-start-design],[data-source],[data-effect],[data-ai-action],[data-ai-look-example],[data-ai-look-step],[data-look-action],[data-look-mode],[data-ai-group],[data-ai-view],[data-artwork-item],[data-add-graphic],[data-quick-font],[data-quick-color]');if(!el||el.disabled||photoBusy||passBusy||aiBusy)return;
-  if(el.dataset.action==='home-photo'){openPhotoPicker();return;}
+  const el=event.target.closest('[data-case-material],[data-phone-color],[data-action],[data-design],[data-start-design],[data-source],[data-effect],[data-ai-action],[data-ai-look-example],[data-ai-look-step],[data-look-action],[data-look-mode],[data-ai-group],[data-ai-view],[data-artwork-item],[data-add-graphic],[data-quick-font],[data-quick-color]');if(!el||el.disabled||photoBusy||passBusy||aiBusy||sessionCheckBusy)return;
+  if(el.dataset.action==='choose-phone'){openModelPicker();return;}
+  if(el.dataset.action==='ai-choose-phone'){openModelPicker(true);return;}
+  if(['home-photo','home-ai'].includes(el.dataset.action)){event.preventDefault();openHomePhone(el.dataset.action==='home-photo'?'photo':'ai');return;}
+  if(el.dataset.action==='reload-private-workspace'){location.reload();return;}
+  if(el.dataset.action==='close-design-review'){closeDesignReview();return;}
+  if(['save-local-design','continue-design-checkout','restore-design','delete-design','refresh-designs','restore-legacy-draft'].includes(el.dataset.action)){
+   event.preventDefault();passBusy=true;
+   try{
+    workspace.check();
+    if(el.dataset.action==='save-local-design'){
+     if(!reviewPass)throw Error('Preview your design again before saving.');
+     await library.save(reviewPass,phoneTemplate(reviewPass.model,reviewPass.phoneTemplateId));reviewSaved=true;
+     notify(locale()==='zh-CN'?'设计已保存到当前身份的本机空间。':'Design saved on this browser for your current account.');
+    }else if(el.dataset.action==='continue-design-checkout'){
+     if(!reviewPass)throw Error('Preview your design again before ordering.');
+     if(!PRINT_AVAILABLE&&!state.editOrderId)throw Error('Printing is unavailable. Your local design can still be saved.');
+     await refreshStockChoices();const available=stockSelection(reviewPass.model,reviewPass.caseMaterial);
+     if(!available||available.templateId!==reviewPass.phoneTemplateId)throw Error('The phone template changed. Please review your design again.');
+     assertCurrentColor(reviewPass,available);
+     const pass=reviewPass;
+     checkoutDraft={quantity:1,pass,fulfillmentType:orderBook.orders[state.editOrderId]?.fulfillmentType||checkoutDraft?.fulfillmentType||'pickup',phoneTemplate:phoneTemplate(pass.model,pass.phoneTemplateId),editId:state.editOrderId||null,requestKey:crypto.randomUUID(),revision:orderBook.orders[state.editOrderId]?.revision};
+     await privateWrite('checkout-draft',checkoutDraft);reviewPass=null;go('checkout');
+    }else if(el.dataset.action==='refresh-designs')await loadLocalDesigns();
+    else if(el.dataset.action==='delete-design'){
+     await library.remove(el.dataset.id);await loadLocalDesigns();
+    }else if(el.dataset.action==='restore-design'){
+     const row=localDesigns.find(row=>row.id===el.dataset.id);if(!row)throw Error('This saved design could not be found.');
+     await restoreLocalDesign(row.pass);
+    }else if(el.dataset.action==='restore-legacy-draft'){
+     if(workspace.owner!=='guest')throw Error('Older browser drafts are separate from signed-in accounts.');
+     const legacy=JSON.parse(localStorage.getItem('popomo-simple-v1')||'null');
+     if(!legacy)throw Error('No older browser draft was found.');
+     const photo=await readDesign('draft-photo');
+     // Copy only validated design fields, never legacy identity, jobs or orders.
+     const pass=createPersonalPass({...layoutSelection({...legacy,photo:legacy.source==='photo'?photo:''}),ai:null});
+     await restoreLocalDesign(pass);
+    }
+   }catch(error){notify(error.message);}
+   finally{passBusy=false;render(true);}
+   return;
+  }
   if(el.dataset.lookAction==='open'){openAIStudio();return;}
   if(el.dataset.lookAction==='close'){closeAIStudio();return;}
   if(el.dataset.lookAction==='zoom'){zoomAIStudio();return;}
@@ -824,13 +940,8 @@ app.addEventListener('click',async event=>{
    else target.rotation=rotationFromPointer({rotation:target.rotation||0,startAngle:0,angle:Math.PI/12});
    save();updatePreview();return;
   }
-  if(el.dataset.phoneBrand){
-   if(!phoneBrands(phoneModels).includes(el.dataset.phoneBrand))return;
-   modelBrand=el.dataset.phoneBrand;modelQuery='';const body=document.querySelector('.model-first-body');body.innerHTML=modelPickerBody();localize(body);
-   document.querySelector(`[data-phone-brand="${modelBrand}"]`)?.focus({preventScroll:true});return;
-  }
-  if(el.dataset.caseMaterial){const choice=stockSelection(state.model,el.dataset.caseMaterial);if(!choice)return;state.caseMaterial=choice.caseMaterial;state.phoneTemplateId=choice.templateId;selectSupplierTemplate(state.model,choice.templateId);save();render(true);return;}
-  if(el.dataset.phoneModel){selectPhoneModel(el.dataset.phoneModel);return;}
+  if(el.dataset.caseMaterial){const choice=stockSelection(state.model,el.dataset.caseMaterial);if(!choice)return;state.caseMaterial=choice.caseMaterial;state.phoneTemplateId=choice.templateId;syncDraftColor();selectSupplierTemplate(state.model,choice.templateId);save();render(true);return;}
+  if(el.dataset.phoneColor){const color=stockSelection(state.model,state.caseMaterial)?.colors?.find(c=>c.code===el.dataset.phoneColor);if(!color)return;state.phoneColor=structuredClone(color);colorNotice=false;reviewPass=null;save();updatePreview();const colors=document.querySelector('#phone-color-picker');colors.innerHTML=colorPicker(stockSelection(state.model,state.caseMaterial).colors,state.phoneColor,locale());colors.querySelector(`[data-phone-color="${color.code}"]`)?.focus();return;}
   if(el.dataset.quickFont){applyTextStyle('font',el.dataset.quickFont);return;}
   if(el.dataset.quickColor){applyTextStyle('color',el.dataset.quickColor);return;}
   if(el.dataset.addGraphic){
@@ -911,11 +1022,11 @@ if(selectedArtwork==='all'){const layout=artworkLayout();layout.zoom=100;layout.
     if(el.dataset.action==='reset-crop'){state.zoom=100;state.x=50;state.y=50;save();render(true);}
     if(['edit-pass','new-order-from-pass'].includes(el.dataset.action)){
       event.preventDefault();const current=orderForCode(orderBook,state.pass.code);if(current?.server){const latest=await refreshOrder(current.id);state.pass=latest.pass;}const p=state.pass;orderBook=await readDesign('print-orders-v1')||freshOrders();const order=orderForCode(orderBook,p.code);selectedArtwork=null;if(p.source==='collection')state.artworkLayouts[p.designId]={zoom:p.zoom,x:p.x,y:p.y,artworkEdits:structuredClone(p.artworkEdits||{}),addedArtwork:structuredClone(p.addedArtwork||[])};state.editOrderId=el.dataset.action==='edit-pass'&&order?.mode==='demo'&&order?.status==='paid'?order.id:null;
-      if(p.version===2){if(p.source==='photo')await writeDesign('draft-photo',p.photo);Object.assign(state,{source:p.source,designId:p.designId,model:p.model,caseMaterial:p.caseMaterial||'',photo:p.source==='photo'?p.photo:state.photo,effect:p.effect,intensity:p.intensity,zoom:p.zoom,x:p.x,y:p.y,ai:p.ai||null,photoOrigin:'upload',...(p.source==='photo'?{photoArtwork:structuredClone(p.addedArtwork||[]),photoPlacement:structuredClone(p.photoPlacement||null),keepCollection:Boolean(p.collectionLayout)}:{})});}
-      else Object.assign(state,{source:'collection',designId:p.designId,model:p.model,caseMaterial:'',effect:'original'});
+      if(p.version===2){if(p.source==='photo')await privateWrite('draft-photo',p.photo);Object.assign(state,{source:p.source,designId:p.designId,model:p.model,caseMaterial:p.caseMaterial||'',phoneTemplateId:p.phoneTemplateId,phoneColor:p.phoneColor||null,photo:p.source==='photo'?p.photo:state.photo,effect:p.effect,intensity:p.intensity,zoom:p.zoom,x:p.x,y:p.y,ai:p.ai||null,photoOrigin:'upload',...(p.source==='photo'?{photoArtwork:structuredClone(p.addedArtwork||[]),photoPlacement:structuredClone(p.photoPlacement||null),keepCollection:Boolean(p.collectionLayout)}:{})});}
+      else Object.assign(state,{source:'collection',designId:p.designId,model:p.model,caseMaterial:'',phoneColor:null,effect:'original'});
       if(!phoneModels.includes(state.model))state.model='';
-      if(!stockSelection(state.model,state.caseMaterial))state.caseMaterial='';
-      state.phoneTemplateId=stockSelection(state.model,state.caseMaterial)?.templateId;selectSupplierTemplate(state.model,state.phoneTemplateId);
+      if(stockCatalogStatus==='ready'&&!stockSelection(state.model,state.caseMaterial))state.caseMaterial='';
+      state.phoneTemplateId=stockSelection(state.model,state.caseMaterial)?.templateId;selectSupplierTemplate(state.model,state.phoneTemplateId);syncDraftColor();
       if(p.source==='photo'&&p.collectionLayout)state.artworkLayouts[p.designId]={...structuredClone(p.collectionLayout),addedArtwork:structuredClone(p.addedArtwork||[])};
       comparing=false;save();go('choose');
     }
@@ -923,34 +1034,39 @@ if(selectedArtwork==='all'){const layout=artworkLayout();layout.zoom=100;layout.
       try{await navigator.clipboard.writeText(state.pass.code);notify('Design code copied.');}
       catch{notify('Your design code: '+state.pass.code);}
     }
-    if(el.dataset.action==='scan-saved'){scannedPass=await resolvePass(state.pass.code);render();}
-    if(el.dataset.action==='rescan'){scannedPass=null;render(true);}
-    if(el.dataset.action==='start-print'){const order=orderForCode(orderBook,scannedPass.code);if(order?.server){const updated=await orderAction(order,'start',state.stationId);state.job={pass:updated.pass,stationId:updated.stationId,status:updated.status,orderId:updated.id};save();render();return;}let result;orderBook=await updateDesign('print-orders-v1',b=>{result=beginOrderPrint(b,scannedPass.code,state.stationId);return result.book;},freshOrders());state.job=result.job;save();render();}
-    if(el.dataset.action==='advance-print'){const order=orderBook.orders[state.job?.orderId];if(order?.server){const updated=await orderAction(order,state.job.status==='printing'?'ready':'collect');state.job={pass:updated.pass,stationId:updated.stationId,status:updated.status,orderId:updated.id};save();render();return;}const job=advancePrint(state.job);if(job.orderId)orderBook=await updateDesign('print-orders-v1',b=>{b.orders[job.orderId].status=job.status;return b;});state.job=job;save();render();}
     if(el.dataset.action==='view-order'){go(await savedOrderRoute(el.dataset.id));}
     if(el.dataset.action==='cancel-order'){const order=orderForCode(orderBook,state.pass.code);if(order?.server){await orderAction(order,'cancel');notify('Test order cancelled. No money was charged.');render(true);}}
     if(el.dataset.action==='orders-page'){orderPage=Number(el.dataset.page);await navigate();}
     if(el.dataset.action==='refresh-orders'||el.dataset.action==='refresh-payment')await navigate();
     if(el.dataset.action==='pay-provider'){if(passBusy)return;passBusy=true;paymentError='';render(true);try{await openPaymentCheckout(el.dataset.id);}catch(e){paymentError=e.message;}finally{passBusy=false;render(true);}}
-    if(el.dataset.action==='finish-session'){state.job=null;scannedPass=null;save();go('designs');}
   } catch(error){notify(error.message||'Your design could not be saved. Please try again.');}
 });
 document.querySelector('.skip-link').addEventListener('click',event=>{event.preventDefault();document.querySelector('#main')?.focus();});
 let stockRefreshedAt=Date.now();
 async function refreshStockChoices(){
- const before=JSON.stringify(phoneModels.map(m=>stockSelection(m))),beforeStatus=stockCatalogStatus;
+ const before=JSON.stringify(phoneModels.map(model=>stockSelection(model))),beforeStatus=stockCatalogStatus;
  await loadStockCatalog(undefined,stockScope);stockRefreshedAt=Date.now();
  if(stockCatalogStatus==='ready'&&state.model&&!phoneModels.includes(state.model)){state.model='';state.caseMaterial='';state.phoneTemplateId=undefined;save();}
- if(state.caseMaterial&&!stockSelection(state.model,state.caseMaterial)){state.caseMaterial='';state.phoneTemplateId=undefined;save();}
- selectSupplierTemplate(state.model,stockSelection(state.model,state.caseMaterial)?.templateId);
- modelBrand=phoneBrands(phoneModels).includes(modelBrand)?modelBrand:phoneBrand(phoneModels[0]);
- return before!==JSON.stringify(phoneModels.map(m=>stockSelection(m)))||beforeStatus!==stockCatalogStatus;
+ if(stockCatalogStatus==='ready'){
+  if(state.caseMaterial&&!stockSelection(state.model,state.caseMaterial))state.caseMaterial='';
+  state.phoneTemplateId=stockSelection(state.model,state.caseMaterial)?.templateId;
+  selectSupplierTemplate(state.model,state.phoneTemplateId);
+ }
+ if(stockCatalogStatus==='ready'&&(state.phoneColor||stockSelection(state.model,state.caseMaterial)?.colors?.length)){syncDraftColor();save();}
+ return before!==JSON.stringify(phoneModels.map(model=>stockSelection(model)))||beforeStatus!==stockCatalogStatus;
 }
 setInterval(async()=>{if(document.hidden||passBusy||photoBusy||aiBusy||canvasExpanded||(stockCatalogStatus==='ready'&&Date.now()-stockRefreshedAt<60000))return;const changed=await refreshStockChoices();if(changed&&location.hash.startsWith('#choose'))render(true);},10000);
 async function navigate(){
  const currentNavigation=++navigationId;
- const [route,query='']=location.hash.slice(1).split('?');const params=new URLSearchParams(query),code=params.get('code');
- if(route==='choose')await refreshStockChoices();
+ const [route,query='']=location.hash.slice(1).split('?');const params=new URLSearchParams(query);
+ if(['choose','review','ai','my-designs','pass','orders','payment'].includes(route))try{await syncAIAccount();}catch(error){if(currentNavigation!==navigationId)return;customerUI.error=error.message;}
+ // Identity reads may finish after a newer navigation has already rendered.
+ // Retire the old route before it can restart loading or consume entry data.
+ if(currentNavigation!==navigationId)return;
+ if(!workspace.active&&route!=='account'){render();return;}
+ if(route==='choose'){reviewPass=null;reviewSaved=false;await refreshStockChoices();}
+ if(route==='review'&&!reviewPass){try{const prepared=await prepareDesignReview({...state});if(currentNavigation!==navigationId)return;reviewPass=prepared;reviewSaved=false;}catch(error){if(currentNavigation!==navigationId)return;notify(error.message);go('choose');return;}}
+ if(route==='my-designs'){localDesigns=[];localDesignBusy=true;render(true);await loadLocalDesigns();}
  if(route==='account'||route==='membership')try{
   await syncAIAccount();
   if(route==='account'){
@@ -986,7 +1102,7 @@ async function navigate(){
    if(detailRoute){history.replaceState(null,'','#'+detailRoute);return navigate();}
    if(order?.server)try{const latest=await refreshOrder(order.id);state.pass=latest.pass;if(state.job?.orderId===latest.id)state.job={...state.job,status:latest.status,pass:latest.pass};}catch(e){notify(e.message);}
  }
- if(route==='orders'){try{if(entryOrderError)throw Error(entryOrderError);const data=entryOrders||await orderRequest('?page='+orderPage);if(currentNavigation!==navigationId)return;orderRows=data.results;orderHasMore=data.has_more;orderError='';}catch(e){orderError=e.message;}finally{entryOrders=null;entryOrderError='';}}
+ if(route==='orders'){orderLoading=true;orderError='';render(true);try{if(entryOrderError)throw Error(entryOrderError);const data=entryOrders||await orderRequest('?page='+orderPage);if(currentNavigation!==navigationId)return;orderRows=data.results;orderHasMore=data.has_more;orderError='';}catch(e){if(currentNavigation!==navigationId)return;orderError=e.message;}finally{if(currentNavigation===navigationId)orderLoading=false;entryOrders=null;entryOrderError='';}}
  if(route==='choose'&&designs.some(d=>d.id===params.get('design'))){state.designId=params.get('design');state.source='collection';}
  if(route==='choose'&&params.get('source')==='photo'){
   if(params.get('fresh')==='1'){
@@ -999,10 +1115,10 @@ async function navigate(){
   state.source='photo';save();
  }
  if(route==='choose'&&params.get('studio')==='1')effectPanelOpen=true;
- if(route==='kiosk'&&code){try{scannedPass=await resolvePass(code);const order=orderForCode(orderBook,scannedPass.code);state.job=order?.stationId&&['printing','ready','collected'].includes(order.status)?{pass:order.pass,stationId:order.stationId,status:order.status,orderId:order.id}:null;save();}catch(error){scannedPass=null;notify(error.message);}history.replaceState(null,'','#kiosk');}
  if(currentNavigation!==navigationId)return;
  syncStationFinder();render();document.querySelector('#main')?.focus({preventScroll:true});
  if(route==='choose'&&params.get('studio')==='1')openAIStudio();
+ if(route==='choose'&&params.get('step')==='model')openModelPicker();
 }
 const entryHash=location.hash;
 const entry=await stationEntry({scope:stockScope,hash:entryHash,station:scannedStation});
@@ -1014,9 +1130,21 @@ if(entry&&location.hash===entryHash){
  if(location.hash===entryHash)history.replaceState(null,'','#'+target);
 }
 window.addEventListener('hashchange',navigate);
+let sessionCheckBusy=false;
+async function checkVisibleSession(){
+ if(document.hidden||sessionCheckBusy)return;
+ sessionCheckBusy=true;
+ try{await syncAIAccount();}catch(error){customerUI.error=error.message;render(true);}
+ finally{sessionCheckBusy=false;}
+}
+// Another tab can change the session. Block submissions during this check;
+// keep the file input alive when the native picker returns window focus.
+window.addEventListener('focus',checkVisibleSession);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkVisibleSession();});
 window.addEventListener('resize',()=>{if(!artworkDrag)highlightArtwork();});
 app.addEventListener('load',event=>{if(!artworkDrag&&event.target.closest?.('.artwork-canvas'))highlightArtwork();},true);
 for(const type of ['load','error'])app.addEventListener(type,event=>{if(event.target.matches?.('.look-comparison img'))updateLookImageState(document.querySelector('.look-browser'));},true);
+startVisiblePolling({interval:60000,enabled:()=>Boolean(pickupContext())&&!passBusy&&!stationFinder.state.busy,refresh:()=>stationFinder.refresh()});
 await navigate();
 
 async function loadAssetPhoto(url){
@@ -1024,23 +1152,59 @@ async function loadAssetPhoto(url){
  const blob=await response.blob();return importPhoto(new File([blob],'sample.png',{type:blob.type}));
 }
 async function mergeAIAccount(data){
+ const owner=designOwner(data);
+ if(!owner)throw Error('Your sign-in could not be verified. Please reload.');
+ if(!workspace.active||owner!==workspace.owner){
+  lockPrivateWorkspace();location.reload();
+  throw Error('Your sign-in changed. Reloading your private workspace.');
+ }
  if(membership.customer?.id!==data.customer?.id)Object.assign(customerUI,{ledger:[],ledgerNext:null,ledgerError:'',ledgerBusy:false,ledgerOpen:false});
  if(aiJob&&(aiJob.customerId&&aiJob.customerId!==data.customer?.id||aiJob.remoteId&&!aiJob.customerId)){aiJob=null;state.aiJobId=null;save();}
- membership=await updateDesign('ai-membership-v1',a=>({...a,...data,jobs:a.customer?.id===data.customer?.id?a.jobs||{}:{}}),freshMembership());
+ membership=await privateUpdate('ai-membership-v1',a=>({...a,...data,jobs:a.customer?.id===data.customer?.id?a.jobs||{}:{}}),freshMembership());
 }
-async function syncAIAccount(){await mergeAIAccount(await getAIAccount());}
+function lockPrivateWorkspace(){
+ workspace.lock();
+ // Keep committed data in its original namespace while removing private views.
+ Object.assign(state,{photo:'',phoneColor:null,pass:null,job:null,ai:null,aiJobId:null,artworkLayouts:{},photoArtwork:[],photoPlacement:null,editOrderId:null});
+ reviewPass=null;reviewSaved=false;checkoutDraft=null;aiJob=null;localDesigns=[];orderRows=[];paymentOrder=null;orderBook=freshOrders();
+ membership={...freshMembership(),server:true,authenticated:false,customer:null};
+ Object.assign(customerUI,{email:'',codeSent:false,ledger:[],ledgerNext:null,ledgerOpen:false});
+}
+async function syncAIAccount(){try{await mergeAIAccount(await getAIAccount());}catch(error){lockPrivateWorkspace();throw error;}}
 async function rememberLiveJob(job){
  job={...job,customerId:job.customerId||membership.customer?.id||null};
- membership=await updateDesign('ai-membership-v1',a=>({...a,jobs:{...a.jobs,[job.id]:job}}),freshMembership());
+ membership=await privateUpdate('ai-membership-v1',a=>({...a,jobs:{...a.jobs,[job.id]:job}}),freshMembership());
  aiJob=job;state.aiJobId=job.id;save();
+}
+async function changeAIPhoneModel(model){
+ if(aiBusy||photoBusy||passBusy||sessionCheckBusy||aiJob?.mode!=='live'||aiJob.status!=='awaiting_confirmation'||aiJob.remoteId||aiJob.submissionAttempted||model===aiJob.model)return;
+ const jobId=aiJob.id;aiBusy=true;aiUi.error='';render(true);
+ try{
+  await syncAIAccount();workspace.check();await refreshStockChoices();
+  if(!aiJob||aiJob.id!==jobId||aiJob.status!=='awaiting_confirmation'||aiJob.remoteId||aiJob.submissionAttempted)throw Error('This render has changed. Please review it again.');
+  if(stockCatalogStatus!=='ready'||!phoneModels.includes(model))throw Error('This phone model is unavailable. Please choose again.');
+  // Preserve the request key, photo and style. Changing a draft must not submit a render.
+  await rememberLiveJob({...aiJob,model});
+  Object.assign(state,{model,caseMaterial:'',phoneTemplateId:undefined,phoneColor:null});
+  selectSupplierTemplate(model,undefined);colorNotice=false;reviewPass=null;aiUi.accepted=false;save();
+ }catch(error){aiUi.error=error.message;notify(error.message);}
+ finally{aiBusy=false;render(true);document.querySelector('#ai-phone-model')?.focus({preventScroll:true});}
 }
 async function confirmAI(generation,accepted){
  if(aiBusy)return;
  if(!membership.authenticated){customerUI.next='ai';go('account');return;}
  aiBusy=true;aiUi.error='';aiUi.accepted=accepted;render(true);
  try{
+  await syncAIAccount();workspace.check();
   if(generation){
    if(aiJob?.mode!=='live')throw Error('Choose your photo and start a new AI render.');
+   if(!accepted)throw Error('Confirm using one AI generation first.');
+   if(!aiJob.submissionAttempted){
+    await refreshStockChoices();
+    if(stockCatalogStatus!=='ready'||!phoneModels.includes(aiJob.model))throw Error('This phone model is unavailable. Please choose again.');
+   }
+   // Freeze model changes before sending: a timeout may already have reserved a credit.
+   await rememberLiveJob({...aiJob,submissionAttempted:true});
    await rememberLiveJob(await submitLiveRender(aiJob,accepted));
    await syncAIAccount();
   }else await mergeAIAccount(await changeAIAccount('subscribe',accepted));
@@ -1067,7 +1231,7 @@ async function handleAI(action){
   }
   if(action==='stop-renewal'||action==='resume-renewal')await mergeAIAccount(await changeAIAccount(action,true));
   if(action==='sample'){
-   const example=exampleFor(state.aiExample);const photo=await loadAssetPhoto(example.original);await writeDesign('draft-photo',photo);
+   const example=exampleFor(state.aiExample);const photo=await loadAssetPhoto(example.original);await privateWrite('draft-photo',photo);
    Object.assign(state,{photo,source:'photo',photoOrigin:example.origin,ai:null,effect:'original',intensity:65,zoom:100,x:50,y:50});clearPreviousPhotoArtwork();effectPanelOpen=true;save();render(true);
   }
   if(action==='create'){
@@ -1080,7 +1244,7 @@ async function handleAI(action){
    if(aiJob?.mode!=='live')throw Error('Choose your photo and start a new AI render.');
    await rememberLiveJob(await refreshLiveRender(aiJob));
    if(!canApplyAIOrder(aiJob))throw Error('Wait until the render is ready before using its result.');
-   const photo=aiJob.resultPhoto;await writeDesign('draft-photo',photo);
+   const photo=aiJob.resultPhoto;await privateWrite('draft-photo',photo);
    Object.assign(state,{photo,source:'photo',photoOrigin:'upload',effect:'original',zoom:100,x:50,y:50,photoPlacement:null,ai:{styleId:aiJob.styleId,jobId:aiJob.id,mode:'live'}});
    save();go('choose');notify('AI image applied. Adjust your crop, then review your print order.');
   }
@@ -1109,13 +1273,6 @@ app.addEventListener('click',async event=>{
  const button=event.target.closest('[data-customer-action]');
  if(!button)return;event.preventDefault();await handleCustomer(button.dataset.customerAction);
 });
-async function loadCustomerCredits(reset=false){
- if(!membership.authenticated||customerUI.ledgerBusy)return;
- const id=membership.customer.id;customerUI.ledgerBusy=true;customerUI.ledgerError='';
- try{const data=await getCustomerCredits(reset?null:customerUI.ledgerNext);if(membership.customer?.id===id){customerUI.ledger=reset?data.results:[...customerUI.ledger,...data.results];customerUI.ledgerNext=data.nextCursor;}}
- catch(error){if(membership.customer?.id===id)customerUI.ledgerError=error.message;}
- finally{if(membership.customer?.id===id)customerUI.ledgerBusy=false;}
-}
 async function handleCustomer(action,fields){
  if(action==='credits-toggle'){customerUI.ledgerOpen=!customerUI.ledgerOpen;render(true);return;}
  if(action==='credits-more'||action==='credits-refresh'){const loading=loadCustomerCredits(action==='credits-refresh');render(true);await loading;render(true);return;}
@@ -1141,10 +1298,21 @@ async function handleCustomer(action,fields){
    await verifyEmailCode(customerUI.email,code);await syncAIAccount();customerUI.codeSent=false;
    customerUI.busy=false;go(customerUI.next==='ai'&&aiJob?'ai':'choose');
   }else if(action==='logout'){
-   await signOutCustomer();
-   await mergeAIAccount({server:true,authenticated:false,customer:null,trialRemaining:0,trialGranted:0,subscription:null,demoSubscriptionsAvailable:false});
-   customerUI.email='';customerUI.codeSent=false;await syncAIAccount();
+   try{await signOutCustomer();}finally{lockPrivateWorkspace();}
+   location.reload();return;
   }
  }catch(error){customerUI.error=error.message;}
  finally{customerUI.busy=false;render(true);if(customerUI.codeSent)document.getElementById('customer-code')?.focus({preventScroll:true});}
 }
+async function loadCustomerCredits(reset=false){
+ if(!membership.authenticated||customerUI.ledgerBusy)return;
+ const id=membership.customer.id;customerUI.ledgerBusy=true;customerUI.ledgerError='';
+ try{const data=await getCustomerCredits(reset?null:customerUI.ledgerNext);if(membership.customer?.id===id){customerUI.ledger=reset?data.results:[...customerUI.ledger,...data.results];customerUI.ledgerNext=data.nextCursor;}}
+ catch(error){if(membership.customer?.id===id)customerUI.ledgerError=error.message;}
+ finally{if(membership.customer?.id===id)customerUI.ledgerBusy=false;}
+}
+}
+
+// A failed startup must not install navigation, polling, or business handlers.
+// Reload retries the original URL and session without deleting browser data.
+if(await startStorefront()==='storage-unavailable')showStorageStartupError(document.querySelector('#app'));

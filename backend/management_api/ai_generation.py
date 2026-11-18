@@ -148,12 +148,37 @@ class RenderInput(StrictSerializer):
 
 
 def build_prompt(style, model, template):
-    return ('Edit the supplied image into original phone-case artwork. Preserve the identity, '
+    # AI design is allowed for every published model, independently of print
+    # inventory/templates. Missing geometry must not masquerade as an exact fit.
+    canvas_guidance = (
+        f'The final case canvas ratio is {template["printWidth"]}:{template["printHeight"]}. '
+        'Create a full-bleed portrait artwork that can be cropped to that narrower ratio. '
+        if template else
+        'Exact case template geometry is not available for this model. '
+        'Create full-bleed portrait artwork using the conservative placement rules above; '
+        'the exact print fit will be checked separately before printing. '
+    )
+    # Text guidance, not a claim that the provider receives the actual cutout mask.
+    # Put composition constraints before every style, including custom styles.
+    return ('PHONE-CASE CAMERA CUTOUT SAFETY — APPLY BEFORE STYLE\n'
+            f'Target phone model: {model.name}. '
+            'This artwork will appear on a phone case with camera openings and cropped outer edges. '
+            'Keep faces, eyes, human and animal heads, other essential subject details, and any '
+            'requested text fully inside the visible area, away from camera openings and edges, '
+            'with generous breathing room. Recompose by moving or proportionally scaling the '
+            'subject; do not crop, distort, remove, or cover important features to make them fit. '
+            'Use only expendable background around the camera area. If exact cutout geometry '
+            'is not supplied, use a conservative layout: keep the main subject in the central '
+            'half and all important facial details below the upper quarter of the final case canvas. '
+            'Keep the background continuous and full bleed, including behind areas that will be '
+            'hidden by the case. Do not draw camera holes, lenses, a phone case, mask outlines, '
+            'guide marks, or blank patches into the artwork. These placement constraints take '
+            'priority over conflicting style or composition instructions below.\n\n'
+            'Edit the supplied image into original phone-case artwork. Preserve the identity, '
             'recognizable features and main subject of the uploaded photo. Apply the following style '
             'to this uploaded subject; do not substitute a stock example or invent a different person.\n\n'
             'STYLE\n'+style.prompt+'\n\nCOMPOSITION\n'+model.adaptation_prompt+
-            f'\nThe final case canvas ratio is {template["printWidth"]}:{template["printHeight"]}. '
-            'Create a full-bleed portrait artwork that can be cropped to that narrower ratio. '
+            '\n'+canvas_guidance+
             'Keep the main subject within the central half of the image and important facial details '
             'below the upper quarter. Extend the background to the edges. The application will apply '
             'the case mask after generation. Do not depict a phone, case border, camera lens, camera '
@@ -281,7 +306,7 @@ class AIRenders(AIPrivateView):
             template=template_for(data['model'])
             if not style or not style.prompt.strip():
                 raise serializers.ValidationError('This AI style is unavailable or has no saved prompt.')
-            if not model or not template:
+            if not model:
                 raise serializers.ValidationError('Choose an available phone model first.')
             if AIRender.objects.filter(owner_hash=key,status__in=['queued','generating']).exists():
                 return Response({'detail':'Finish your current render before starting another.'},status=409)
@@ -302,7 +327,7 @@ class AIRenders(AIPrivateView):
                 return Response({'detail':'No AI generations remaining. Subscribe or wait for your next monthly reset.'},status=409)
             account.save(update_fields=['trial_used','subscription','updated_at'])
             job=AIRender.objects.create(request_key=data['request_key'],owner_hash=key,style_code=style.code,
-                style_name=style.name,provider=config.provider,model_name=config.model_name,phone_model=model.name,phone_template_id=template['id'],
+                style_name=style.name,provider=config.provider,model_name=config.model_name,phone_model=model.name,phone_template_id=template['id'] if template else '',
                 prompt=build_prompt(style,model,template),input_image=raw,input_mime=mime,input_hash=digest,allocation=allocation)
             pool = 'gift' if allocation['type']=='trial' else 'monthly'
             record(account, 'render:'+str(job.pk), 'generation', pool, gift_before if pool=='gift' else monthly_before, balance(account,pool), render_id=job.pk, period=allocation.get('period'))

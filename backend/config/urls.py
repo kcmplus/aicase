@@ -4,6 +4,7 @@ from django.http import JsonResponse
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from management_api import views
+from management_api.phone_colors import PhoneColorViewSet
 from management_api.inventory import (ConnectionViewSet, DeviceViewSet, ProductViewSet,
                                      StockViewSet, RunViewSet, InventoryOptions)
 from management_api.orders import StoreOrders, StoreOrder, StoreOrderAction, OrderFulfillment, StoreOrderProgress
@@ -24,8 +25,10 @@ from management_api.order_stations import OrderStations, public_print_stations
 from management_api.device_info import public_device_info
 from management_api.supplier_orders import OrderTarget, OrderFiles, ConfirmSupplierPrint, SupplierFile, SupplierImage, FulfillmentConfig, RetrySupplierOrder
 from management_api.terminal_orders import RetiredTerminalAPI
+from management_api.direct_terminal import DirectPoll, DirectPreview
 
 router = DefaultRouter()
+router.register('phone-colors', PhoneColorViewSet)
 router.register('device-connections', ConnectionViewSet)
 router.register('devices', DeviceViewSet)
 router.register('inventory/products', ProductViewSet)
@@ -36,6 +39,8 @@ router.register("ai-examples", views.AIExampleViewSet)
 for name, view in [("brands", views.BrandViewSet), ("phone-models", views.PhoneModelViewSet), ("graphics", views.GraphicViewSet), ("designs", views.DesignTemplateViewSet), ("ai-styles", views.AIStyleViewSet), ("plans", views.PricingPlanViewSet), ("orders", views.OrderViewSet), ("users", views.UserViewSet), ("roles", views.RoleViewSet), ("audit-logs", views.AuditViewSet)]:
     router.register(name, view)
 urlpatterns = [
+    path('api/v1/debug-terminal/poll/', DirectPoll.as_view()),
+    path('api/v1/debug-terminal/orders/<uuid:reference>/preview.png', DirectPreview.as_view()),
     path('api/v1/store/device-info/', public_device_info),
     path('api/v1/store/phone-models/', views.public_phone_models),
     path('api/v1/admin/inventory/options/', InventoryOptions.as_view()),

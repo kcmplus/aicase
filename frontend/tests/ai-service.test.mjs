@@ -151,3 +151,16 @@ test('account mutations and permission failures are never automatically retried'
   assert.equal(calls,1);
  }
 });
+
+test('AI confirmation opens the shared model picker only before submission',()=>{
+ const pending=job(),account=freshMembership(),ui={phoneModels:['iPhone 17','iPhone 13 Pro'],stockCatalogStatus:'ready'};
+ const html=aiPage(pending,account,false,ui);
+ assert.match(html,/<label for="ai-phone-model">Change phone model<\/label>/);
+ assert.match(html,/data-action="ai-choose-phone" aria-haspopup="dialog"/);
+ assert.match(html,/iPhone 17/);
+ assert.match(aiPage(pending,account,true,ui),/<button[^>]+id="ai-phone-model"[^>]+disabled/);
+ assert.match(aiPage(pending,account,false,{phoneModels:[],stockCatalogStatus:'unavailable'}),/data-action="refresh-models"/);
+ for(const frozen of [{...pending,submissionAttempted:true},{...pending,remoteId:'known'},{...pending,status:'queued'},{...pending,status:'ready'}]){
+  assert.doesNotMatch(aiPage(frozen,account,false,ui),/id="ai-phone-model"/);
+ }
+});

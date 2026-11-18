@@ -62,6 +62,8 @@ def phase(record):
 
 def query_order(row):
     """Exact trade lookup, checked again even if the supplier ignores its filters."""
+    if row.transport != 'supplier':
+        raise ProviderError('Simulated orders cannot use supplier transport.')
     provider = DeviceProvider(row.device.connection)
     data = provider.get('/shop/order/list', device_id=row.device.vendor_device_id,
                         trade_no=row.trade_no, page=1, limit=10)
@@ -164,7 +166,7 @@ def sync_order(pk, force=False):
     with transaction.atomic():
         row = SupplierOrder.objects.select_for_update(of=('self',)).select_related('device__connection', 'order').defer(
             'print_image', 'preview_image').get(pk=pk)
-        if (row.state != 'submitted' or not row.trade_no or row.order.fulfillment_type != 'pickup'
+        if (row.transport != 'supplier' or row.state != 'submitted' or not row.trade_no or row.order.fulfillment_type != 'pickup'
                 or not row.device.active or not row.device.connection.active):
             return False
         if not force and row.cloud_checked_at and row.cloud_checked_at > timezone.now()-timedelta(seconds=10):
@@ -189,6 +191,9 @@ def sync_order(pk, force=False):
 
 def record_merchant_payment(pk):
     """Persist a one-shot claim before POST. Never repeat an ambiguous merchant write."""
+    if SupplierOrder.objects.only('transport').get(pk=pk).transport == 'direct_debug':
+        from .direct_terminal import confirm
+        return confirm(pk)
     if not cloud_release_available():
         from .supplier_orders import PrintReleaseUnavailable
         raise PrintReleaseUnavailable()
@@ -280,11 +285,11 @@ def record_merchant_payment(pk):
 def sync_pending(limit=20):
     if not settings.SUPPLIER_ORDER_ENABLED:
         return 0
-    SupplierOrder.objects.filter(state='submitted', order__fulfillment_type='pickup',
+    SupplierOrder.objects.filter(transport='supplier', state='submitted', order__fulfillment_type='pickup',
         release_state__in=['claimed', 'submitted'],
         print_confirmed_at__lt=timezone.now()-timedelta(seconds=60)).update(
             release_state='unknown', message='开印确认结果待核实，请勿重复打印。')
-    ids = list(SupplierOrder.objects.filter(state='submitted', order__fulfillment_type='pickup',
+    ids = list(SupplierOrder.objects.filter(transport='supplier', state='submitted', order__fulfillment_type='pickup',
         order__status__in=['paid', 'printing']).filter(
         Q(cloud_checked_at__isnull=True) | Q(cloud_checked_at__lt=timezone.now()-timedelta(seconds=10))
         ).order_by('cloud_checked_at', 'pk').values_list('pk', flat=True)[:limit])

@@ -86,6 +86,15 @@ class AIMetadata(StrictSerializer):
     jobId = serializers.CharField(max_length=50, allow_blank=True)
     mode = serializers.ChoiceField(choices=['demo','live'])
 
+class ColorSelection(StrictSerializer):
+    code = serializers.SlugField(max_length=80)
+    version = serializers.IntegerField(min_value=1)
+
+    def to_internal_value(self, data):
+        if not isinstance(data, dict) or type(data.get('version')) is not int or not isinstance(data.get('code'), str):
+            raise serializers.ValidationError('Invalid color resource version.')
+        return super().to_internal_value(data)
+
 class Snapshot(Layout):
     version = serializers.IntegerField(min_value=2, max_value=2)
     code = serializers.RegexField(r'^POP-C-[A-F0-9]{16}$')
@@ -101,6 +110,7 @@ class Snapshot(Layout):
     photoPlacement = Placement(required=False)
     collectionLayout = Layout(required=False)
     ai = AIMetadata(required=False)
+    phoneColor = ColorSelection(required=False)
     def validate(self, data):
         # JSON must be finite even for values where a serializer range comparison
         # alone would permit NaN. Clients cannot submit HTML, SVG or remote URLs.
@@ -139,6 +149,21 @@ class Snapshot(Layout):
         template = template_for(data['model'])
         if template:
             data.setdefault('phoneTemplateId', template['id'])
+        if 'phoneColor' in data:
+            from .store_catalog import available_colors
+            color_template = data.get('_template') or template_for(data['model'], data.get('phoneTemplateId'))
+            model = None
+            if color_template:
+                model = stock.product.phone_model if supplied_template.startswith('supplier-') else PhoneModel.objects.filter(
+                    name=data['model'], code=color_template['code']).first()
+            selection = data['phoneColor']
+            color = next((c for c in available_colors(model, color_template)
+                          if c['code'] == selection['code'] and c['resource']['version'] == selection['version']), None) if model else None
+            if color is None:
+                raise serializers.ValidationError('This phone color changed or is unavailable. Please preview your design again.')
+            # Resolve all display values and immutable resource paths on the server.
+            # Historical paid orders are read as-is and never re-resolve this data.
+            data['phoneColor'] = color
         if data['designId'] not in LAYERS or not DesignTemplate.objects.filter(code=data['designId'], active=True).exists():
             raise serializers.ValidationError('This design is unavailable.')
         for layout in (data, data.get('collectionLayout', {})):
@@ -166,7 +191,18 @@ class Snapshot(Layout):
             raise serializers.ValidationError('Unexpected photo in a collection design.')
         return data
 
+class SinglePrintQuantity(serializers.Field):
+    def to_internal_value(self, value):
+        if type(value) is not int or value != 1:
+            raise serializers.ValidationError('Printing supports exactly one copy per order.')
+        return 1
+
+    def to_representation(self, value):
+        return value
+
+
 class Checkout(StrictSerializer):
+    quantity = SinglePrintQuantity(default=1)
     fulfillment_type = serializers.ChoiceField(choices=['pickup', 'courier', 'air'], default='pickup')
     payment_mode = serializers.ChoiceField(choices=['demo', 'test', 'live'], default='demo')
     payment_provider = serializers.ChoiceField(choices=['demo', 'stripe', 'airwallex', 'free'], default='demo')
@@ -183,6 +219,7 @@ class Checkout(StrictSerializer):
         return value
 
 class Revision(StrictSerializer):
+    quantity = SinglePrintQuantity(default=1)
     revision = serializers.IntegerField(min_value=1)
     accepted = serializers.BooleanField()
     snapshot = Snapshot()
@@ -203,6 +240,19 @@ def owner(request):
     if not re.fullmatch(r'[0-9a-f]{64}', token):
         raise PermissionDenied('This browser needs its order access key. Please reload.')
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+def require_single_print_payment(order):
+    """Never pay an unreviewed legacy quantity or alter its frozen payment data.
+
+    Missing quantity is the historical single-copy contract. Even when no local
+    provider ID exists, an earlier timed-out write may exist remotely; this guard
+    must not reprice, rotate the request key, or discard provider identifiers.
+    """
+    quantity = order.snapshot.get('quantity', 1)
+    if type(quantity) is not int or quantity != 1:
+        raise Conflict('This historical order needs single-print review before payment. '
+                       'Its amount and payment records are preserved; do not create a duplicate payment.')
 
 
 def order_data(order, detail=True):
@@ -257,6 +307,14 @@ class StoreOrders(APIView):
         plan = PricingPlan.objects.select_for_update().filter(kind='print', active=True).first()
         if not isinstance(request.data, dict):
             raise serializers.ValidationError({'detail':'Expected an order object.'})
+        # Validate the quantity envelope even on an idempotent retry. Do not
+        # revalidate mutable inventory or reprice an already frozen order.
+        SinglePrintQuantity().run_validation(request.data.get('quantity', 1))
+        if set(request.data) - set(Checkout().fields):
+            raise serializers.ValidationError({'detail': 'Unsupported order fields.'})
+        snapshot = request.data.get('snapshot')
+        if isinstance(snapshot, dict) and set(snapshot) - set(Snapshot().fields):
+            raise serializers.ValidationError({'snapshot': 'Unsupported design fields.'})
         request_key = serializers.UUIDField().run_validation(request.data.get('request_key'))
         existing = PrintOrder.objects.filter(request_key=request_key).first()
         if existing:
@@ -303,6 +361,8 @@ class StoreOrder(StoreOrders):
         serializer = Revision(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        if order.snapshot.get('quantity', 1) != 1:
+            raise Conflict('This historical multi-print order cannot be edited. Its original snapshot is preserved.')
         if order.mode != 'demo' or order.status != 'paid':
             raise Conflict('This order can no longer be edited. Create a new order.')
         if data['snapshot'] == order.snapshot and data['revision'] + 1 == order.revision:

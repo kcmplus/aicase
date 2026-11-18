@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("management_api", "0033_order_case_material"),
+        ("management_api", "0035_merge_v35_dev"),
     ]
 
     operations = [
