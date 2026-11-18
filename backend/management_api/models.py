@@ -447,6 +447,48 @@ class EmailChallenge(models.Model):
         default_permissions = ()
 
 
+class SocialLoginConfig(Timestamped):
+    provider = models.CharField(primary_key=True, max_length=12, choices=[('google', 'Google'), ('facebook', 'Facebook')])
+    enabled = models.BooleanField(default=False)
+    client_id = models.CharField(max_length=255, blank=True)
+    secret_ciphertext = models.TextField(blank=True, editable=False)
+    site_origin = models.URLField(max_length=255, blank=True)
+    graph_version = models.CharField(max_length=12, default='v27.0')
+    revision = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        default_permissions = ()
+
+
+class CustomerSocialIdentity(Timestamped):
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
+    provider = models.CharField(max_length=12)
+    client_id = models.CharField(max_length=255)
+    subject = models.CharField(max_length=255)
+
+    class Meta:
+        default_permissions = ()
+        constraints = [
+            models.UniqueConstraint(fields=['provider', 'client_id', 'subject'], name='unique_social_subject'),
+            models.UniqueConstraint(fields=['provider', 'client_id', 'customer'], name='unique_customer_social_provider'),
+        ]
+
+
+class SocialLoginAttempt(models.Model):
+    state_hash = models.CharField(primary_key=True, max_length=64)
+    browser_hash = models.CharField(max_length=64)
+    provider = models.CharField(max_length=12)
+    config_revision = models.PositiveIntegerField()
+    nonce = models.CharField(max_length=100)
+    verifier = models.CharField(max_length=100)
+    context = models.JSONField(default=dict)
+    expires_at = models.DateTimeField(db_index=True)
+    consumed = models.BooleanField(default=False)
+
+    class Meta:
+        default_permissions = ()
+
+
 class CustomerAuthLimit(models.Model):
     key = models.CharField(primary_key=True, max_length=64)
     window_at = models.DateTimeField()

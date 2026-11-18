@@ -4,6 +4,7 @@ const select=(key,label,options,extra={})=>({key,label,type:'select',options,...
 const base=[text('code','唯一标识',{required:true,immutable:true,placeholder:'例如：spring-flower'}),text('name','名称',{required:true}),number('sort_order','显示顺序'),{key:'active',label:'启用',type:'switch',default:true}];
 const image=(key='image_path',label='图片')=>({key,label,type:'image',required:['image_path','original_path'].includes(key)});
 export const resources={
+ 'device-connections':{hidden:true,title:'设备连接',model:'deviceconnection',icon:'Connection',superuserOnly:true},
  inventory:{title:'商品与库存',model:'deviceproduct',icon:'Box',viewPermissions:['management_api.view_supplierproduct','management_api.view_deviceproduct','management_api.view_device','management_api.view_inventorysyncrun']},
  brands:{title:'品牌管理',subtitle:'按品牌整理机型，让用户更快找到自己的手机。',model:'brand',icon:'Collection',columns:[['name','品牌'],['code','标识'],['sort_order','顺序'],['active','状态']],fields:base},
  'phone-colors':{title:'机型颜色',subtitle:'可选的 RGB 机身预览配置',model:'phonecolor',icon:'Iphone'},

@@ -3,6 +3,7 @@ import {computed,onMounted,onBeforeUnmount,reactive,ref} from 'vue';
 import {onBeforeRouteLeave} from 'vue-router';
 import {ElMessage,ElMessageBox} from 'element-plus';
 import {api} from './api.js';
+import SocialLoginSettings from './SocialLoginSettings.vue';
 const config=ref(null),busy=ref(false),error=ref(''),recipient=ref(''),result=ref('');
 const form=reactive({enabled:false,host:'',port:587,security:'starttls',username:'',from_email:'',from_name:'POPOMO'});
 const password=ref(''),clearPassword=ref(false),signupCredits=ref(1);
@@ -62,6 +63,7 @@ onBeforeRouteLeave(discard);
     </div>
    </aside>
   </div>
+  <SocialLoginSettings/>
  </section>
 </template>
 <style scoped>

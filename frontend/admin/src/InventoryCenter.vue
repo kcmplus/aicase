@@ -3,6 +3,7 @@ import {computed,ref,reactive,onMounted,onBeforeUnmount} from 'vue';
 import {onBeforeRouteLeave} from 'vue-router';
 import {ElMessage,ElMessageBox} from 'element-plus';
 import {api,can,session} from './api.js';
+const props=defineProps({connectionsOnly:{type:Boolean,default:false}});
 const permit=p=>can('management_api.'+p);
 const tabs=computed(()=>[
  {key:'products',label:'商品管理',permission:'view_supplierproduct',path:'inventory/products'},
@@ -12,7 +13,7 @@ const tabs=computed(()=>[
 ].filter(t=>permit(t.permission)));
 const tab=ref(tabs.value[0]?.key||''),rows=ref([]),total=ref(0),page=ref(1),search=ref(''),device=ref(''),state=ref('');
 const loading=ref(false),error=ref(''),options=ref({devices:[],phone_models:[],connections:[],base_urls:[]});
-const syncing=ref(null),connectionsOpen=ref(false),connections=ref([]),connectionsError=ref('');
+const syncing=ref(null),connectionsOpen=ref(props.connectionsOnly),connections=ref([]),connectionsError=ref('');
 const syncingModels=ref(false),modelSyncResult=ref(null);
 const discovering=ref(null),discoveryResult=ref(''),discoveryStatus=ref('success');
 function deviceInfoUrl(row){
@@ -49,13 +50,12 @@ async function load(){
 }
 function filter(){page.value=1;load();}
 function switchTab(){state.value='';search.value='';rows.value=[];modelSyncResult.value=null;filter();}
-async function refresh(){try{await loadOptions();await load();}catch(e){error.value=e.message;}}
+async function refresh(){try{await loadOptions();if(!props.connectionsOnly)await load();}catch(e){error.value=e.message;}}
 async function loadConnections(){
  connectionsError.value='';
  try{let all=[],next='admin/device-connections/';while(next){const data=await api(next);all.push(...data.results);next=data.next?data.next.split('/api/v1/')[1]:null;if(data.next&&!next)throw Error('连接列表地址不正确。');}connections.value=all;}
  catch(e){connectionsError.value=e.message;}
 }
-async function showConnections(){connectionsOpen.value=true;await loadConnections();}
 function edit(type,row=null){
  kind.value=type;editing.value=row;formError.value='';Object.keys(form).forEach(k=>delete form[k]);
  if(type==='product')Object.assign(form,{phone_model:row.phone_model,display_name:row.display_name,active:row.active});
@@ -94,14 +94,17 @@ async function syncModels(){
  catch(e){ElMessage.error(e.message);}finally{syncingModels.value=false;}
 }
 function unload(e){if(dirty.value){e.preventDefault();e.returnValue='';}}
-onMounted(()=>{refresh();window.addEventListener('beforeunload',unload);});
+onMounted(()=>{refresh();if(props.connectionsOnly)loadConnections();window.addEventListener('beforeunload',unload);});
 onBeforeUnmount(()=>{requestId++;window.removeEventListener('beforeunload',unload);if('authorization' in form)form.authorization='';});
 onBeforeRouteLeave(()=>editOpen.value?closeEdit():true);
 </script>
 
 <template>
  <section class="inventory-page">
-  <div class="inventory-heading"><div><h1>商品与库存</h1><p>统一查看设备商品、维护机型对应关系和库存快照。</p></div><el-button v-if="session.user?.is_superuser" @click="showConnections">设备连接配置</el-button></div>
+  <div v-if="connectionsOnly" class="inventory-heading"><div><h1>设备连接</h1><p>统一管理供应商服务和商家连接。</p></div><el-button @click="refresh();loadConnections()">刷新连接</el-button></div>
+  <el-alert v-if="connectionsOnly&&error" :title="error" type="error" :closable="false"/>
+  <template v-if="!connectionsOnly">
+  <div class="inventory-heading"><div><h1>商品与库存</h1><p>统一查看设备商品、维护机型对应关系和库存快照。</p></div><el-button v-if="session.user?.is_superuser" @click="$router.push('/settings/connections')">设备连接配置</el-button></div>
   <el-alert title="同步更新库存、机型和底图；满足条件的新商品自动上架，人工停用项保持停用。库存以设备方为准，同步不下单或打印。" type="info" :closable="false" show-icon/>
   <el-tabs v-model="tab" @tab-change="switchTab"><el-tab-pane v-for="item in tabs" :key="item.key" :label="item.label" :name="item.key"/></el-tabs>
   <div class="inventory-toolbar">
@@ -147,11 +150,12 @@ onBeforeRouteLeave(()=>editOpen.value?closeEdit():true);
    <el-table-column prop="device_name" label="设备" min-width="140"/><el-table-column prop="actor_name" label="触发人" width="130"/><el-table-column label="结果" width="90"><template #default="{row}"><el-tag :type="row.status==='failed'?'danger':row.status==='success'?'success':'info'">{{statusText[row.status]||row.status}}</el-tag></template></el-table-column><el-table-column prop="message" label="详情" min-width="280"/><el-table-column label="开始时间" min-width="190"><template #default="{row}">{{time(row.started_at)}}</template></el-table-column>
   </el-table>
   <el-pagination v-if="total>20" v-model:current-page="page" :total="total" :page-size="20" layout="prev, pager, next, total" @current-change="load"/>
-  <el-dialog v-model="connectionsOpen" title="设备连接配置" width="760px">
+  </template>
+  <component :is="connectionsOnly?'div':'el-dialog'" v-model="connectionsOpen" title="设备连接配置" width="760px" class="connections-panel">
    <el-alert v-if="!options.encryption_ready" title="服务端尚未配置凭据加密，请先完成加密配置。" type="warning" :closable="false"/><el-alert v-if="connectionsError" :title="connectionsError" type="error" :closable="false"/>
    <p>每个服务地址与商家独立配置。点击「同步设备与机型」更新设备资料，并同步已启用设备的库存、机型、底图和遮罩；五分钟任务执行相同流程。新设备默认停用，人工配置保留。</p><el-alert v-if="discoveryResult" :title="discoveryResult" :type="discoveryStatus" :closable="false"/><el-button type="primary" :disabled="!options.encryption_ready" @click="edit('connection')">新增连接</el-button>
    <el-table :data="connections" empty-text="暂无连接"><el-table-column prop="name" label="名称"/><el-table-column prop="shop_id" label="商家编号"/><el-table-column label="自营收款币种"><template #default="{row}">{{row.payment_currency||'未确认'}}</template></el-table-column><el-table-column label="资料同步" min-width="180"><template #default="{row}">{{statusText[row.profile_sync_status]||row.profile_sync_status}}<div class="inventory-secondary">{{time(row.profile_sync_at)}}</div><div class="inventory-secondary">{{row.profile_sync_message}}</div></template></el-table-column><el-table-column prop="masked_key" label="凭据"/><el-table-column label="状态"><template #default="{row}">{{row.active?'启用':'停用'}}</template></el-table-column><el-table-column label="操作"><template #default="{row}"><el-button text @click="edit('connection',row)">编辑</el-button><el-button text type="primary" :loading="discovering===row.id" :disabled="discovering!==null||!row.active" @click="syncDevices(row)">同步设备与机型</el-button></template></el-table-column></el-table>
-  </el-dialog>
+  </component>
   <el-dialog v-model="editOpen" :title="title" width="560px" :before-close="closeEdit" :close-on-click-modal="false">
    <el-alert v-if="formError" :title="formError" type="error" :closable="false"/>
    <el-form label-position="top" :disabled="saving" @submit.prevent="save">

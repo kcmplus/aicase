@@ -46,7 +46,7 @@ import {activeLook,lookBrowserContent,setLookMode,setLookComparison,updateLookIm
 import {aiStyles,refreshAIOrder,canApplyAIOrder} from './ai-core.js';
 import {generatedPhotoPlacement,createLiveRender,getAIAccount,changeAIAccount,submitLiveRender,refreshLiveRender,cancelLiveRender} from './ai-service.js';
 import {importPhoto} from './simple-upload.js';
-import {customerPage,sendEmailCode,verifyEmailCode,signOutCustomer,updateCustomerName,getCustomerCredits} from './customer-account.js';
+import {customerPage,sendEmailCode,verifyEmailCode,signOutCustomer,updateCustomerName,getCustomerCredits,startSocialLogin,socialReturnMessage} from './customer-account.js';
 import {createDesignWorkspace,createDesignLibrary,designOwner} from './design-workspace.js';
 import {myDesignsPage,designReview} from './v35-designs.js';
 import {showStorageStartupError} from './v35-startup.js';
@@ -1280,7 +1280,19 @@ async function navigate(){
  if(route==='choose'){reviewPass=null;reviewSaved=false;await refreshStockChoices();if(currentNavigation!==navigationId)return;}
  if(route==='review'&&!reviewPass){try{const prepared=await prepareDesignReview({...state});if(currentNavigation!==navigationId)return;reviewPass=prepared;reviewSaved=false;}catch(error){if(currentNavigation!==navigationId)return;notify(error.message);go('choose');return;}}
  if(route==='my-designs'){localDesigns=[];localDesignBusy=true;render(true);await loadLocalDesigns();}
- if(route==='account'||route==='membership')try{await syncAIAccount();if(route==='account'&&membership.authenticated)await loadCustomerCredits(true);}catch(error){customerUI.error=error.message;}
+ if(route==='account'||route==='membership')try{
+  await syncAIAccount();
+  if(route==='account'){
+   if(params.has('social')){
+    customerUI.next=params.get('next')==='ai'?'ai':'choose';
+    customerUI.error=socialReturnMessage(params.get('social'));
+    if(params.get('social')==='verify_email')customerUI.error='';
+    history.replaceState(null,'',location.pathname+location.search+'#account');
+   }
+   if(membership.socialPending&&!customerUI.email)customerUI.email=membership.socialPending.email||'';
+   if(membership.authenticated)await loadCustomerCredits(true);
+  }
+ }catch(error){customerUI.error=error.message;}
  stopPaymentPolling();paymentPollCount=0;
  if(route==='checkout'){
   paymentConfig=null;paymentError='';paymentLoading=true;render(true);
@@ -1499,7 +1511,13 @@ async function handleCustomer(action,fields){
  const code=String(fields?.get('code')||'').trim();
  render(true);
  try{
-  if(action==='profile'){
+  if(action==='social-google'||action==='social-facebook'){
+   save();
+   const url=await startSocialLogin(action.slice(7),{next:customerUI.next,search:location.search});
+   location.assign(url);return;
+  }else if(action==='cancel-social'){
+   await signOutCustomer();customerUI.email='';customerUI.codeSent=false;await syncAIAccount();
+  }else if(action==='profile'){
    await updateCustomerName(String(fields.get('displayName')||'').trim());await syncAIAccount();customerUI.success='Your profile has been saved.';
   }else if(action==='send'||action==='resend'){
    await sendEmailCode(customerUI.email);customerUI.codeSent=true;customerUI.resendAt=Date.now()+60000;

@@ -7,7 +7,7 @@ import {viewPermissionsFor} from './resources.js';
 const route=useRoute();
 const tabs=computed(()=>[
  {path:'/ai/prompts',label:'内容管理',visible:viewPermissionsFor('ai-prompts').some(can)},
- {path:'/ai/service',label:'生图配置',visible:session.user?.is_superuser},
+ {path:'/settings/ai',label:'生图配置 ↗',visible:session.user?.is_superuser},
  {path:'/ai/usage',label:'统计与日志',visible:session.user?.is_superuser},
 ].filter(tab=>tab.visible));
 </script>
