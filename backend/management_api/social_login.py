@@ -182,7 +182,7 @@ class SocialStart(CustomerView):
                 code_challenge=base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode(), code_challenge_method='S256')
             endpoint = 'https://accounts.google.com/o/oauth2/v2/auth'
         else:
-            params.update(scope='email,public_profile')
+            params['scope'] = 'public_profile'
             endpoint = f'https://www.facebook.com/{c.graph_version}/dialog/oauth'
         return Response({'authorizationUrl': endpoint+'?'+urlencode(params)})
 
@@ -231,13 +231,14 @@ def exchange_identity(c, attempt, code):
                 (checked.get('data_access_expires_at') and checked['data_access_expires_at'] <= time.time())):
             raise ValueError('invalid facebook token')
         proof = hmac.new(secret.encode(), token.encode(), hashlib.sha256).hexdigest()
-        claims = provider_json('GET', endpoint+'/me', params={'fields': 'id,name,email', 'appsecret_proof': proof},
+        claims = provider_json('GET', endpoint+'/me', params={'fields': 'id,name', 'appsecret_proof': proof},
             headers={'Authorization': 'Bearer '+token})
         subject = str(claims.get('id', ''))
         if subject != str(checked.get('user_id', '')):
             raise ValueError('identity mismatch')
-        email, name = str(claims.get('email', '')).strip().lower(), str(claims.get('name', ''))[:60]
-        trusted = False  # Facebook email is not a mailbox-ownership proof.
+        # First-time Facebook users verify an address they enter in POPOMO.
+        email, name = '', str(claims.get('name', ''))[:60]
+        trusted = False
     if not isinstance(subject, str) or not subject or len(subject) > 255:
         raise ValueError('invalid subject')
     try:
