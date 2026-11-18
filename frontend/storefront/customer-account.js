@@ -42,7 +42,15 @@ function creditActivity(ui){
  return `<section class="account-ledger"><button type="button" class="account-ledger-toggle" data-customer-action="credits-toggle" aria-expanded="${!!ui.ledgerOpen}"><span>${locale()==='zh-CN'?'额度记录':'Credit history'}</span><span aria-hidden="true">${ui.ledgerOpen?'−':'+'}</span></button>${ui.ledgerOpen?`<p class="account-ledger-note">1 credit = 1 AI generation. Balances are shown separately for gifts and monthly credits.</p>${ui.ledgerError?`<p class="account-error" role="alert">${esc(ui.ledgerError)}</p><button class="text-button" data-customer-action="credits-refresh">Refresh activity</button>`:''}${rows.length?`<ul class="credit-entries">${rows.map(row=>`<li><div><strong>${creditLabels[row.kind]||'Credit adjustment'}</strong><small><span>${row.pool==='gift'?'Gift credits':'Monthly credits'}</span> · ${esc(new Date(row.createdAt).toLocaleString(locale()))}</small>${row.renderId?`<small class="credit-ref"><span>Render</span> ${esc(row.renderId)}</small>`:''}</div><div class="credit-entry-amount"><b class="${row.amount>0?'credit-plus':row.amount<0?'credit-minus':''}">${row.amount>0?'+':''}${Number(row.amount)}</b><small><span>Balance</span> ${Number(row.balanceAfter)}</small></div></li>`).join('')}</ul>`:ui.ledgerBusy?'':'<p class="account-ledger-note">No credit activity yet.</p>'}${ui.ledgerBusy?'<p role="status" class="account-ledger-note">Loading activity…</p>':''}${ui.ledgerNext?`<button class="text-button" data-customer-action="credits-more" ${ui.ledgerBusy?'disabled':''}>Load earlier activity</button>`:''}<p class="account-ledger-note">Older balances appear as an opening balance.</p>`:''}</section>`;
 }
 
+export function accountStatusPage(unavailable=false){
+ const zh=locale()==='zh-CN';
+ const title=unavailable?(zh?'暂时无法加载登录方式':'Sign-in options are unavailable'):(zh?'正在加载登录方式…':'Loading sign-in options…');
+ const retry=unavailable?`<button type="button" class="button primary" data-action="reload-account">${zh?'重新加载':'Reload'}</button>`:'';
+ return `<section class="v35-account-login v35-account-status"><div role="${unavailable?'alert':'status'}"><h1>${title}</h1>${retry}</div></section>`;
+}
+
 export function customerPage(account,ui={}){
+ if(ui.loading||ui.unavailable)return accountStatusPage(ui.unavailable&&!ui.loading);
  const signedIn=account.authenticated===true,gift=Math.max(0,Number(account.signupCredits)||0);
  const subscription=account.subscription,balance={trial:signedIn?Math.max(0,Number(account.trialRemaining)||0):0,monthly:signedIn&&subscription&&Date.now()<subscription.endsAt?Math.max(0,(Number(subscription.monthlyLimit)||0)-(Number(subscription.used)||0)):0};
  const zh=locale()==='zh-CN',say=(en,cn)=>zh?cn:en;

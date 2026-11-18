@@ -221,9 +221,11 @@ body[data-v35-route=choose] .v35-header{max-width:760px}
 
 /* Account: prototype glass sign-in card and matching real profile panels. */
 body[data-v35-route="account"]{min-height:100dvh;background:#f6edff linear-gradient(#ffffff72,#ffffff72);background-image:linear-gradient(#ffffff72,#ffffff72),url('./assets/v35/backgrounds/bg-ss1-h1-.webp');background-position:center top;background-size:cover;background-repeat:no-repeat}
-body[data-v35-route="account"] .v35-footer{display:none}
+body[data-v35-route="account"] .v35-footer{justify-content:center;padding:0 0 24px}
+body[data-v35-route="account"] .v35-footer>:not(.v35-legal-links){display:none}
 body[data-v35-route="account"] #main{padding:26px 24px 34px;min-height:calc(100dvh - 230px)}
 .v35-account-login{display:grid;align-items:stretch;grid-template-columns:.95fr 1.05fr;gap:0;width:100%;max-width:1032px;min-height:510px;margin:0 auto;border:1px solid white;border-radius:26px;overflow:hidden;background:#ffffff9c;box-shadow:0 18px 60px #280a401a,inset 0 1px #fff;backdrop-filter:blur(12px)}
+.v35-account-login.v35-account-status{display:grid;grid-template-columns:1fr;place-items:center;min-height:min(510px,68dvh);text-align:center;padding:24px}.v35-account-status h1{font-size:clamp(18px,4vw,24px);font-weight:600;margin:0}.v35-account-status .button{margin-top:18px}
 .v35-account-login .v35-account-story{position:relative;display:flex;flex-direction:column;padding:34px;border-right:1px solid #ffffff99;background:radial-gradient(at 10% 0%,#fff9,transparent 65%),linear-gradient(150deg,#eedcff91,#dcb8f09c)}
 .v35-account-login .v35-kicker{font-size:12px;letter-spacing:1.6px;color:#7021b0;margin:0;line-height:1.6;font-weight:500}
 .v35-account-story-copy{margin:30px 0}

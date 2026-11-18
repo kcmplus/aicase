@@ -570,7 +570,7 @@ test('actual local restore clears unavailable color while retaining composition 
 async function startColorDraft(editor,response){
  const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
  const start=source.indexOf('async function startStorefront(){');
- const end=source.indexOf("try{if(location.hash.slice(1).split('?')[0]!=='checkout')",start);
+ const end=source.indexOf('try{if(!accountEntry',start);
  const refreshStart=source.indexOf('async function refreshStockChoices(){');
  const refreshEnd=source.indexOf('\nsetInterval(async()=>',refreshStart);
  assert.ok(start>=0&&end>start&&refreshStart>0&&refreshEnd>refreshStart);
@@ -737,7 +737,7 @@ test('orders loading and failure remain distinct from empty, and server text is 
 // responses. No browser, database or external service is involved in this race.
 async function qaOrdersNavigation(){
  const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
- const start=source.indexOf('async function navigate(){');
+ const start=source.indexOf('async function navigate(');
  const end=source.indexOf('\nconst entryHash=',start);
  assert.ok(start>=0&&end>start);
  const identity=[];
@@ -766,6 +766,44 @@ test('QA orders navigation clears loading after a successful or failed server re
   assert.equal(context.orderError,fails?'Synthetic API failure':'');
   assert.equal(context.orderRows.length,fails?0:1);
  }
+});
+
+test('account navigation shows the complete provider list only after the session is known',async()=>{
+ const {context,identity}=await qaOrdersNavigation();
+ const providerList=['google','facebook'];
+ const views=[];
+ context.location.hash='#account';
+ context.membership={authenticated:false,socialProviders:[]};
+ context.render=()=>views.push(customerPage(context.membership,context.customerUI));
+ const opening=context.navigate();
+ assert.equal(context.customerUI.loading,true);
+ // Other app events may render while this request is still pending.
+ context.render();
+ assert.match(views[0],/Loading sign-in options/);
+ assert.doesNotMatch(views[0],/customer-email-form|social-google|social-facebook/);
+ context.membership={authenticated:false,socialProviders:providerList};
+ identity[0]();
+ await opening;
+ assert.match(views[1],/customer-email-form/);
+ assert.match(views[1],/data-customer-action="social-google"/);
+ assert.match(views[1],/data-customer-action="social-facebook"/);
+ assert.equal(views.length,2);
+});
+
+test('direct account entry reuses the startup session and offers reload when unavailable',async()=>{
+ const {context,identity}=await qaOrdersNavigation();
+ const views=[];
+ context.location.hash='#account';
+ context.membership={authenticated:false,socialProviders:['google','facebook']};
+ context.render=()=>views.push(customerPage(context.membership,context.customerUI));
+ await context.navigate({useInitialAccount:true});
+ assert.equal(identity.length,0);
+ assert.match(views[0],/social-google/);
+ context.workspace.active=false;
+ await context.navigate({useInitialAccount:true});
+ assert.equal(identity.length,0);
+ assert.match(views[1],/data-action="reload-account"/);
+ assert.doesNotMatch(views[1],/customer-email-form|social-google/);
 });
 
 test('QA a superseded orders navigation cannot leave the newer loaded page permanently busy',async()=>{
