@@ -243,6 +243,26 @@ body{font-family:'DM Sans','PingFang SC','Microsoft YaHei',sans-serif;background
 .v35-socials svg{width:24px;height:24px}
 .v35-legal-links{display:flex;flex-wrap:wrap;align-items:center;gap:0 18px;font-size:13px}
 .v35-legal-links a{display:inline-flex;align-items:center;min-height:44px;text-decoration:underline;text-underline-offset:.15em}
+.v35-company-info {
+  width: calc(100% - 96px);
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 16px 0 24px;
+  border-top: 1px solid #dfc9ef;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.v35-company-info [lang="zh-CN"],
+html:lang(zh-CN) .v35-company-info [lang="en"],
+body[data-v35-route]:not(.v35-home-page) .v35-company-info {
+  display: none;
+}
+html:lang(zh-CN) .v35-company-info [lang="zh-CN"] {
+  display: inline;
+}
+@media (max-width: 760px) {
+  .v35-company-info { width: calc(100% - 40px); }
+}
 @media(max-width:1150px) and (min-width:761px){.v35-home .v35-studio{padding-inline:32px;gap:45px}.v35-curated-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.v35-ai-visual{scale:.85;transform-origin:center}.v35-ai-copy h2{font-size:40px}}
 @media(max-width:760px){
  .v35-home .v35-hero{padding-top:124px;min-height:810px}
