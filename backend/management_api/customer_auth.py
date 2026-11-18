@@ -44,6 +44,37 @@ def signup_credits():
     return mail_config().signup_credits
 
 
+def complete_customer_login(*, email=None, customer_id=None, name=''):
+    """Call inside a transaction after identity/mailbox ownership has been verified."""
+    if customer_id:
+        customer, created = Customer.objects.get(pk=customer_id), False
+    else:
+        customer, created = Customer.objects.get_or_create(email=email, defaults={
+            'verified_at': timezone.now(), 'display_name': name[:60]})
+    customer = Customer.objects.select_for_update().get(pk=customer.pk)
+    if not customer.active:
+        raise PermissionDenied('This account is unavailable. Please contact the store.')
+    customer.last_login_at = timezone.now()
+    customer.save(update_fields=['last_login_at', 'updated_at'])
+    key = hashlib.sha256(('customer:' + str(customer.pk)).encode()).hexdigest()
+    account, account_created = AIAccount.objects.get_or_create(owner_hash=key, defaults={
+        'customer': customer, 'trial_granted': signup_credits()})
+    if account_created:
+        from .credit_ledger import record
+        record(account, 'signup', 'signup', 'gift', 0, account.trial_granted)
+    return customer, created
+
+
+def establish_customer_session(request, customer):
+    request.session.cycle_key()
+    rotate_token(request)
+    request.session[SESSION_KEY] = str(customer.pk)
+    request.session['store_customer_version'] = customer.session_version
+    request.session.pop('social_browser', None)
+    request.session.pop('social_pending', None)
+    request.session.set_expiry(30*24*60*60)
+
+
 def public_customer(customer):
     return {'id': str(customer.pk), 'email': customer.email, 'displayName': customer.display_name,
             'joinedAt': customer.created_at.isoformat(),
@@ -97,9 +128,10 @@ class CustomerView(APIView):
         SessionAuthentication().enforce_csrf(request)
 
     def get(self, request):
+        from .social_login import public_options
         return Response({'customer': public_customer(customer_for(request)),
-                         'signupCredits': signup_credits(), 'emailEnabled': mail_available(),
-                         'csrfToken': get_token(request)})
+                         'signupCredits': signup_credits(),
+                         'csrfToken': get_token(request), **public_options(request)})
 
     def patch(self, request):
         customer = customer_for(request)
@@ -115,6 +147,8 @@ class CustomerView(APIView):
     def delete(self, request):
         request.session.pop(SESSION_KEY, None)
         request.session.pop('store_customer_version', None)
+        request.session.pop('social_pending', None)
+        request.session.pop('social_browser', None)
         request.session.cycle_key()
         return Response({'customer': None, 'csrfToken': get_token(request)})
 
@@ -179,26 +213,14 @@ class VerifyCode(CustomerView):
                 valid = True
                 challenge.delivered, challenge.code_hash = False, ''
                 challenge.save(update_fields=['delivered', 'code_hash'])
-                customer, created = Customer.objects.get_or_create(email=email, defaults={'verified_at': timezone.now()})
-                customer = Customer.objects.select_for_update().get(pk=customer.pk)
-                if customer.active:
-                    customer.last_login_at = timezone.now()
-                    customer.save(update_fields=['last_login_at', 'updated_at'])
-                    key = hashlib.sha256(('customer:' + str(customer.pk)).encode()).hexdigest()
-                    account, account_created = AIAccount.objects.get_or_create(owner_hash=key, defaults={
-                        'customer': customer, 'trial_granted': signup_credits()})
-                    if account_created:
-                        from .credit_ledger import record
-                        record(account, 'signup', 'signup', 'gift', 0, account.trial_granted)
+                customer, created = complete_customer_login(email=email)
+                from .social_login import link_verified_pending
+                link_verified_pending(request, customer)
         if not valid:
             return Response({'detail': 'This code is invalid or expired. Request a new code.'}, status=400)
         if not customer.active:
             raise PermissionDenied('This account is unavailable. Please contact the store.')
-        request.session.cycle_key()
-        rotate_token(request)
-        request.session[SESSION_KEY] = str(customer.pk)
-        request.session['store_customer_version'] = customer.session_version
-        request.session.set_expiry(30*24*60*60)
+        establish_customer_session(request, customer)
         return Response({'customer': public_customer(customer), 'created': created, 'csrfToken': get_token(request)})
 
 

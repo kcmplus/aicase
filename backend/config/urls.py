@@ -11,6 +11,7 @@ from management_api.ai_service import AIServiceSettingsView, AIServiceCheckView
 from management_api.ai_generation import AIAccountView, AIRenders, AIRenderDetail, AIRenderImage
 from management_api.ai_reporting import AIUsageView, AICallLogsView, AIRenderCostView, AIAdminImageView
 from management_api.customer_auth import CustomerView, SendCode, VerifyCode, CustomerCredits
+from management_api.social_login import SocialSettings, SocialStart, SocialCallback
 from management_api.mail_service import MailSettings, MailTest, RegistrationSettings
 
 from management_api.customers import CustomerViewSet
@@ -41,6 +42,9 @@ urlpatterns = [
     path("api/v1/admin/orders/<int:pk>/refund/", AdminRefund.as_view()),
     path("api/v1/store/customer/credits/", CustomerCredits.as_view()),
     path("api/v1/store/customer/", CustomerView.as_view()),
+    path("api/v1/store/customer/social/<str:provider>/start/", SocialStart.as_view()),
+    path("api/v1/store/customer/social/<str:provider>/callback/", SocialCallback.as_view()),
+    path("api/v1/admin/social-login/<str:provider>/", SocialSettings.as_view()),
     path("api/v1/store/customer/send-code/", SendCode.as_view()),
     path("api/v1/store/customer/verify/", VerifyCode.as_view()),
     path("api/v1/admin/registration/", RegistrationSettings.as_view()),
