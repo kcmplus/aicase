@@ -134,23 +134,28 @@ class SocialLoginTests(TestCase):
         _,exchange=self.callback(state);exchange.assert_not_called();self.assertFalse(Customer.objects.exists())
 
     def test_facebook_first_login_requires_mailbox_proof_and_later_uses_subject(self):
-        self.facebook();state,_=self.start('facebook')
-        fb={**self.identity,'email':'existing@example.com','trusted':False}
-        with transaction.atomic():customer,_=complete_customer_login(email=fb['email'])
+        self.facebook()
+        state, params = self.start('facebook')
+        self.assertEqual(params['scope'], ['public_profile'])
+        email = 'existing@example.com'
+        fb = {**self.identity, 'email': '', 'trusted': False}
+        with transaction.atomic():
+            customer, _ = complete_customer_login(email=email)
         response,_=self.callback(state,'facebook',identity=fb)
         self.assertIn('social=verify_email',response.url);self.assertNotIn('store_customer_id',self.client.session)
         self.assertFalse(CustomerSocialIdentity.objects.exists());self.assertEqual(Customer.objects.count(),1)
-        self.assertNotIn('subject',str(self.client.get('/api/v1/store/customer/').data))
+        pending = self.client.get('/api/v1/store/customer/').data['socialPending']
+        self.assertEqual(pending, {'provider': 'facebook', 'email': ''})
         with patch('management_api.customer_auth.send_transactional_mail') as mail:
-            result=self.client.post('/api/v1/store/customer/send-code/',{'email':fb['email']},format='json')
+            result=self.client.post('/api/v1/store/customer/send-code/',{'email':email},format='json')
         self.assertEqual(result.status_code,200)
         code=re.search(r'\b\d{6}\b',mail.call_args.args[2])[0]
-        result=self.client.post('/api/v1/store/customer/verify/',{'email':fb['email'],'code':code},format='json')
+        result=self.client.post('/api/v1/store/customer/verify/',{'email':email,'code':code},format='json')
         self.assertEqual(result.status_code,200,result.data);self.assertEqual(CustomerSocialIdentity.objects.get().customer,customer)
         self.assertEqual(CreditEntry.objects.filter(kind='signup').count(),1)
         self.client.delete('/api/v1/store/customer/');state,_=self.start('facebook')
-        response,_=self.callback(state,'facebook',identity={**fb,'email':'changed@example.com'})
-        self.assertIn('social=success',response.url);self.assertEqual(self.client.get('/api/v1/store/customer/').data['customer']['email'],fb['email'])
+        response,_=self.callback(state,'facebook',identity=fb)
+        self.assertIn('social=success',response.url);self.assertEqual(self.client.get('/api/v1/store/customer/').data['customer']['email'],email)
 
     def test_external_google_email_uses_verification_and_missing_email_is_supported(self):
         state,_=self.start();response,_=self.callback(state,identity={**self.identity,'trusted':False,'email':''})
@@ -177,11 +182,14 @@ class SocialLoginTests(TestCase):
         good={'data':{'is_valid':True,'app_id':'12345','user_id':'u1','type':'USER','expires_at':int(time.time())+600}}
         for changed in [None,{'app_id':'other'},{'user_id':'other'},{'expires_at':1},{'is_valid':False}]:
             checked=good if not changed else {'data':{**good['data'],**changed}}
-            with patch('management_api.social_login.provider_json',side_effect=[{'access_token':'token-canary'},checked,{'id':'u1','email':'person@example.com'}]) as fetch:
+            with patch('management_api.social_login.provider_json',side_effect=[{'access_token':'token-canary'},checked,{'id':'u1','name':'Tester'}]) as fetch:
                 if changed:
                     with self.assertRaises(ValueError):exchange_identity(c,attempt,'code')
                 else:
-                    self.assertFalse(exchange_identity(c,attempt,'code')['trusted'])
+                    identity = exchange_identity(c, attempt, 'code')
+                    self.assertFalse(identity['trusted'])
+                    self.assertEqual(identity['email'], '')
+                    self.assertEqual(fetch.call_args.kwargs['params']['fields'], 'id,name')
                     self.assertIn('appsecret_proof',fetch.call_args.kwargs['params'])
                     self.assertEqual(fetch.call_args.kwargs['headers']['Authorization'],'Bearer token-canary')
 
