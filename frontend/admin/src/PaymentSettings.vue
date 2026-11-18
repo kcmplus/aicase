@@ -1,7 +1,7 @@
 <script setup>
 import {useRoute} from 'vue-router';
 const route=useRoute();
-const channels=[{path:'/payments/airwallex',label:'Airwallex'},{path:'/payments/stripe',label:'Stripe'}];
+const channels=[{path:'/settings/payments/airwallex',label:'Airwallex'},{path:'/settings/payments/stripe',label:'Stripe'}];
 </script>
 <template>
  <section class="payment-settings">

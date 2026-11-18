@@ -1,6 +1,6 @@
-# 邮箱注册与 AI 注册赠送
+# 顾客登录、邮箱注册与 AI 注册赠送
 
-用户端入口：`/#account`。后台入口：`/admin/mail`（邮件与注册），仅超级管理员可访问。
+用户端入口：`/#account`。后台入口：「设置 → 邮件与登录」(`/admin/settings/mail`)，仅超级管理员可访问；旧 `/admin/mail` 自动跳转。
 
 ## 用户流程
 
@@ -29,9 +29,31 @@
 3. 用户名和发件地址填写同一个完整 Gmail 邮箱；SMTP 密码填写应用专用密码（去掉显示用的空格），不是 Google 登录密码。发件人名称可填 POPOMO。
 4. 保存配置后发送测试邮件，确认收件成功，再开启邮箱验证码并保存。不要将真实密码写入仓库。
 
-当前使用 SMTP 用户名及应用专用密码认证，不支持 Google OAuth 登录。若组织策略不允许创建应用专用密码，需要管理员处理或改用其他邮件服务。
+邮件发送使用 SMTP 用户名及应用专用密码认证，不使用 Google OAuth 发送邮件。下面的 Google 登录是独立能力。若组织策略不允许创建应用专用密码，需要管理员处理或改用其他邮件服务。
 
 官方说明：https://support.google.com/accounts/answer/185833 与 https://support.google.com/mail/answer/7104828 。
+
+## Google / Facebook 登录配置
+
+后台「邮件与注册」下方的「第三方登录」分别配置两个平台，仅超级管理员可操作。初始全部关闭，用户端只显示已启用且配置完整的平台。注册赠送继续使用上方「新账号赠送额度」，页面不固定显示 5 次。
+
+1. 在 Google Auth Platform 创建 **Web 应用** OAuth 客户端，完成品牌、受众和测试用户设置。在 Meta for Developers 创建支持 Facebook Login 的应用，按平台要求配置测试用户及上线资格。
+2. 在我方后台填写客户网站域名（测试站为 `https://aicase.chunpat.cc`）、Client ID / App ID 与对应 Secret。Facebook Graph API 版本与应用支持版本保持一致。
+3. 复制后台生成的完整回调地址，填到平台允许的重定向 URI。测试站分别为：
+   - `https://aicase.chunpat.cc/api/v1/store/customer/social/google/callback/`
+   - `https://aicase.chunpat.cc/api/v1/store/customer/social/facebook/callback/`
+4. 保存并开启对应登录方式。在同一网站域名上用实际测试账号登录，确认授权返回和额度正确；平台处于测试／开发模式时不能据此承诺所有顾客可用。
+5. 应用密钥留空表示保留，清除需先关闭登录。更换应用 ID 需同时更换或清除密钥。配置有版本校验，其他管理员修改后需刷新再保存。
+
+Google 登录通过服务端校验签名、颁发者、客户端、有效期与 nonce。只有可确认邮箱归属的 Gmail 或已验证的托管域邮箱才能直接关联同邮箱账号；其他 Google 邮箱和首次 Facebook 登录须再收一次邮箱验证码。验证后保存平台稳定用户 ID 的关联，后续不因平台邮箱字段变化而迁移账号。停用账号不能通过任何登录方式进入。
+
+授权采用服务端 code 流程，Google 同时使用 PKCE；一次性 state 绑定发起授权的浏览器，有效期 10 分钟。重放、换浏览器、配置变更和超时均不能继续登录。密钥使用现有加密配置保存，不返回前端；不保存平台 access token。新注册只发放一次赠送，不自动合并旧匿名任务、历史订单或其他浏览器的草稿。
+
+部署需安装新增 PyJWT 依赖并执行迁移 `0036_social_login`，同步前后台。**启用平台前**，将 `deploy/dev/nginx.locations.conf`（生产用 prod 对应文件）的 OAuth callback 专用 location 合入实际 Nginx 配置，检查并重载，关闭回调 URL 的访问日志；同时使用新的 Gunicorn 日志配置，只记录路径、状态和耗时，不记录查询参数及 Referer。已有发布流程不会自动替换已安装的 Nginx include 或 systemd 单元，需显式核对；`backend/gunicorn.conf.py` 为旧单元提供默认日志配置。外层代理的日志也应移除回调参数。
+
+本地测试覆盖授权替身、真实 RSA 签名校验、回调幂等、权限与赠送；不等于已通过平台真实账号验收。未填写真实应用凭据时保持关闭。
+
+参考：[Google OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect)、[Google ID token 校验与邮箱归属](https://developers.google.com/identity/gsi/web/guides/verify-google-id-token)、[Facebook 手动登录流程](https://developers.facebook.com/documentation/facebook-login/guides/advanced/manual-flow)。
 
 ## 会话与限流
 

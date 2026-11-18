@@ -251,10 +251,11 @@ class AIPrivateView(APIView):
 class AIAccountView(AIPrivateView):
     def get(self, request):
         if not customer_for(request):
+            from .social_login import public_options
             return Response({'server': True, 'authenticated': False, 'customer': None,
                              'trialGranted': 0, 'trialRemaining': 0, 'trialCount': 0,
                              'trialUsed': False, 'subscription': None, 'signupCredits': signup_credits(),
-                             'demoSubscriptionsAvailable': False})
+                             'demoSubscriptionsAvailable': False, **public_options(request)})
         key=owner(request); expire_stale_jobs(key)
         account=AIAccount.objects.get(owner_hash=key)
         plan=PricingPlan.objects.filter(kind='ai_monthly',active=True).first()
