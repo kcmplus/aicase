@@ -46,7 +46,7 @@ import {activeLook,lookBrowserContent,setLookMode,setLookComparison,updateLookIm
 import {aiStyles,refreshAIOrder,canApplyAIOrder} from './ai-core.js';
 import {generatedPhotoPlacement,createLiveRender,getAIAccount,changeAIAccount,submitLiveRender,refreshLiveRender,cancelLiveRender} from './ai-service.js';
 import {importPhoto} from './simple-upload.js';
-import {customerPage,sendEmailCode,verifyEmailCode,signOutCustomer,updateCustomerName,getCustomerCredits,startSocialLogin,socialReturnMessage} from './customer-account.js';
+import {accountStatusPage,customerPage,sendEmailCode,verifyEmailCode,signOutCustomer,updateCustomerName,getCustomerCredits,startSocialLogin,socialReturnMessage} from './customer-account.js';
 import {createDesignWorkspace,createDesignLibrary,designOwner} from './design-workspace.js';
 import {myDesignsPage,designReview} from './v35-designs.js';
 import {showStorageStartupError} from './v35-startup.js';
@@ -54,7 +54,13 @@ import {showStorageStartupError} from './v35-startup.js';
 async function startStorefront(){
 let colorNotice=false;
 const app = document.querySelector('#app');
-app.textContent=t('Loading POPOMO…');
+const initialHash=location.hash;
+const accountEntry=initialHash.split('?')[0]==='#account';
+if(accountEntry){
+ document.body.dataset.v35Route='account';
+ app.innerHTML=shellHeader({lang:locale(),language:languageControl(),route:'account'})+
+  `<main id="main" tabindex="-1">${accountStatusPage()}</main>`;
+}else app.textContent=t('Loading POPOMO…');
 const stockScope=deviceScope();
 if(stockScope){const url=new URL(location.href);for(const [key,value] of new URLSearchParams(stockScope))url.searchParams.set(key,value);history.replaceState(null,'',url);}
 const scannedIds=scopeIds(stockScope);
@@ -83,7 +89,7 @@ let cleanupShell=()=>{};
 let cleanupWorkLikes=()=>{};
 let cleanupHomePhone=()=>{};
 let cleanupPhoneModels=()=>{};
-const customerUI={email:'',codeSent:false,busy:false,error:'',success:'',ledger:[],ledgerNext:null,ledgerOpen:false,ledgerBusy:false,ledgerError:'',resendAt:0,next:'choose'};
+const customerUI={email:'',codeSent:false,busy:false,loading:accountEntry,unavailable:false,error:'',success:'',ledger:[],ledgerNext:null,ledgerOpen:false,ledgerBusy:false,ledgerError:'',resendAt:0,next:'choose'};
 let resendTimer;
 let membership={...freshMembership(),server:true,authenticated:false,customer:null,...(initialData[4]||{})};
 const stopForStorage=()=>{
@@ -205,7 +211,7 @@ try{if(workspace.active)membership=await privateUpdate('ai-membership-v1',a=>mig
 catch{return stopForStorage();}
 if(aiJob)aiJob=membership.jobs[aiJob.id];
 if(aiJob?.status==='awaiting_confirmation')customerUI.next='ai';
-try{if(location.hash.slice(1).split('?')[0]!=='checkout')await syncAIAccount();if(aiJob?.mode==='live')await rememberLiveJob(await refreshLiveRender(aiJob));}catch{/* A saved job can be resumed when the service returns. */}
+try{if(!accountEntry&&location.hash.slice(1).split('?')[0]!=='checkout')await syncAIAccount();if(aiJob?.mode==='live')await rememberLiveJob(await refreshLiveRender(aiJob));}catch{/* A saved job can be resumed when the service returns. */}
 let comparing=false,photoBusy=false,passBusy=false;
 const editorHistory=createEditorHistory();
 let editorTool='base',editorToolsOpen=true;
@@ -1085,7 +1091,7 @@ app.addEventListener('click',async event=>{
   if(el.dataset.action==='ai-choose-phone'){openModelPicker(true);return;}
   if(el.dataset.action==='home-photo'){event.preventDefault();go('choose?source=photo');return;}
   if(el.dataset.action==='home-ai'){event.preventDefault();openHomePhone();return;}
-  if(el.dataset.action==='reload-private-workspace'){location.reload();return;}
+  if(['reload-private-workspace','reload-account'].includes(el.dataset.action)){location.reload();return;}
   if(el.dataset.action==='close-design-review'){closeDesignReview();return;}
   if(['save-local-design','continue-design-checkout','restore-design','delete-design','refresh-designs','restore-legacy-draft','restore-photo-draft','delete-photo-draft','print-design','print-photo-draft'].includes(el.dataset.action)){
    event.preventDefault();passBusy=true;
@@ -1268,7 +1274,7 @@ async function refreshStockChoices(){
  return before!==JSON.stringify(phoneModels.map(model=>stockSelection(model)))||beforeStatus!==stockCatalogStatus;
 }
 setInterval(async()=>{if(document.hidden||passBusy||photoBusy||aiBusy||canvasExpanded||(stockCatalogStatus==='ready'&&Date.now()-stockRefreshedAt<60000))return;const changed=await refreshStockChoices();if(changed&&location.hash.startsWith('#choose'))render(true);},10000);
-async function navigate(){
+async function navigate({useInitialAccount=false}={}){
  let verifiedNoticeOrder=null;
  const currentNavigation=++navigationId;
  const [route,query='']=location.hash.slice(1).split('?');const params=new URLSearchParams(query);
@@ -1280,9 +1286,14 @@ async function navigate(){
  if(route==='choose'){reviewPass=null;reviewSaved=false;await refreshStockChoices();if(currentNavigation!==navigationId)return;}
  if(route==='review'&&!reviewPass){try{const prepared=await prepareDesignReview({...state});if(currentNavigation!==navigationId)return;reviewPass=prepared;reviewSaved=false;}catch(error){if(currentNavigation!==navigationId)return;notify(error.message);go('choose');return;}}
  if(route==='my-designs'){localDesigns=[];localDesignBusy=true;render(true);await loadLocalDesigns();}
- if(route==='account'||route==='membership')try{
-  await syncAIAccount();
-  if(route==='account'){
+ if(route==='account'){
+  customerUI.loading=true;
+  customerUI.unavailable=false;
+  try{
+   if(useInitialAccount){
+    if(!workspace.active)throw Error('Sign-in options are unavailable');
+   }else await syncAIAccount();
+   if(currentNavigation!==navigationId)return;
    if(params.has('social')){
     customerUI.next=params.get('next')==='ai'?'ai':'choose';
     customerUI.error=socialReturnMessage(params.get('social'));
@@ -1291,8 +1302,16 @@ async function navigate(){
    }
    if(membership.socialPending&&!customerUI.email)customerUI.email=membership.socialPending.email||'';
    if(membership.authenticated)await loadCustomerCredits(true);
+  }catch{
+   if(currentNavigation!==navigationId)return;
+   customerUI.unavailable=true;
+  }finally{
+   if(currentNavigation===navigationId)customerUI.loading=false;
   }
- }catch(error){customerUI.error=error.message;}
+ }else if(route==='membership'){
+  try{await syncAIAccount();}catch(error){if(currentNavigation===navigationId)customerUI.error=error.message;}
+ }
+ if(currentNavigation!==navigationId)return;
  stopPaymentPolling();paymentPollCount=0;
  if(route==='checkout'){
   paymentConfig=null;paymentError='';paymentLoading=true;render(true);
@@ -1354,7 +1373,7 @@ if(entry&&location.hash===entryHash){
 window.addEventListener('hashchange',navigate);
 let sessionCheckBusy=false;
 async function checkVisibleSession(){
- if(document.hidden||sessionCheckBusy)return;
+ if(document.hidden||sessionCheckBusy||(customerUI.loading&&location.hash.split('?')[0]==='#account'))return;
  sessionCheckBusy=true;
  try{await syncAIAccount();}catch(error){customerUI.error=error.message;render(true);}
  finally{sessionCheckBusy=false;}
@@ -1367,7 +1386,7 @@ window.addEventListener('resize',()=>{if(!artworkDrag)highlightArtwork();});
 app.addEventListener('load',event=>{if(!artworkDrag&&event.target.closest?.('.artwork-canvas'))highlightArtwork();},true);
 for(const type of ['load','error'])app.addEventListener(type,event=>{if(event.target.matches?.('.look-comparison img'))updateLookImageState(document.querySelector('.look-browser'));},true);
 startVisiblePolling({interval:60000,enabled:()=>Boolean(pickupContext())&&!passBusy&&!stationFinder.state.busy,refresh:()=>stationFinder.refresh()});
-await navigate();
+await navigate({useInitialAccount:accountEntry&&location.hash===initialHash});
 
 async function loadAssetPhoto(url){
  const response=await fetch(url);if(!response.ok)throw Error('The style sample could not be loaded. Please try again.');
@@ -1391,7 +1410,7 @@ function lockPrivateWorkspace(){
  Object.assign(state,{photo:'',phoneColor:null,pass:null,job:null,ai:null,aiJobId:null,artworkLayouts:{},photoArtwork:[],photoPlacement:null,editOrderId:null});
  reviewPass=null;reviewSaved=false;checkoutDraft=null;aiJob=null;localDesigns=[];localPhotoDrafts=[];orderRows=[];paymentOrder=null;orderBook=freshOrders();
  membership={...freshMembership(),server:true,authenticated:false,customer:null};
- Object.assign(customerUI,{email:'',codeSent:false,ledger:[],ledgerNext:null,ledgerOpen:false});
+ Object.assign(customerUI,{email:'',codeSent:false,unavailable:true,ledger:[],ledgerNext:null,ledgerOpen:false});
 }
 async function syncAIAccount(){try{await mergeAIAccount(await getAIAccount());}catch(error){lockPrivateWorkspace();throw error;}}
 async function rememberLiveJob(job){

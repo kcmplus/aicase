@@ -33,7 +33,7 @@ function errorView(){
 test('startup stops when the saved draft photo cannot be read',async()=>{
  const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
  const start=source.indexOf('async function startStorefront(){');
- const end=source.indexOf("try{if(location.hash.slice(1).split('?')[0]!=='checkout')");
+ const end=source.indexOf('try{if(!accountEntry',start);
  assert.ok(start>=0&&end>start);
  const app={textContent:''};let photoRead=0;
  const context=vm.createContext({createOrderSuccessTracker,singlePrintDraft,createStationFinder,selectSupplierTemplate,
@@ -71,7 +71,7 @@ test('storage recovery is bilingual, keyboard reachable, and only reloads when r
 test('a transient photo read failure preserves the scoped draft for a later startup',async()=>{
  const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
  const start=source.indexOf('async function startStorefront(){');
- const end=source.indexOf("try{if(location.hash.slice(1).split('?')[0]!=='checkout')");
+ const end=source.indexOf('try{if(!accountEntry',start);
  assert.ok(start>=0&&end>start);
  const photo='data:image/png;base64,c3ludGhldGlj';
  const draft={source:'photo',designId:'bloom',zoom:137,x:27,y:69,photoPlacement:{x:27,y:69,scale:137,rotation:0}};
