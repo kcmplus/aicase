@@ -704,7 +704,11 @@ function publicStationPage(legacy=false){
 function stationContext(){
  if(!scannedIds)return '';
  const zh=locale()==='zh-CN';
- return `<section class="station-context" aria-label="${zh?'当前打印设备':'Selected print station'}">${scannedStation?`${stationIdentity(scannedStation,{lang:locale()})}<p class="device-scan-notice">${zh?'已选择此设备。已有订单可确认推单，新设计将在此设备打印。':'Station selected. Confirm an existing order here, or create a new design.'}</p>`:`${lastScannedStation?stationIdentity({...lastScannedStation,coordinates:null},{lang:locale()})+`<small>${zh?'上次读取的设备资料，当前待核实':'Previously loaded station details; verification pending'}</small>`:''}<p role="status">${esc(deviceInfoErrorMessage(stationError,locale()))}</p><button class="text-button" data-action="refresh-device-info" ${passBusy?'disabled':''}>${zh?'刷新设备信息':'Refresh station details'}</button>`}</section>`;
+ if(scannedStation){
+  const name=typeof scannedStation.name==='string'?scannedStation.name.trim():'';
+  return `<details class="station-context station-context-compact"><summary aria-label="${zh?'当前打印设备，展开详情':'Selected print station, show details'}"><span class="station-context-dot" aria-hidden="true"></span><strong class="station-context-title">${esc(name||(zh?'打印设备':'Print station'))}</strong><span class="station-context-action">${zh?'详情':'Details'}</span><span class="station-context-chevron" aria-hidden="true">⌄</span></summary><div class="station-context-body">${stationIdentity(scannedStation,{lang:locale()})}<p class="device-scan-notice">${zh?'已选择此设备。已有订单可确认推单，新设计将在此设备打印。':'Station selected. Confirm an existing order here, or create a new design.'}</p></div></details>`;
+ }
+ return `<section class="station-context" aria-label="${zh?'当前打印设备':'Selected print station'}">${lastScannedStation?stationIdentity({...lastScannedStation,coordinates:null},{lang:locale()})+`<small>${zh?'上次读取的设备资料，当前待核实':'Previously loaded station details; verification pending'}</small>`:''}<p role="status">${esc(deviceInfoErrorMessage(stationError,locale()))}</p><button class="text-button" data-action="refresh-device-info" ${passBusy?'disabled':''}>${zh?'刷新设备信息':'Refresh station details'}</button></section>`;
 }
 async function savedOrderRoute(id){
  const order=await refreshOrder(id);
