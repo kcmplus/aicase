@@ -68,12 +68,12 @@ def station_options(request, model_name, target=None, material=''):
             devices = devices.filter(vendor_device_id=device_id, connection__shop_id=shop_id)
         else:
             devices = devices.filter(stocked=True)
-    # Validate source coordinates before pagination so omitted stations never
-    # leave an empty page ahead of valid candidates. Uses the public WGS84 contract.
+    # Coordinates are required for nearby discovery, not for an explicitly
+    # scanned device or an existing order target. Stock checks still apply.
     rows, valid_count = [], 0
     offset = (page - 1) * 20
     for device in devices.order_by('-stocked', 'pk').iterator(chunk_size=100):
-        if device_coordinates(device) is None:
+        if target is None and device_id is None and device_coordinates(device) is None:
             continue
         if valid_count >= offset:
             rows.append(device)

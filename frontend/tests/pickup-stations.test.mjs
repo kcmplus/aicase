@@ -84,3 +84,20 @@ test('picker selection respects fresh stock, coordinates and search matches',()=
  assert.doesNotMatch(stationFinderPanel(state,{now,selectable:true,search:'no-such-station'}),/data-action="select-station"/);
  assert.doesNotMatch(stationFinderPanel({...state,rows:[{...station,coordinates:null}]},{now,selectable:true}),/data-action="select-station"/);
 });
+
+
+test('scanned station without map coordinates shows stock and refresh instead of nearby search',()=>{
+ const scope={shop_id:'146',device_id:'401'},row={...station,coordinates:null,name:'<Scanned>'};
+ const state={rows:[row],loadedAt:now};
+ const html=stationChoicePanel(state,{scope,now});
+ assert.match(html,/&lt;Scanned&gt;/);assert.match(html,/Stock is available/);
+ assert.match(html,/data-action="refresh-stations"/);
+ assert.doesNotMatch(html,/open-station-picker|station-navigation|Enable location|Scan the station QR code/);
+ for(const [changes,message] of [[{busy:true},'Checking station stock'],[{error:true},'Stock could not be checked'],[{loadedAt:now-61000},'Refresh station stock before confirming'],[{rows:[{...row,availability:'out_of_stock'}]},'out of stock'],[{rows:[{...row,availability:'updating'}]},'needs updating'],[{rows:[{...row,device_id:'999'}]},'Printing is unavailable']]){
+  const result=stationChoicePanel({...state,...changes},{scope,station:row,now});
+  assert.ok(result.includes(message));assert.doesNotMatch(result,/Stock is available/);
+ }
+ assert.match(stationChoicePanel(state,{scope,now,lang:'zh-CN'}),/此设备有该机型和款式的库存/);
+ const bound=stationFinderPanel({...state,bound:true},{now});
+ assert.match(bound,/&lt;Scanned&gt;/);assert.doesNotMatch(bound,/station-navigation/);
+});
