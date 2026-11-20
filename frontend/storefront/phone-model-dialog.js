@@ -5,7 +5,8 @@ export function phoneModelChoices({models=[],status='ready',brand='',selected=''
  const say=(en,zh)=>lang==='zh-CN'?zh:en;
  const brandOf=model=>selection?.(model)?.brand||phoneBrand(model);
  const brands=[...new Set(models.map(brandOf).filter(Boolean))],active=brands.includes(brand)?brand:brands[0]||'';
- if(status!=='ready'||!models.length)return `<div class="v35-model-empty" role="status"><p>${say('Phone models are unavailable. Please try again.','机型暂不可用，请重新加载。')}</p><button type="button" data-picker-retry ${busy?'disabled':''}>${say(busy?'Loading…':'Try again',busy?'正在加载…':'重新加载')}</button></div>`;
+ const messages={loading:say('Loading phone models…','正在加载机型…'),updating:say('Station stock needs updating. Refresh in a moment or ask staff to sync inventory.','设备库存需要更新，请稍后刷新，或联系工作人员同步库存。'),empty:say('No phone models are currently available at this station. Please contact staff.','此设备暂无可用机型，请联系工作人员。')};
+ if(status!=='ready'||!models.length)return `<div class="v35-model-empty" role="status"><p>${messages[status]||say('Phone models are unavailable. Please try again.','机型暂不可用，请重新加载。')}</p><button type="button" data-picker-retry ${busy?'disabled':''}>${say(busy?'Loading…':'Try again',busy?'正在加载…':'重新加载')}</button></div>`;
  return `<div class="v35-model-brands" role="group" aria-label="${say('Phone brand','手机品牌')}">${brands.map(b=>`<button type="button" data-picker-brand="${esc(b)}" aria-pressed="${b===active}">${esc(b)}</button>`).join('')}</div><div class="v35-model-list" role="group" aria-label="${say('Phone model','手机机型')}">${models.filter(model=>brandOf(model)===active).map(model=>`<button type="button" data-picker-model="${esc(model)}" aria-pressed="${model===selected}"><span>${esc(model)}</span>${model===selected?'<b aria-hidden="true">✓</b>':''}</button>`).join('')}</div>`;
 }
 

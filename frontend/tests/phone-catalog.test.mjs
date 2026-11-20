@@ -44,3 +44,14 @@ test('model sheet uses the server brand for model names without a brand prefix',
  const html=phoneModelChoices({models:['Galaxy test'],brand:'Samsung',selection:()=>({brand:'Samsung'})});
  assert.match(html,/data-picker-brand="Samsung"/);assert.match(html,/data-picker-model="Galaxy test"/);assert.doesNotMatch(html,/data-picker-brand="Galaxy"/);
 });
+
+
+test('stale station inventory is distinguished from a failed catalog request',()=>{
+ const updating=phoneModelChoices({status:'updating',models:['Old phone']});
+ assert.match(updating,/Station stock needs updating/);
+ assert.doesNotMatch(updating,/data-picker-model=/);
+ assert.match(phoneModelChoices({status:'updating',lang:'zh-CN'}),/设备库存需要更新/);
+ assert.match(phoneModelChoices({status:'unavailable'}),/Phone models are unavailable/);
+ assert.match(phoneModelChoices({status:'loading'}),/Loading phone models/);
+ assert.match(phoneModelChoices({status:'empty'}),/No phone models are currently available/);
+});

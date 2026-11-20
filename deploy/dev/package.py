@@ -18,7 +18,8 @@ def allowed_source(name, environment='dev'):
         units.update({'deploy/dev/aicase-dev-inventory.service', 'deploy/dev/aicase-dev-inventory.timer'})
     if environment == 'prod':
         units.update({'deploy/prod/backup.sh', 'deploy/prod/aicase-prod-backup.service',
-                      'deploy/prod/aicase-prod-backup.timer'})
+                      'deploy/prod/aicase-prod-backup.timer', 'deploy/prod/aicase-prod-inventory.service',
+                      'deploy/prod/aicase-prod-inventory.timer'})
     if name in units:
         return True
     path = Path(name)
