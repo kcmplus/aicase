@@ -11,7 +11,7 @@ class ProductionPackageTests(unittest.TestCase):
     def test_production_units_are_included_without_dev_units_or_secrets(self):
         for name in ['backup.sh', 'aicase-prod-backup.service', 'aicase-prod-backup.timer',
                      'aicase-prod-ai-cleanup.service', 'aicase-prod-ai-cleanup.timer',
-                     'aicase-prod-supplier-orders.service', 'aicase-prod-supplier-orders.timer']:
+                     'aicase-prod-supplier-orders.service', 'aicase-prod-supplier-orders.timer', 'aicase-prod-inventory.service', 'aicase-prod-inventory.timer']:
             self.assertTrue(package.allowed_source('deploy/prod/' + name, 'prod'))
             self.assertFalse(package.allowed_source('deploy/prod/' + name, 'dev'))
         for name in ['deploy/prod/backend.env', 'deploy/prod/backend.env.example',

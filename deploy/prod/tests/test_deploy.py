@@ -83,7 +83,7 @@ elif name == 'curl' and fail == 'health':
         (tree / 'frontend/storefront/index.html').write_text('test')
         (tree / 'VERSION').write_text('a' * 40 + '\n')
         (tree / 'deploy/prod').mkdir(parents=True)
-        for name in ['aicase-prod-ai-cleanup.service', 'aicase-prod-ai-cleanup.timer', 'aicase-prod-backup.service', 'aicase-prod-backup.timer', 'backup.sh', 'aicase-prod-supplier-orders.service', 'aicase-prod-supplier-orders.timer']:
+        for name in ['aicase-prod-ai-cleanup.service', 'aicase-prod-ai-cleanup.timer', 'aicase-prod-backup.service', 'aicase-prod-backup.timer', 'backup.sh', 'aicase-prod-supplier-orders.service', 'aicase-prod-supplier-orders.timer', 'aicase-prod-inventory.service', 'aicase-prod-inventory.timer']:
             shutil.copyfile(Path(__file__).resolve().parents[1] / name, tree / 'deploy/prod' / name)
         with tarfile.open(self.root / 'release.tar.gz', 'w:gz') as archive:
             for path in tree.iterdir(): archive.add(path, arcname=path.name)
@@ -111,6 +111,8 @@ elif name == 'curl' and fail == 'health':
         self.assertIn('seed_phone_templates --only-supplied', calls)
         self.assertIn('systemctl enable --now aicase-prod-ai-cleanup.timer', calls)
         self.assertIn('systemctl enable --now aicase-prod-backup.timer', calls)
+        self.assertIn('systemctl enable --now aicase-prod-inventory.timer', calls)
+        self.assertTrue((self.root / 'units/aicase-prod-inventory.service').exists())
         self.assertLess(calls.index('pg_restore '), calls.index('migrate --noinput'))
         self.assertTrue((self.root / 'units/aicase-prod-ai-cleanup.service').exists())
         self.assertLess(calls.index('pg_dump '), calls.index('migrate --noinput'))
@@ -118,9 +120,12 @@ elif name == 'curl' and fail == 'health':
 
     def test_upgrade_preserves_managed_catalog(self):
         self.previous_release()
+        (self.root / 'units/aicase-prod-inventory.service').write_text('existing')
         result = self.run_deploy()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertNotIn('seed_catalog', (self.root / 'calls').read_text())
+        calls = (self.root / 'calls').read_text()
+        self.assertNotIn('seed_catalog', calls)
+        self.assertLess(calls.index('systemctl stop aicase-prod-inventory.service'), calls.index('pg_dump '))
 
     def test_failures_restore_previous_release(self):
         previous = self.previous_release()

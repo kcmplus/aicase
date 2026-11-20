@@ -1,0 +1,21 @@
+[Unit]
+Description=Refresh merchant device profiles, stock and phone model mappings
+After=network-online.target postgresql.service
+Wants=network-online.target
+ConditionPathExists=/opt/aicase-prod/current/backend/management_api/management/commands/sync_device_inventory.py
+ConditionPathExists=!/var/lib/aicase-prod/deploying
+
+[Service]
+Type=oneshot
+User=aicase-prod
+Group=aicase-prod
+WorkingDirectory=/opt/aicase-prod/current/backend
+EnvironmentFile=/etc/aicase-prod/backend.env
+ExecStart=/opt/aicase-prod/current/.venv/bin/python manage.py sync_device_inventory --all --allow-empty
+TimeoutStartSec=240
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/aicase-prod/media
+UMask=0027

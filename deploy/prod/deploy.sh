@@ -98,6 +98,9 @@ touch "$state/deploying"
 if [[ -f "$unit_dir/aicase-prod-supplier-orders.service" ]]; then
     systemctl stop aicase-prod-supplier-orders.service
 fi
+if [[ -f "$unit_dir/aicase-prod-inventory.service" ]]; then
+    systemctl stop aicase-prod-inventory.service
+fi
 if [[ -n "$previous" && -f "$previous/backend/manage.py" ]]; then
     drained=0
     for ((attempt=0; attempt<60; attempt++)); do
@@ -138,6 +141,8 @@ install -m 644 "$release/deploy/prod/aicase-prod-supplier-orders.service" "$unit
 install -m 644 "$release/deploy/prod/aicase-prod-supplier-orders.timer" "$unit_dir/"
 install -m 644 "$release/deploy/prod/aicase-prod-ai-cleanup.service" "$unit_dir/"
 install -m 644 "$release/deploy/prod/aicase-prod-ai-cleanup.timer" "$unit_dir/"
+install -m 644 "$release/deploy/prod/aicase-prod-inventory.service" "$unit_dir/"
+install -m 644 "$release/deploy/prod/aicase-prod-inventory.timer" "$unit_dir/"
 systemctl daemon-reload
 systemctl enable --now aicase-prod-ai-cleanup.timer
 systemctl enable --now aicase-prod-supplier-orders.timer
@@ -148,4 +153,5 @@ install -m 644 "$release/deploy/prod/aicase-prod-backup.timer" "$unit_dir/"
 systemctl daemon-reload
 systemctl enable --now aicase-prod-backup.timer
 rm -f "$state/deploying"
+systemctl enable --now aicase-prod-inventory.timer
 printf 'Deployed %s to https://%s\n' "$release_id" "$domain"
