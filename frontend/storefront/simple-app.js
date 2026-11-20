@@ -126,7 +126,7 @@ function syncStationFinder(){stationFinder.setContext(pickupContext());}
 function pickupStationPanel(){
  const context=pickupContext();if(!context)return '';
  const finder=stationFinder.state.key===context.key?stationFinder.state:{rows:[],busy:true};
- return stationChoicePanel(finder,{selectedKey:stationChoices.get(context.key),lang:locale()});
+ return stationChoicePanel(finder,{selectedKey:stationChoices.get(context.key),scope:context.scope,station:scannedStation,lang:locale()});
 }
 function stationPickerContents(search=''){
  const context=pickupContext();if(!context)return '';
@@ -153,7 +153,7 @@ function showStationPicker(){
  void requestStationLocation();
  if(Date.now()-stationFinder.state.loadedAt>60000)void stationFinder.refresh();
 }
-function pickupCheckoutReady(){const c=pickupContext(),v=stationFinder.state;return c&&v.key===c.key&&!v.error&&!v.busy&&Date.now()-v.loadedAt<=60000&&v.rows.some(s=>s.availability==='available');}
+function pickupCheckoutReady(){const c=pickupContext(),v=stationFinder.state;return c&&v.key===c.key&&!v.error&&!v.busy&&Date.now()-v.loadedAt<=60000&&v.rows.some(s=>s.availability==='available'&&(!c.scope||s.device_id===c.scope.device_id&&s.shop_id===c.scope.shop_id));}
 async function requestStationLocation({force=false}={}){
  if(locatingStations||passBusy||(!force&&userPosition&&Date.now()-userPosition.acquiredAt<300000))return;
  locatingStations=true;stationLocationError='';
@@ -704,7 +704,11 @@ function publicStationPage(legacy=false){
 function stationContext(){
  if(!scannedIds)return '';
  const zh=locale()==='zh-CN';
- return `<section class="station-context" aria-label="${zh?'当前打印设备':'Selected print station'}">${scannedStation?`${stationIdentity(scannedStation,{lang:locale()})}<p class="device-scan-notice">${zh?'已选择此设备。已有订单可确认推单，新设计将在此设备打印。':'Station selected. Confirm an existing order here, or create a new design.'}</p>`:`${lastScannedStation?stationIdentity({...lastScannedStation,coordinates:null},{lang:locale()})+`<small>${zh?'上次读取的设备资料，当前待核实':'Previously loaded station details; verification pending'}</small>`:''}<p role="status">${esc(deviceInfoErrorMessage(stationError,locale()))}</p><button class="text-button" data-action="refresh-device-info" ${passBusy?'disabled':''}>${zh?'刷新设备信息':'Refresh station details'}</button>`}</section>`;
+ if(scannedStation){
+  const name=typeof scannedStation.name==='string'?scannedStation.name.trim():'';
+  return `<details class="station-context station-context-compact"><summary aria-label="${zh?'当前打印设备，展开详情':'Selected print station, show details'}"><span class="station-context-dot" aria-hidden="true"></span><strong class="station-context-title">${esc(name||(zh?'打印设备':'Print station'))}</strong><span class="station-context-action">${zh?'详情':'Details'}</span><span class="station-context-chevron" aria-hidden="true">⌄</span></summary><div class="station-context-body">${stationIdentity(scannedStation,{lang:locale()})}<p class="device-scan-notice">${zh?'已选择此设备。已有订单可确认推单，新设计将在此设备打印。':'Station selected. Confirm an existing order here, or create a new design.'}</p></div></details>`;
+ }
+ return `<section class="station-context" aria-label="${zh?'当前打印设备':'Selected print station'}">${lastScannedStation?stationIdentity({...lastScannedStation,coordinates:null},{lang:locale()})+`<small>${zh?'上次读取的设备资料，当前待核实':'Previously loaded station details; verification pending'}</small>`:''}<p role="status">${esc(deviceInfoErrorMessage(stationError,locale()))}</p><button class="text-button" data-action="refresh-device-info" ${passBusy?'disabled':''}>${zh?'刷新设备信息':'Refresh station details'}</button></section>`;
 }
 async function savedOrderRoute(id){
  const order=await refreshOrder(id);
@@ -823,7 +827,7 @@ function checkoutPage(){
  <a class="back-link" href="#orders">← ${say('My orders','我的订单')}</a>
  <header class="checkout-heading"><p class="eyebrow">${say('ONE LAST LOOK. THEN MAKE IT YOURS.','最后确认，让设计成为你的专属。')}</p><div class="checkout-title-row"><h1>${editId?say('Review your changes','确认设计修改'):paidCheckout?say('Review & pay','确认并付款'):say('Review & confirm','确认你的订单')}</h1><span class="checkout-status">${paymentLoading?say('Loading checkout','正在加载'):!supported?say('Checkout paused','暂不可结算'):editId?say('Editing design','修改设计'):paymentConfig?.zero_price_test?say('No-charge test','免付测试'):paidCheckout?say('Awaiting payment','等待付款'):say('Review order','确认订单')}</span></div><span class="checkout-fulfillment-tag">${pickup?say('Nearby printing','附近打印'):deliveryLabel(delivery,locale())}</span><p>${say('Check your artwork and phone model before confirming.','确认前请检查图案和手机机型。')}</p></header>
  <div class="ai-order-layout">${checkoutDesignCard(pass)}
- <section class="ai-order-card checkout-fulfillment">${singlePrintNotice(checkoutDraft,locale())}${!editId?deliveryOptions(delivery,locale(),{pickupDetails:pickupStationPanel(),presentation:'checkout'}):`<h2>${deliveryLabel(delivery,locale())}</h2>`}${pickup&&scannedStation?stationIdentity(scannedStation,{lang:locale(),navigation:false}):''}${delivery==='courier'&&!editId?courierAddressForm(checkoutDraft,locale()):''}</section>
+ <section class="ai-order-card checkout-fulfillment">${singlePrintNotice(checkoutDraft,locale())}${!editId?deliveryOptions(delivery,locale(),{pickupDetails:pickupStationPanel(),presentation:'checkout'}):`<h2>${deliveryLabel(delivery,locale())}</h2>`}${pickup&&scannedStation&&editId?stationIdentity(scannedStation,{lang:locale(),navigation:false}):''}${delivery==='courier'&&!editId?courierAddressForm(checkoutDraft,locale()):''}</section>
  <section class="ai-order-card checkout-summary">${supported&&(paymentConfig||editId)?quoteBreakdown(pass,price,Boolean(editId)):''}${pickup?`<p class="field-note">${paidCheckout||paymentConfig?.zero_price_test?'Check your design carefully. The artwork is locked when the payment order is created.':'You can edit your design until printing starts. Saving a revision updates your design. After printing starts, changes need a new order.'}</p>`:''}${confirmation}</section></div>
  ${canConfirm?'':checkoutDock({price:displayPrice,label:actionLabel,disabled:true})}</section>`;
 }

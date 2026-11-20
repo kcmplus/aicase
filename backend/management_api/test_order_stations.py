@@ -96,17 +96,24 @@ class OrderStationTests(TestCase):
         self.assertEqual(len(self.public('&page=2').data['results']),3)
         self.assertEqual(self.public('&page=bad').status_code,400)
 
-    def test_missing_invalid_and_unconfirmed_coordinates_are_skipped(self):
+    def test_coordinates_only_required_for_nearby_discovery(self):
         for coords in [None, {}, {'latitude':'invalid','longitude':113,'coordinate_type':'WGS84'},
                        {'latitude':91,'longitude':113,'coordinate_type':'WGS84'},
                        {'latitude':23,'longitude':113},
                        {'latitude':23,'longitude':113,'coordinate_type':'GCJ02'}]:
             self.device.provider_profile={'coordinates':coords};self.device.save()
             self.assertEqual(self.public().data['results'],[])
-            self.assertEqual(self.public('&shop_id=146&device_id=401').data['results'],[])
+            scoped = self.public('&shop_id=146&device_id=401').data['results']
+            self.assertEqual(len(scoped), 1)
+            self.assertEqual(scoped[0]['availability'], 'available')
+            self.assertIsNone(scoped[0]['coordinates'])
+            self.assertEqual(SupplierOrder.objects.count(), 0)
         order=self.order()
         row=SupplierOrder.objects.create(order=order,device=self.device,inventory_item=self.stock,business_number='2',goods_id=10,order_revision=1,snapshot_sha256='a'*64,state='prepared')
-        self.assertEqual(self.client.get(f'/api/v1/store/orders/{order.reference}/stations/').data['results'],[])
+        bound = self.client.get(f'/api/v1/store/orders/{order.reference}/stations/?device_id=999&shop_id=146').data['results']
+        self.assertEqual(len(bound), 1)
+        self.assertEqual(bound[0]['device_id'], '401')
+        self.assertIsNone(bound[0]['coordinates'])
         row.refresh_from_db();self.assertEqual(row.device_id,self.device.pk)
 
     def test_coordinate_filter_runs_before_pagination(self):
@@ -118,3 +125,22 @@ class OrderStationTests(TestCase):
         self.assertEqual(len(first['results']),20);self.assertTrue(first['has_more'])
         self.assertEqual(len(second['results']),1);self.assertFalse(second['has_more'])
         self.assertNotIn('401',[s['device_id'] for s in first['results']+second['results']])
+
+    def test_scanned_device_without_coordinates_still_requires_stock_and_template(self):
+        self.device.provider_profile = {}
+        self.device.save()
+        for field, value, expected in [('stock', 0, 'out_of_stock'),
+                ('template_mask', '', 'unavailable'), ('present', False, 'unavailable'),
+                ('observed_at', timezone.now()-timedelta(minutes=16), 'updating')]:
+            original = getattr(self.stock, field)
+            setattr(self.stock, field, value)
+            self.stock.save()
+            data = self.public('&shop_id=146&device_id=401').data
+            self.assertEqual(data['results'][0]['availability'], expected, field)
+            setattr(self.stock, field, original)
+            self.stock.save()
+        self.assertEqual(self.public('&shop_id=999&device_id=401').data['results'], [])
+        self.device.active = False
+        self.device.save()
+        self.assertEqual(self.public('&shop_id=146&device_id=401').data['results'], [])
+        self.assertEqual(SupplierOrder.objects.count(), 0)

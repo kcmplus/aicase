@@ -1184,3 +1184,14 @@ test('applying camera-aware AI preserves the full image and rejects a changed ca
   else{assert.equal(writes.length,1);assert.equal(context.state.photo,'generated');assert.equal(context.state.photoPlacement.fit,'blur');assert.equal(context.state.photoPlacement.scale,100);}
  }
 });
+
+
+test('scoped checkout needs fresh stock for the exact scanned device, without requiring coordinates',async()=>{
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
+ const scope={shop_id:'351',device_id:'789'},context={key:'checkout',scope};
+ const state={key:'checkout',error:false,busy:false,loadedAt:Date.now(),rows:[{...scope,availability:'available',coordinates:null}]};
+ const ready=(changes={},ctx=context)=>vm.runInNewContext(appFunction(source,'pickupCheckoutReady')+';pickupCheckoutReady()', {pickupContext:()=>ctx,stationFinder:{state:{...state,...changes}}});
+ assert.equal(ready(),true);
+ for(const changes of [{error:true},{busy:true},{loadedAt:Date.now()-61000},{key:'old'},{rows:[]},{rows:[{...scope,availability:'out_of_stock'}]},{rows:[{...scope,device_id:'999',availability:'available'}]},{rows:[{...scope,shop_id:'999',availability:'available'}]}])assert.equal(ready(changes),false);
+ assert.equal(ready({}, {key:'checkout'}),true);
+});
