@@ -63,7 +63,10 @@ def order_progress(order):
         payment = 'free' if order.mode == 'free_test' else 'paid'
     else:
         payment = 'unpaid' if order.status == 'pending' else 'unverified'
-    return {'code': code, 'payment': payment,
+    station_order_ending = ''
+    if row and row.transport == 'supplier' and order.fulfillment_type == 'pickup':
+        station_order_ending = row.trade_no[-6:]
+    return {'code': code, 'payment': payment, 'station_order_ending': station_order_ending,
             'group': next((key for key, values in GROUPS.items() if code in values), 'other'),
             'device': {key: device[key] for key in ('device_id', 'shop_id', 'name', 'location', 'number')} if device else None,
             'updated_at': updated,

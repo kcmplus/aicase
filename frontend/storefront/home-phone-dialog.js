@@ -1,7 +1,7 @@
 import {openPhoneModelDialog} from './phone-model-dialog.js';
 import {esc} from './art.js';
 import {phoneBrand} from './phone-catalog.js';
-import {caseStylePicker} from './case-styles.js';
+import {caseStylePicker,defaultCaseMaterial} from './case-styles.js';
 import {reconcilePhoneColor,phoneColorName} from './phone-colors.js';
 
 // Choices stay local until confirmation. This dialog never creates an order or AI job.
@@ -20,6 +20,7 @@ export function openHomePhoneDialog({root,initial={},catalog,refresh,lang='en-US
   const {models,status,selection:lookup}=catalog(),brands=[...new Set(models.map(model=>lookup(model)?.brand||phoneBrand(model)))];
   if(!brands.includes(brand))brand=brands[0]||'';
   const record=models.includes(draft.model)?lookup(draft.model):null;
+  if(status==='ready'&&!lookup(draft.model,draft.caseMaterial))draft.caseMaterial=defaultCaseMaterial(record);
   const choice=selection(),colors=choice?.colors||[];
   draft.phoneColor=reconcilePhoneColor(draft.phoneColor,colors).color;
   const ready=Boolean(choice)&&!refreshing;

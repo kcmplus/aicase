@@ -8,16 +8,16 @@ import {openPhoneModelDialog} from './phone-model-dialog.js';
 import {openHomePhoneDialog} from './home-phone-dialog.js';
 import {worksPage,workDetailPage,tutorialPage,aboutPage,locationsPage,membershipInfoPage} from './v35-pages.js';
 import {shellHeader,shellFooter,homePresentation,mountShell} from './v35-shell.js';
-import {caseStylePicker,caseMaterialLabel} from './case-styles.js';
+import {caseStylePicker,caseMaterialLabel,defaultCaseMaterial} from './case-styles.js';
 import {createStationFinder,stationFinderPanel,locateUser} from './pickup-stations.js';
 import {stationChoicePanel,openStationPicker,chosenStation} from './station-picker.js';
-import {progressPanel,progressPaymentText} from './order-progress.js';
+import {progressPanel,progressPaymentText,progressText,stationOrderEnding} from './order-progress.js';
 import {startVisiblePolling} from './visible-polling.js';
 import {providerOrderRoute,requireDisplayedOrder,mergeOrderProgress} from './order-service.js';
 import {stationScanPrompt,previewStationPanel,openStationScanner} from './station-scanner.js';
 import {stationEntry} from './station-entry.js';
 import {loadDeviceInfo,deviceInfoErrorMessage} from './device-info-service.js';
-import {fulfillmentConfig,prepareDeviceOrder,fulfillmentView,scopeIds,scanScope,stationIdentity,isPickup,deliveryOptions,deliveryLabel,deliveryStatusPanel,courierAddressForm} from './fulfillment-service.js';
+import {fulfillmentConfig,prepareDeviceOrder,fulfillmentView,stationOrderNotice,scopeIds,scanScope,stationIdentity,isPickup,deliveryOptions,deliveryLabel,deliveryStatusPanel,courierAddressForm} from './fulfillment-service.js';
 import {paymentState} from './payment-state.js';
 import {createOrderSuccessTracker,orderSuccessContent,openOrderSuccess} from './order-success.js';
 import {openAirwallexCheckout} from './airwallex-checkout.js';
@@ -203,6 +203,7 @@ try {
     }
   }
 } catch { /* Missing or invalid local data starts a fresh session. */ }
+if(stockScope&&stockCatalogStatus==='ready'&&!state.editOrderId&&!stockSelection(state.model,state.caseMaterial))state.caseMaterial=defaultCaseMaterial(stockSelection(state.model));
 state.phoneTemplateId=stockSelection(state.model,state.caseMaterial)?.templateId;selectSupplierTemplate(state.model,state.phoneTemplateId);
 if(state.phoneColor||stockSelection(state.model,state.caseMaterial)?.colors?.length)syncDraftColor();
 state.aiExample=exampleFor(state.aiExample).id;
@@ -485,7 +486,7 @@ function assertCurrentColor(selection,available){
 }
 function selectPhoneModel(model){
  if(!phoneModels.includes(model))return;
- if(model!==state.model||!state.caseMaterial){state.model=model;state.caseMaterial='standard';state.phoneTemplateId=stockSelection(model,'standard')?.templateId;selectSupplierTemplate(model,state.phoneTemplateId);syncDraftColor(true);phoneSettingsOpen=Boolean(stockSelection(model,'standard')?.colors?.length);reviewPass=null;save();}
+ if(model!==state.model||!stockSelection(model,state.caseMaterial)){state.model=model;state.caseMaterial=defaultCaseMaterial(stockSelection(model));const choice=stockSelection(model,state.caseMaterial);state.phoneTemplateId=choice?.templateId;selectSupplierTemplate(model,state.phoneTemplateId);syncDraftColor(true);phoneSettingsOpen=Boolean(choice?.colors?.length);reviewPass=null;save();}
  if(location.hash==='#choose?step=model')history.replaceState(null,'','#choose');
  render(true);document.querySelector(phoneSettingsOpen?'[data-action="choose-phone"]':'.phone-settings-summary')?.focus({preventScroll:true});
 }
@@ -737,7 +738,7 @@ function deviceFulfillmentPanel(order){
  if(!devicePrinting.enabled)return `<section class="device-fulfillment"><h3>${say('Print at a station','设备打印')}</h3>${f?stationIdentity({name:f.device_name,location:f.device_location,number:f.device_number,device_id:f.device_id,coordinates:f.device_coordinates},{lang:locale(),navigation:!pickupContext()}):scannedStation?stationIdentity(scannedStation,{lang:locale(),navigation:!pickupContext()}):''}<p role="status">${say('Sending orders to this station is not available yet. Your order is saved. Please contact staff.','设备推单暂未开放，订单已保存，请联系工作人员。')}</p>${order.status==='paid'?`<button class="button primary full" disabled>${say('I’m at this printer — send order','确认在打印机前并推单')}</button>`:''}</section>`;
  const simulationNotice=f?.simulated?`<p role="status">${say('Direct backend simulation — no physical printing or dispensing.','服务端直连模拟：不会实际打印或出货。')}</p><p>${say('Simulation progress: ','模拟进度：')}${esc(v.phase||v.state)}</p>`:'';
  const ids=scopeIds(stockScope),selection=stockSelection(order.pass.model,order.pass.caseMaterial);
- return `<section class="device-fulfillment" aria-label="${say('Station printing','设备打印')}"><h3>${say('Print at a station','设备打印')}</h3>${simulationNotice}${f?`${stationIdentity({name:f.device_name,location:f.device_location,number:f.device_number,device_id:f.device_id,coordinates:f.device_coordinates},{lang:locale(),navigation:!pickupContext()})}${v.releasePending?`<button class="button primary full" disabled>${say('Print now','立即打印')}</button><small role="status">${f.zero_release_unconfirmed?say('Your order was sent. Zero-amount printing is awaiting supplier confirmation.','订单已推送，0 元开印仍待供应商确认支持。'):say('Immediate printing is unavailable at this station. Your order is saved; please contact staff.','此设备暂不能确认开印，订单已保存，请联系工作人员。')}</small>`:''}${v.canPrint?`<button class="button primary full" data-action="confirm-device-print" ${passBusy?'disabled':''}>${say('Print now','立即打印')}</button><small>${say('Confirm that you are at this station before printing.','请确认你已在这台设备前。')}</small>`:''}${(v.state==='draft'||v.canRetry)?`<button class="button primary full" data-action="send-device-order" ${passBusy?'disabled':''}>${order.status==='paid'?say('I’m at this printer — send order','确认在打印机前并推单'):say('Prepare print files','准备打印文件')}</button>`:''}`:
+ return `<section class="device-fulfillment" aria-label="${say('Station printing','设备打印')}"><h3>${say('Print at a station','设备打印')}</h3>${simulationNotice}${stationOrderNotice(order,{lang:locale()})}${f?`${stationIdentity({name:f.device_name,location:f.device_location,number:f.device_number,device_id:f.device_id,coordinates:f.device_coordinates},{lang:locale(),navigation:!pickupContext()})}${v.releasePending?`<button class="button primary full" disabled>${say('Print now','立即打印')}</button><small role="status">${f.zero_release_unconfirmed?say('Your order was sent. Zero-amount printing is awaiting supplier confirmation.','订单已推送，0 元开印仍待供应商确认支持。'):say('Immediate printing is unavailable at this station. Your order is saved; please contact staff.','此设备暂不能确认开印，订单已保存，请联系工作人员。')}</small>`:''}${v.canPrint?`<button class="button primary full" data-action="confirm-device-print" ${passBusy?'disabled':''}>${say('Print now','立即打印')}</button><small>${say('Confirm that you are at this station before printing.','请确认你已在这台设备前。')}</small>`:''}${(v.state==='draft'||v.canRetry)?`<button class="button primary full" data-action="send-device-order" ${passBusy?'disabled':''}>${order.status==='paid'?say('I’m at this printer — send order','确认在打印机前并推单'):say('Prepare print files','准备打印文件')}</button>`:''}`:
  ids?`${scannedStation?stationIdentity(scannedStation,{lang:locale(),navigation:!pickupContext()}):`<p>${esc(deviceInfoErrorMessage(stationError,locale()))}</p><small>${say('Device ID','设备编号')}：${esc(ids.device_id)}</small><button class="text-button" data-action="refresh-device-info" ${passBusy?'disabled':''}>${say('Refresh station details','刷新设备信息')}</button>`}${selection&&scannedStation?`<div class="checkout-case">${passPreview({...order.pass,phoneTemplateId:selection.templateId})}</div><p>${say('Check this station’s template before sending.','请确认此设备的机型预览，再发送订单。')}</p><button class="button primary full" data-action="send-device-order" ${passBusy?'disabled':''}>${order.status==='paid'?say('I’m at this printer — send order','确认在打印机前并推单'):say('Use this printer','使用此打印设备')}</button>`:`<p>${scannedStation?say('This station has no stock for this phone model and case style. Scan another station.','此设备暂无该机型和款式的库存，请扫描其他设备。'):''}</p>`}`:
  stationScanPrompt(locale())}</section>`;
 }
@@ -748,11 +749,17 @@ function providerOrderPage(order){
  const oldReceipt=document.querySelector('.payment-receipt');
  const receiptOpen=oldReceipt?.dataset.order===order.id&&oldReceipt.open;
  const headline=view.fulfilled?(locale()==='zh-CN'?'订单详情':'Order details'):view.canPay&&(isPickup(order)||order.fulfillmentType==='courier'&&order.shippingQuote?.version===1)?(locale()==='zh-CN'?'确认并付款':'Review & pay'):order.progress&&!order.refund&&!view.pending?progressPaymentText(order.progress,locale()):view.title;
- const headingMessage=view.fulfilled?(locale()==='zh-CN'?'你的设计已保存，可在下方查看订单并继续。':'Your design is saved. View your order and next steps below.'):order.fulfillmentType==='courier'?view.message:order.progress&&!order.refund&&!view.pending?(locale()==='zh-CN'?'订单已保存，打印与出货进度见下方。':'Your order is saved. See printing and dispensing progress below.'):view.message;
+ const lang=locale();
+ const detailStatus=order.progress?.code
+  ?progressText(order.progress,lang).label
+  :orderStatus(order.status,order.refund);
+ const statusCaption=lang==='zh-CN'?'订单状态':'Order status';
+ const headingMessage=order.fulfillmentType==='courier'?view.message:order.progress&&!order.refund&&!view.pending?(lang==='zh-CN'?'订单已保存，打印与出货进度见下方。':'Your order is saved. See printing and dispensing progress below.'):view.message;
  const canStartNew=['ready','completed','collected','cancelled'].includes(order.status)||order.refund?.status==='succeeded';
- return `<section class="flow wrap review-flow payment-flow v35-checkout ${view.fulfilled?'payment-fulfilled v35-order-detail':''} ${view.canPay&&(isPickup(order)||order.fulfillmentType==='courier'&&order.shippingQuote?.version===1)?'v35-checkout-design':''}" data-active-order="${esc(order.id)}"><div class="ai-heading">${view.pending||view.fulfilled?`<a class="back-link" href="#orders">← ${locale()==='zh-CN'?'我的订单':'My orders'}</a>`:''}${view.fulfilled?'':`<p class="eyebrow">${paymentLabel(order.mode)}</p>`}<div class="checkout-title-row"><h1>${esc(headline)}</h1>${view.canPay||view.fulfilled?`<span class="checkout-status">${esc(orderStatus(order.status,order.refund))}</span>`:''}</div><p role="status">${esc(headingMessage)}</p></div>${view.fulfilled?'':progressPanel(order.progress,{lang:locale()})}${!view.pending&&!view.fulfilled?`<div id="pickup-station-panel">${pickupStationPanel()}</div>`:''}
+ return `<section class="flow wrap review-flow payment-flow v35-checkout ${view.fulfilled?'payment-fulfilled v35-order-detail':''} ${view.canPay&&(isPickup(order)||order.fulfillmentType==='courier'&&order.shippingQuote?.version===1)?'v35-checkout-design':''}" data-active-order="${esc(order.id)}"><div class="ai-heading">${view.pending||view.fulfilled?`<a class="back-link" href="#orders">← ${locale()==='zh-CN'?'我的订单':'My orders'}</a>`:''}${view.fulfilled?'':`<p class="eyebrow">${paymentLabel(order.mode)}</p>`}<div class="checkout-title-row"><h1>${esc(headline)}</h1>${view.canPay||view.fulfilled?`<span class="checkout-status">${esc(orderStatus(order.status,order.refund))}</span>`:''}</div><p role="status">${view.fulfilled?`${statusCaption} · <strong>${esc(detailStatus)}</strong>`:esc(headingMessage)}</p></div>${view.fulfilled?'':progressPanel(order.progress,{lang:locale()})}${!view.pending&&!view.fulfilled?`<div id="pickup-station-panel">${pickupStationPanel()}</div>`:''}
  <div class="ai-order-layout">${checkoutDesignCard(order.pass)}${view.pending?`<div id="pickup-station-panel">${pickupStationPanel()}</div>`:''}
  <div class="ai-order-card" aria-busy="${passBusy}">${view.fulfilled?'':`<p class="eyebrow">${esc(orderStatus(order.status,order.refund))}</p><h2>${esc(order.currency)} ${money(order.priceCents)}</h2>`}
+ ${stationOrderEnding(order.progress,locale())}
  ${order.mode==='free_test'?`<p class="payment-environment">${locale()==='zh-CN'?'0 元免付联调，不产生实际收款。':'No-charge test order. No payment was collected.'}</p>`:order.mode.endsWith('_test')?`<p class="payment-environment">${provider} test mode · No real charge.</p>`:view.pending?'<p class="payment-environment">Live payment · Your payment method will be charged.</p>':''}
  ${orderActionError||paymentError?`<p class="error" role="alert">${esc(orderActionError||paymentError)}</p>`:''}
  ${passBusy?`<p role="status" aria-live="polite">${locale()==='zh-CN'?'正在处理，请稍候…':'Processing your request… Please wait.'}</p>`:''}
@@ -760,7 +767,7 @@ function providerOrderPage(order){
  ${view.fulfilled?`<div id="pickup-station-panel">${pickupStationPanel()}</div>`:''}${deliveryStatusPanel(order,{lang:locale(),busy:passBusy})}${deviceFulfillmentPanel(order)}
  <button class="text-button payment-refresh" data-action="refresh-payment" ${passBusy?'disabled':''}>${locale()==='zh-CN'?'刷新订单':'Refresh order'}</button>
 
- <details class="payment-receipt" data-order="${esc(order.id)}" ${receiptOpen?'open':''}><summary><span>Order details</span><span>${view.fulfilled?`${esc(order.currency)} ${money(order.priceCents)}`:''}</span></summary><div class="payment-receipt-body"><dl><div><dt>Order number</dt><dd>${esc(order.id)}</dd></div><div><dt>Delivery method</dt><dd>${deliveryLabel(order.fulfillmentType,locale())}</dd></div><div><dt>Payment method</dt><dd>${provider}</dd></div><div><dt>Order status</dt><dd>${esc(orderStatus(order.status,order.refund))}</dd></div></dl><a class="text-button" href="#orders">View all my orders →</a><p class="field-note">Keep this browser’s site data to retain access to your order.</p></div></details>
+ <details class="payment-receipt" data-order="${esc(order.id)}" ${receiptOpen?'open':''}><summary><span>Order details</span><span>${view.fulfilled?`${esc(order.currency)} ${money(order.priceCents)}`:''}</span></summary><div class="payment-receipt-body"><dl><div><dt>Order number</dt><dd>${esc(order.id)}</dd></div><div><dt>Delivery method</dt><dd>${deliveryLabel(order.fulfillmentType,locale())}</dd></div><div><dt>Payment method</dt><dd>${provider}</dd></div><div><dt>${statusCaption}</dt><dd>${esc(view.fulfilled?detailStatus:orderStatus(order.status,order.refund))}</dd></div></dl><a class="text-button" href="#orders">View all my orders →</a><p class="field-note">Keep this browser’s site data to retain access to your order.</p></div></details>
  ${canStartNew?'<a class="button secondary full payment-next-design" href="#choose">Create a new design →</a>':''}</div></div></section>`;
 }
 function paymentPage(){return paymentOrder?providerOrderPage(paymentOrder):`<section class="empty wrap v35-checkout" aria-busy="${!paymentError}"><h1>Payment status</h1><p class="${paymentError?'error':'v35-order-notice'}" role="${paymentError?'alert':'status'}">${esc(paymentError||'Loading your order…')}</p><button class="text-button" data-action="refresh-payment">Refresh payment status</button><a class="text-button" href="#orders">View all my orders →</a></section>`;}
@@ -1270,9 +1277,11 @@ async function refreshStockChoices(){
  await loadStockCatalog(undefined,stockScope);stockRefreshedAt=Date.now();
  if(stockCatalogStatus==='ready'&&state.model&&!phoneModels.includes(state.model)){state.model='';state.caseMaterial='';state.phoneTemplateId=undefined;save();}
  if(stockCatalogStatus==='ready'){
-  if(state.caseMaterial&&!stockSelection(state.model,state.caseMaterial))state.caseMaterial='';
+  const previousMaterial=state.caseMaterial;
+  if(!stockSelection(state.model,state.caseMaterial))state.caseMaterial=stockScope&&!state.editOrderId?defaultCaseMaterial(stockSelection(state.model)):'';
   state.phoneTemplateId=stockSelection(state.model,state.caseMaterial)?.templateId;
   selectSupplierTemplate(state.model,state.phoneTemplateId);
+  if(previousMaterial!==state.caseMaterial){syncDraftColor();save();}
  }
  if(stockCatalogStatus==='ready'&&(state.phoneColor||stockSelection(state.model,state.caseMaterial)?.colors?.length)){syncDraftColor();save();}
  return before!==JSON.stringify(phoneModels.map(model=>stockSelection(model)))||beforeStatus!==stockCatalogStatus;
@@ -1430,8 +1439,10 @@ async function changeAIPhoneModel(model){
   if(!aiJob||aiJob.id!==jobId||aiJob.status!=='awaiting_confirmation'||aiJob.remoteId||aiJob.submissionAttempted)throw Error('This render has changed. Please review it again.');
   if(stockCatalogStatus!=='ready'||!phoneModels.includes(model))throw Error('This phone model is unavailable. Please choose again.');
   // Preserve the request key, photo and style. Changing a draft must not submit a render.
-  await rememberLiveJob({...aiJob,model,caseMaterial:'standard',phoneTemplateId:stockSelection(model,'standard')?.templateId||''});
-  Object.assign(state,{model,caseMaterial:'standard',phoneTemplateId:stockSelection(model,'standard')?.templateId,phoneColor:null});
+  const caseMaterial=defaultCaseMaterial(stockSelection(model)),choice=stockSelection(model,caseMaterial);
+  if(!choice)throw Error('This station has no available case style for this phone model.');
+  await rememberLiveJob({...aiJob,model,caseMaterial,phoneTemplateId:choice.templateId||''});
+  Object.assign(state,{model,caseMaterial,phoneTemplateId:choice.templateId,phoneColor:null});
   selectSupplierTemplate(model,state.phoneTemplateId);colorNotice=false;reviewPass=null;aiUi.accepted=false;save();
  }catch(error){aiUi.error=error.message;notify(error.message);}
  finally{aiBusy=false;render(true);document.querySelector('#ai-phone-model')?.focus({preventScroll:true});}

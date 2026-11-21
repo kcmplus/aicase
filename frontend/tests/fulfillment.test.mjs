@@ -266,3 +266,34 @@ test('courier address matches prototype required fields and escapes private draf
  assert.match(html,/Address saved\./);
  assert.match(courierAddressForm({},'zh-CN'),/收件人（必填）/);
 });
+
+test('station panel explains blocked orders without adding a print or retry action',async()=>{
+ const {stationOrderNotice}=await import('../storefront/fulfillment-service.js');
+ const {readFile}=await import('node:fs/promises');
+ const {default:vm}=await import('node:vm');
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
+ const panel=source.slice(source.indexOf('function deviceFulfillmentPanel('),source.indexOf('function providerOrderPage('));
+ const context={isPickup,fulfillmentView,stationOrderNotice,stationIdentity,scopeIds,locale:()=> 'en-US',devicePrinting:{enabled:true},
+  stockScope:'device_id=789&shop_id=351',stockSelection:()=>null,pickupContext:()=>true,passBusy:false};
+ vm.createContext(context);vm.runInContext(panel,context);
+ const base={...order(),mode:'free_test',fulfillment:{state:'submitted',release_state:'idle',device_id:'789',shop_id:'351',device_name:'Station',
+  can_confirm_print:true,release_available:true}};
+ for(const [patch,expected] of [
+  [{cloud_status:{status:4,phase:'cancelled'}},/cancelled by the station service/],
+  [{state:'unknown',can_confirm_print:false},/not confirmed whether it received/],
+  [{release_state:'unknown',print_confirmed:true},/print confirmation is awaiting verification/],
+  [{state:'prepared',can_confirm_print:false},/waiting to be sent/],
+  [{state:'submitting',can_confirm_print:false},/being sent to the station/],
+ ]){
+  const value={...base,fulfillment:{...base.fulfillment,...patch}};
+  const html=context.deviceFulfillmentPanel(value);
+  assert.match(html,expected);assert.match(html,/role="status"/);
+  assert.doesNotMatch(html,/data-action="(?:confirm-device-print|send-device-order)"/);
+ }
+ const allowed=context.deviceFulfillmentPanel(base);
+ assert.match(allowed,/data-action="confirm-device-print"/);assert.doesNotMatch(allowed,/station-order-notice/);
+ const rejected={...base,fulfillment:{...base.fulfillment,state:'rejected',can_confirm_print:false,can_retry_dispatch:true}};
+ assert.match(context.deviceFulfillmentPanel(rejected),/data-action="send-device-order"/);
+ assert.match(stationOrderNotice({...base,fulfillment:{...base.fulfillment,cloud_status:{status:4}}},{lang:'zh-CN'}),/已取消此打印请求/);
+ for(const patch of [{fulfillmentType:'courier'},{refund:{status:'requested'}},{mode:'stripe_test'}])assert.equal(stationOrderNotice({...base,...patch}),'');
+});

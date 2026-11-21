@@ -1,5 +1,12 @@
 import {esc} from './art.js';
 
+export function stationOrderEnding(progress,lang){
+ const ending=progress?.station_order_ending;
+ if(!ending)return '';
+ const label=lang==='zh-CN'?'设备订单尾号':'Station order ending';
+ return `<p class="station-order-ending">${label} <strong>${esc(ending)}</strong></p>`;
+}
+
 const stages={
  awaiting_payment:['等待付款','Awaiting payment','付款确认后继续选择打印设备。','Choose a station after payment is confirmed.'],
  unbound:['待选择设备','Choose a station','到设备前扫描屏幕上的二维码。','Scan the code on the station screen when you arrive.'],

@@ -2,8 +2,8 @@ import {generatedPhotoPlacement} from '../storefront/ai-service.js';
 import {homeLooks} from '../storefront/v35-home.js';
 import {orderListPage} from '../storefront/v35-order-list.js';
 import {createOrderSuccessTracker} from '../storefront/order-success.js';
-import {progressPanel,progressPaymentText} from '../storefront/order-progress.js';
-import {caseMaterialLabel} from '../storefront/case-styles.js';
+import {progressPanel,progressPaymentText,progressText,stationOrderEnding} from '../storefront/order-progress.js';
+import {caseMaterialLabel,defaultCaseMaterial} from '../storefront/case-styles.js';
 import {createStationFinder} from '../storefront/pickup-stations.js';
 import {selectSupplierTemplate} from '../storefront/phone-templates.js';
 import {singlePrintDraft} from '../storefront/order-service.js';
@@ -231,9 +231,9 @@ test('saved design, payment page and order receipt render shared statuses from s
  const pass=Object.freeze({code:'SYNTHETIC-DESIGN',model:'Synthetic model'});
  for(const [status,refund,label] of [['pending',null,'Awaiting payment'],['paid',null,'Paid'],['ready',null,'Ready to collect'],['completed',null,'Collected'],['cancelled',null,'Cancelled'],['paid',{status:'pending'},'Refund processing.'],['paid',{status:'succeeded'},'Payment refunded.'],['paid',{status:'failed'},'Refund could not be completed.'],['<unknown>',null,'&lt;unknown&gt;']]){
   for(const mode of ['demo','stripe_test','airwallex_test','free_test']){
-   const order=Object.freeze({id:'SYNTHETIC-ORDER',server:true,pass,status,refund,mode,priceCents:0,currency:'USD',fulfillmentType:'pickup'});
+   const order=Object.freeze({id:'SYNTHETIC-ORDER',progress:mode==='free_test'&&status==='paid'?{code:'awaiting_confirmation',station_order_ending:'006330',payment:'free'}:null,server:true,pass,status,refund,mode,priceCents:0,currency:'USD',fulfillmentType:'pickup'});
    const before=JSON.stringify(order);
-   const context={progressPanel:()=>'<section class="order-progress">PRINT PROGRESS</section>',caseMaterialLabel,phoneColorName,arrow:()=>'→',t:v=>v,pickupStationPanel:()=>'',orderActionError:'',state:{pass},orderBook:{},orderForCode:()=>order,locale:()=> 'en-US',esc,
+   const context={progressText,stationOrderEnding,progressPanel:()=>'<section class="order-progress">PRINT PROGRESS</section>',caseMaterialLabel,phoneColorName,arrow:()=>'→',t:v=>v,pickupStationPanel:()=>'',orderActionError:'',state:{pass},orderBook:{},orderForCode:()=>order,locale:()=> 'en-US',esc,
     money:()=> '0.00',PRINT_PRICE:'0.00',passPreview:()=>'',passName:()=> 'Synthetic design',effectCaption:()=>'',
     previewStationPanel:()=>'',scannedStation:null,stockScope:'',paymentState,paymentOrder:order,paymentPollCount:0,paymentError:'',passBusy:false,
     document:{querySelector:()=>null},location:{hash:'#payment?order=SYNTHETIC-ORDER&result=success'},URLSearchParams,
@@ -241,11 +241,25 @@ test('saved design, payment page and order receipt render shared statuses from s
    const html=vm.runInNewContext(`${declarations}\n${mode==='demo'?'passPage()':'paymentPage()'}`,context);
    assert.ok(html.includes(label),`${mode} ${status} ${refund?.status||''}: ${label}`);
    assert.ok(html.includes('SYNTHETIC-ORDER'));
+   if(order.progress){
+    assert.match(html,/Station order ending <strong>006330<\/strong>/);
+    const list=orderListPage({rows:[{reference:order.id,progress:order.progress,fulfillment_type:'pickup',status,mode,amount:0,currency:'USD'}],lang:'zh-CN',statusLabel:()=> '已支付'});
+    assert.match(list,/设备订单尾号 <strong>006330<\/strong>/);
+   }else assert.doesNotMatch(html,/station-order-ending/);
    assert.equal(JSON.stringify(order),before,'rendering cannot change server order state');
    if(mode!=='demo'){
     assert.match(html,/<dt>Order status<\/dt><dd>/);
     if(paymentState(order).fulfilled){
      assert.match(html,/v35-order-detail/);
+     if(order.progress){
+      assert.match(html,/Order status · <strong>Ready for print confirmation<\/strong>/);
+      for(const [code,statusText] of [['cancelled','订单已取消'],['unverified','设备进度待核实'],['printed','已打印，等待出货'],['dispensed','已出货，请取件']]){
+       const localized=vm.runInNewContext(declarations+'\npaymentPage()',{
+        ...context,locale:()=> 'zh-CN',paymentOrder:{...order,progress:{...order.progress,code}}
+       });
+       assert.ok(localized.includes('订单状态 · <strong>'+statusText+'</strong>'));
+      }
+     }
      assert.match(html,/<h1>Order details<\/h1>/);
      assert.match(html,new RegExp(`<span class="checkout-status">${label}</span>`));
      assert.doesNotMatch(html,/class="order-progress|PRINT PROGRESS|progress below/);
@@ -567,7 +581,7 @@ test('actual local restore clears unavailable color while retaining composition 
 // Run the actual startup, persistence and refresh code against the real catalog
 // module. Only HTTP/storage are synthetic; a failed read must remain distinct
 // from a successfully loaded catalog with no colors.
-async function startColorDraft(editor,response){
+async function startColorDraft(editor,response,scope=''){
  const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
  const start=source.indexOf('async function startStorefront(){');
  const end=source.indexOf('try{if(!accountEntry',start);
@@ -575,15 +589,15 @@ async function startColorDraft(editor,response){
  const refreshEnd=source.indexOf('\nsetInterval(async()=>',refreshStart);
  assert.ok(start>=0&&end>start&&refreshStart>0&&refreshEnd>refreshStart);
  let currentResponse=response;
- const context=vm.createContext({createOrderSuccessTracker,singlePrintDraft,createStationFinder,selectSupplierTemplate,editorHistory:{record(){}},syncEditorHistoryButtons(){},
+ const context=vm.createContext({URL,URLSearchParams,history:{replaceState(){}},createOrderSuccessTracker,singlePrintDraft,createStationFinder,selectSupplierTemplate,editorHistory:{record(){}},syncEditorHistoryButtons(){},
   document:{querySelector:()=>({textContent:''})},location:{hash:'#choose',href:'http://localhost/#choose'},
   localStorage:{getItem:key=>editor.get(key)||null,setItem:(key,value)=>editor.set(key,value)},
-  t:value=>value,deviceScope:()=>'',scopeIds:()=>null,loadCatalog:async()=>null,
+  t:value=>value,deviceScope:()=>scope,scopeIds:()=>null,loadCatalog:async()=>null,
   loadStockCatalog:()=>loadStockCatalog(async()=>currentResponse(),''),fulfillmentConfig:async()=>({}),
   getAIAccount:async()=>customerIdentity(8),createDesignWorkspace,createDesignLibrary,createPhotoDraftLibrary,readPass,
   readDesign:async()=>undefined,writeDesign:async()=>{},updateDesign:async(key,transform,initial)=>transform(initial),
   freshMembership:()=>({jobs:{}}),freshOrders:()=>({orders:{}}),designs:[{id:'bloom'}],phoneModels:stockedPhoneModels,
-  stations:[],aiStyles:[],aiExamples:[],effects:[],stockSelection,
+  stations:[],aiStyles:[],aiExamples:[],effects:[],stockSelection,defaultCaseMaterial,
   exampleFor:()=>({id:'portrait',results:{anime:'synthetic'}}),migrateRender:value=>value,
   frozenPhoneColor,reconcilePhoneColor,isPhoto,validateAddedArtwork,validatePlacement,validatePhotoPlacement,phoneBrands:()=>[],phoneBrand:()=> 'Synthetic',notify:message=>assert.fail(message),
  });
@@ -921,7 +935,7 @@ async function aiPhoneChangeHarness(){
   state:{model:'iPhone 17',caseMaterial:'standard',phoneColor:{code:'old'},phoneTemplateId:'old-template'},
   phoneModels:['iPhone 17','iPhone 13 Pro'],stockCatalogStatus:'ready',colorNotice:true,reviewPass:{old:true},
   membership:{authenticated:true},workspace:{check(){}},syncAIAccount:async()=>{},refreshStockChoices:async()=>{},
-  render:()=>{},notify:()=>{},save:()=>{},selectSupplierTemplate:()=>{},stockSelection:()=>({templateId:'new-standard-template'}),document:{querySelector:()=>null},location:{hash:'#ai'},
+  render:()=>{},notify:()=>{},save:()=>{},selectSupplierTemplate:()=>{},defaultCaseMaterial,stockSelection:()=>({templateId:'new-standard-template',styles:[{caseMaterial:'standard',available:true}]}),document:{querySelector:()=>null},location:{hash:'#ai'},
   rememberLiveJob:async value=>{writes.push(structuredClone(value));context.aiJob=value;},
   submitLiveRender:async value=>{sent.push(structuredClone(value));return {...value,status:'queued',remoteId:'server-id'};}};
  vm.createContext(context);vm.runInContext(appFunction(source,'changeAIPhoneModel')+'\n'+appFunction(source,'confirmAI'),context);
@@ -1194,4 +1208,46 @@ test('scoped checkout needs fresh stock for the exact scanned device, without re
  assert.equal(ready(),true);
  for(const changes of [{error:true},{busy:true},{loadedAt:Date.now()-61000},{key:'old'},{rows:[]},{rows:[{...scope,availability:'out_of_stock'}]},{rows:[{...scope,device_id:'999',availability:'available'}]},{rows:[{...scope,shop_id:'999',availability:'available'}]}])assert.equal(ready(changes),false);
  assert.equal(ready({}, {key:'checkout'}),true);
+});
+
+test('editor model selection uses the first available style and preserves a valid manual selection',async()=>{
+ const source=await readFile(new URL('../storefront/simple-app.js',import.meta.url),'utf8');
+ const context={state:{model:'Old',caseMaterial:'standard'},phoneModels:['Phone'],defaultCaseMaterial,
+  stockSelection:(_model,material)=>material===undefined?{styles:[{caseMaterial:'standard',available:false},{caseMaterial:'magnetic',available:true}]}:material==='magnetic'?{templateId:'magnet-template',colors:[]}:null,
+  selectSupplierTemplate:()=>{},syncDraftColor:()=>{},save:()=>{},render:()=>{},document:{querySelector:()=>null},location:{hash:'#choose'},phoneSettingsOpen:false,reviewPass:{}};
+ vm.createContext(context);vm.runInContext(appFunction(source,'selectPhoneModel'),context);
+ context.selectPhoneModel('Phone');assert.equal(context.state.caseMaterial,'magnetic');assert.equal(context.state.phoneTemplateId,'magnet-template');
+ context.stockSelection=(_model,material)=>material===undefined?{styles:[{caseMaterial:'standard',available:true},{caseMaterial:'magnetic',available:true}]}:{templateId:material+'-template',colors:[]};
+ context.selectPhoneModel('Phone');assert.equal(context.state.caseMaterial,'magnetic');
+ context.state.model='Old';context.selectPhoneModel('Phone');assert.equal(context.state.caseMaterial,'standard');
+});
+
+test('AI model changes use the available magnetic template instead of unavailable standard',async()=>{
+ const {context}=await aiPhoneChangeHarness();
+ context.stockSelection=(_model,material)=>material===undefined?{styles:[{caseMaterial:'standard',available:false},{caseMaterial:'magnetic',available:true}]}:material==='magnetic'?{templateId:'magnetic-template'}:null;
+ await context.changeAIPhoneModel('iPhone 13 Pro');
+ assert.equal(context.state.caseMaterial,'magnetic');assert.equal(context.aiJob.caseMaterial,'magnetic');assert.equal(context.aiJob.phoneTemplateId,'magnetic-template');
+});
+
+test('scanned draft selects available material on startup and refresh without overwriting a valid choice',async()=>{
+ const {catalog,draft}=draftColorCatalog();
+ const data=catalog([]);data.scope='device';
+ const magnetic={...data.templates[0],id:'supplier-890-'+'b'.repeat(20),inventoryItemId:890};
+ data.templates.push(magnetic);
+ data.models[0].styles[0].available=false;
+ data.models[0].styles[1]={caseMaterial:'magnetic',available:true,templateId:magnetic.id,inventoryItemId:890,colors:[]};
+ const key='v35:customer-8:editor',editor=new Map([[key,JSON.stringify(draft)]]);
+ const session=await startColorDraft(editor,()=>({ok:true,json:async()=>structuredClone(data)}),'device_id=789&shop_id=351');
+ assert.equal(session.controller.state.caseMaterial,'magnetic');assert.equal(session.controller.state.phoneTemplateId,magnetic.id);
+ data.models[0].styles[0].available=true;
+ await session.controller.refresh();assert.equal(session.controller.state.caseMaterial,'magnetic');
+ session.respond(()=>({ok:false,status:503}));
+ await session.controller.refresh();assert.equal(session.controller.state.caseMaterial,'magnetic');
+ data.models[0].styles[1].available=false;
+ session.respond(()=>({ok:true,json:async()=>structuredClone(data)}));
+ await session.controller.refresh();assert.equal(session.controller.state.caseMaterial,'standard');
+ assert.equal(session.controller.state.phoneTemplateId,data.templates[0].id);
+ assert.equal(JSON.parse(editor.get(key)).phoneTemplateId,data.templates[0].id);
+ data.models[0].styles[0].available=false;
+ await session.controller.refresh();assert.equal(session.controller.state.caseMaterial,'');assert.equal(session.controller.state.phoneTemplateId,undefined);
 });
