@@ -11,7 +11,7 @@ import {shellHeader,shellFooter,homePresentation,mountShell} from './v35-shell.j
 import {caseStylePicker,caseMaterialLabel,defaultCaseMaterial} from './case-styles.js';
 import {createStationFinder,stationFinderPanel,locateUser} from './pickup-stations.js';
 import {stationChoicePanel,openStationPicker,chosenStation} from './station-picker.js';
-import {progressPanel,progressPaymentText} from './order-progress.js';
+import {progressPanel,progressPaymentText,stationOrderEnding} from './order-progress.js';
 import {startVisiblePolling} from './visible-polling.js';
 import {providerOrderRoute,requireDisplayedOrder,mergeOrderProgress} from './order-service.js';
 import {stationScanPrompt,previewStationPanel,openStationScanner} from './station-scanner.js';
@@ -754,6 +754,7 @@ function providerOrderPage(order){
  return `<section class="flow wrap review-flow payment-flow v35-checkout ${view.fulfilled?'payment-fulfilled v35-order-detail':''} ${view.canPay&&(isPickup(order)||order.fulfillmentType==='courier'&&order.shippingQuote?.version===1)?'v35-checkout-design':''}" data-active-order="${esc(order.id)}"><div class="ai-heading">${view.pending||view.fulfilled?`<a class="back-link" href="#orders">← ${locale()==='zh-CN'?'我的订单':'My orders'}</a>`:''}${view.fulfilled?'':`<p class="eyebrow">${paymentLabel(order.mode)}</p>`}<div class="checkout-title-row"><h1>${esc(headline)}</h1>${view.canPay||view.fulfilled?`<span class="checkout-status">${esc(orderStatus(order.status,order.refund))}</span>`:''}</div><p role="status">${esc(headingMessage)}</p></div>${view.fulfilled?'':progressPanel(order.progress,{lang:locale()})}${!view.pending&&!view.fulfilled?`<div id="pickup-station-panel">${pickupStationPanel()}</div>`:''}
  <div class="ai-order-layout">${checkoutDesignCard(order.pass)}${view.pending?`<div id="pickup-station-panel">${pickupStationPanel()}</div>`:''}
  <div class="ai-order-card" aria-busy="${passBusy}">${view.fulfilled?'':`<p class="eyebrow">${esc(orderStatus(order.status,order.refund))}</p><h2>${esc(order.currency)} ${money(order.priceCents)}</h2>`}
+ ${stationOrderEnding(order.progress,locale())}
  ${order.mode==='free_test'?`<p class="payment-environment">${locale()==='zh-CN'?'0 元免付联调，不产生实际收款。':'No-charge test order. No payment was collected.'}</p>`:order.mode.endsWith('_test')?`<p class="payment-environment">${provider} test mode · No real charge.</p>`:view.pending?'<p class="payment-environment">Live payment · Your payment method will be charged.</p>':''}
  ${orderActionError||paymentError?`<p class="error" role="alert">${esc(orderActionError||paymentError)}</p>`:''}
  ${passBusy?`<p role="status" aria-live="polite">${locale()==='zh-CN'?'正在处理，请稍候…':'Processing your request… Please wait.'}</p>`:''}

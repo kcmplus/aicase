@@ -66,6 +66,9 @@ class OrderProgressTests(TestCase):
         self.assertTrue(data['stale']);self.assertEqual(data['updated_at'],stamp);self.assertEqual(data['code'],'printing')
 
     def test_list_detail_progress_match_and_are_private_read_only(self):
+        self.assertEqual(self.progress()['station_order_ending'], '')
+        self.row.trade_no = 'WM2611210233206330'
+        self.row.save(update_fields=['trade_no'])
         url=f'/api/v1/store/orders/{self.order.reference}/'
         with patch('management_api.device_provider.DeviceProvider') as provider:
             listing=self.client.get('/api/v1/store/orders/').data['results'][0]
@@ -76,7 +79,8 @@ class OrderProgressTests(TestCase):
         self.assertEqual(listing['progress'],detail['progress'])
         self.assertEqual(detail['progress'],response.data['progress'])
         self.assertEqual(response.data['progress']['code'],'awaiting_confirmation')
-        for forbidden in ['SECRET','PRIVATE-KEY','snapshot','customer_email','trade_no','print_image','file_token']:
+        self.assertEqual(listing['progress']['station_order_ending'], '206330')
+        for forbidden in [self.row.trade_no,'SECRET','PRIVATE-KEY','snapshot','customer_email','trade_no','print_image','file_token']:
             self.assertNotIn(forbidden,str(response.data))
             self.assertNotIn(forbidden,str(listing))
         self.assertIn('no-store',response['Cache-Control'])

@@ -2,7 +2,7 @@ import {generatedPhotoPlacement} from '../storefront/ai-service.js';
 import {homeLooks} from '../storefront/v35-home.js';
 import {orderListPage} from '../storefront/v35-order-list.js';
 import {createOrderSuccessTracker} from '../storefront/order-success.js';
-import {progressPanel,progressPaymentText} from '../storefront/order-progress.js';
+import {progressPanel,progressPaymentText,stationOrderEnding} from '../storefront/order-progress.js';
 import {caseMaterialLabel,defaultCaseMaterial} from '../storefront/case-styles.js';
 import {createStationFinder} from '../storefront/pickup-stations.js';
 import {selectSupplierTemplate} from '../storefront/phone-templates.js';
@@ -231,9 +231,9 @@ test('saved design, payment page and order receipt render shared statuses from s
  const pass=Object.freeze({code:'SYNTHETIC-DESIGN',model:'Synthetic model'});
  for(const [status,refund,label] of [['pending',null,'Awaiting payment'],['paid',null,'Paid'],['ready',null,'Ready to collect'],['completed',null,'Collected'],['cancelled',null,'Cancelled'],['paid',{status:'pending'},'Refund processing.'],['paid',{status:'succeeded'},'Payment refunded.'],['paid',{status:'failed'},'Refund could not be completed.'],['<unknown>',null,'&lt;unknown&gt;']]){
   for(const mode of ['demo','stripe_test','airwallex_test','free_test']){
-   const order=Object.freeze({id:'SYNTHETIC-ORDER',server:true,pass,status,refund,mode,priceCents:0,currency:'USD',fulfillmentType:'pickup'});
+   const order=Object.freeze({id:'SYNTHETIC-ORDER',progress:mode==='free_test'&&status==='paid'?{station_order_ending:'006330',payment:'free'}:null,server:true,pass,status,refund,mode,priceCents:0,currency:'USD',fulfillmentType:'pickup'});
    const before=JSON.stringify(order);
-   const context={progressPanel:()=>'<section class="order-progress">PRINT PROGRESS</section>',caseMaterialLabel,phoneColorName,arrow:()=>'→',t:v=>v,pickupStationPanel:()=>'',orderActionError:'',state:{pass},orderBook:{},orderForCode:()=>order,locale:()=> 'en-US',esc,
+   const context={stationOrderEnding,progressPanel:()=>'<section class="order-progress">PRINT PROGRESS</section>',caseMaterialLabel,phoneColorName,arrow:()=>'→',t:v=>v,pickupStationPanel:()=>'',orderActionError:'',state:{pass},orderBook:{},orderForCode:()=>order,locale:()=> 'en-US',esc,
     money:()=> '0.00',PRINT_PRICE:'0.00',passPreview:()=>'',passName:()=> 'Synthetic design',effectCaption:()=>'',
     previewStationPanel:()=>'',scannedStation:null,stockScope:'',paymentState,paymentOrder:order,paymentPollCount:0,paymentError:'',passBusy:false,
     document:{querySelector:()=>null},location:{hash:'#payment?order=SYNTHETIC-ORDER&result=success'},URLSearchParams,
@@ -241,6 +241,11 @@ test('saved design, payment page and order receipt render shared statuses from s
    const html=vm.runInNewContext(`${declarations}\n${mode==='demo'?'passPage()':'paymentPage()'}`,context);
    assert.ok(html.includes(label),`${mode} ${status} ${refund?.status||''}: ${label}`);
    assert.ok(html.includes('SYNTHETIC-ORDER'));
+   if(order.progress){
+    assert.match(html,/Station order ending <strong>006330<\/strong>/);
+    const list=orderListPage({rows:[{reference:order.id,progress:order.progress,fulfillment_type:'pickup',status,mode,amount:0,currency:'USD'}],lang:'zh-CN',statusLabel:()=> '已支付'});
+    assert.match(list,/设备订单尾号 <strong>006330<\/strong>/);
+   }else assert.doesNotMatch(html,/station-order-ending/);
    assert.equal(JSON.stringify(order),before,'rendering cannot change server order state');
    if(mode!=='demo'){
     assert.match(html,/<dt>Order status<\/dt><dd>/);
