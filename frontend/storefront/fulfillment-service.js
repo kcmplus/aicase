@@ -83,6 +83,27 @@ export function fulfillmentView(order){
  return {state:f.state,canRetry:f.state==='rejected'&&order.status==='paid'&&f.can_retry_dispatch===true,canPrint:order.status==='paid'&&f.can_confirm_print===true&&f.release_available===true,
   releasePending:f.state==='submitted'&&f.release_available!==true};
 }
+// Keep the reason visible when a station action is unavailable; this is not a
+// replacement for server authorization or a reason to retry an uncertain write.
+export function stationOrderNotice(order,{lang='en-US'}={}){
+ const v=fulfillmentView(order),f=order.fulfillment,zh=lang==='zh-CN';
+ if(!f||v.canPrint||v.canRetry||v.releasePending)return '';
+ const messages={
+  station_cancelled:['This print request was cancelled by the station service. It cannot be printed. Contact staff with your order number.','设备服务已取消此打印请求，无法继续打印。请提供订单号联系工作人员。'],
+  unknown:f.print_confirmed||f.release_state==='unknown'
+   ?['Your print confirmation is awaiting verification. Contact staff before trying again.','开印确认结果待核实，请联系工作人员，勿重复操作。']
+   :['The station has not confirmed whether it received this order. Contact staff with your order number; do not submit it again yet.','设备是否收到此订单尚未核实。请提供订单号联系工作人员，暂勿重复推单。'],
+  prepared:['Your design is waiting to be sent to the station. Refresh this order shortly.','设计正在等待发送至设备，请稍后刷新订单。'],
+  submitting:['Your design is being sent to the station. Refresh this order shortly; do not submit it again.','设计正在发送至设备，请稍后刷新订单，勿重复推单。'],
+  confirming:['Your print confirmation is being checked. Refresh this order shortly; do not confirm again.','正在核实开印确认，请稍后刷新订单，勿重复确认。'],
+  released:['Printing has been authorized. Waiting for the station to report progress.','已确认开印，正在等待设备返回进度。'],
+  failed:['The station reported a printing or dispensing problem. Contact staff before trying again.','设备报告打印或出货异常，请联系工作人员，勿重复操作。'],
+  rejected:['The station did not accept this request. Contact staff before sending it again.','设备未接受此请求，请联系工作人员核实后再发送。'],
+  submitted:['This order needs verification before printing. Contact staff with your order number.','此订单需要核实后才能打印，请提供订单号联系工作人员。'],
+ };
+ const message=messages[v.state];
+ return message?`<p class="station-order-notice" role="status">${esc(message[zh?1:0])}</p>`:'';
+}
 export async function prepareDeviceOrder(order,scope,{save,request=orderRequest,render=exportCase,fetcher=fetch}={}){
  if(!isPickup(order)||(!/^(stripe|airwallex)_live$/.test(order.mode)&&order.mode!=='free_test'))return order;
  const ids=scopeIds(scope)||order.fulfillment&&{device_id:order.fulfillment.device_id,shop_id:order.fulfillment.shop_id};
