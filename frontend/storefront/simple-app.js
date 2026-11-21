@@ -8,7 +8,7 @@ import {openPhoneModelDialog} from './phone-model-dialog.js';
 import {openHomePhoneDialog} from './home-phone-dialog.js';
 import {worksPage,workDetailPage,tutorialPage,aboutPage,locationsPage,membershipInfoPage} from './v35-pages.js';
 import {shellHeader,shellFooter,homePresentation,mountShell} from './v35-shell.js';
-import {caseStylePicker,caseMaterialLabel} from './case-styles.js';
+import {caseStylePicker,caseMaterialLabel,defaultCaseMaterial} from './case-styles.js';
 import {createStationFinder,stationFinderPanel,locateUser} from './pickup-stations.js';
 import {stationChoicePanel,openStationPicker,chosenStation} from './station-picker.js';
 import {progressPanel,progressPaymentText} from './order-progress.js';
@@ -203,6 +203,7 @@ try {
     }
   }
 } catch { /* Missing or invalid local data starts a fresh session. */ }
+if(stockScope&&stockCatalogStatus==='ready'&&!state.editOrderId&&!stockSelection(state.model,state.caseMaterial))state.caseMaterial=defaultCaseMaterial(stockSelection(state.model));
 state.phoneTemplateId=stockSelection(state.model,state.caseMaterial)?.templateId;selectSupplierTemplate(state.model,state.phoneTemplateId);
 if(state.phoneColor||stockSelection(state.model,state.caseMaterial)?.colors?.length)syncDraftColor();
 state.aiExample=exampleFor(state.aiExample).id;
@@ -485,7 +486,7 @@ function assertCurrentColor(selection,available){
 }
 function selectPhoneModel(model){
  if(!phoneModels.includes(model))return;
- if(model!==state.model||!state.caseMaterial){state.model=model;state.caseMaterial='standard';state.phoneTemplateId=stockSelection(model,'standard')?.templateId;selectSupplierTemplate(model,state.phoneTemplateId);syncDraftColor(true);phoneSettingsOpen=Boolean(stockSelection(model,'standard')?.colors?.length);reviewPass=null;save();}
+ if(model!==state.model||!stockSelection(model,state.caseMaterial)){state.model=model;state.caseMaterial=defaultCaseMaterial(stockSelection(model));const choice=stockSelection(model,state.caseMaterial);state.phoneTemplateId=choice?.templateId;selectSupplierTemplate(model,state.phoneTemplateId);syncDraftColor(true);phoneSettingsOpen=Boolean(choice?.colors?.length);reviewPass=null;save();}
  if(location.hash==='#choose?step=model')history.replaceState(null,'','#choose');
  render(true);document.querySelector(phoneSettingsOpen?'[data-action="choose-phone"]':'.phone-settings-summary')?.focus({preventScroll:true});
 }
@@ -1270,9 +1271,11 @@ async function refreshStockChoices(){
  await loadStockCatalog(undefined,stockScope);stockRefreshedAt=Date.now();
  if(stockCatalogStatus==='ready'&&state.model&&!phoneModels.includes(state.model)){state.model='';state.caseMaterial='';state.phoneTemplateId=undefined;save();}
  if(stockCatalogStatus==='ready'){
-  if(state.caseMaterial&&!stockSelection(state.model,state.caseMaterial))state.caseMaterial='';
+  const previousMaterial=state.caseMaterial;
+  if(!stockSelection(state.model,state.caseMaterial))state.caseMaterial=stockScope&&!state.editOrderId?defaultCaseMaterial(stockSelection(state.model)):'';
   state.phoneTemplateId=stockSelection(state.model,state.caseMaterial)?.templateId;
   selectSupplierTemplate(state.model,state.phoneTemplateId);
+  if(previousMaterial!==state.caseMaterial){syncDraftColor();save();}
  }
  if(stockCatalogStatus==='ready'&&(state.phoneColor||stockSelection(state.model,state.caseMaterial)?.colors?.length)){syncDraftColor();save();}
  return before!==JSON.stringify(phoneModels.map(model=>stockSelection(model)))||beforeStatus!==stockCatalogStatus;
@@ -1430,8 +1433,10 @@ async function changeAIPhoneModel(model){
   if(!aiJob||aiJob.id!==jobId||aiJob.status!=='awaiting_confirmation'||aiJob.remoteId||aiJob.submissionAttempted)throw Error('This render has changed. Please review it again.');
   if(stockCatalogStatus!=='ready'||!phoneModels.includes(model))throw Error('This phone model is unavailable. Please choose again.');
   // Preserve the request key, photo and style. Changing a draft must not submit a render.
-  await rememberLiveJob({...aiJob,model,caseMaterial:'standard',phoneTemplateId:stockSelection(model,'standard')?.templateId||''});
-  Object.assign(state,{model,caseMaterial:'standard',phoneTemplateId:stockSelection(model,'standard')?.templateId,phoneColor:null});
+  const caseMaterial=defaultCaseMaterial(stockSelection(model)),choice=stockSelection(model,caseMaterial);
+  if(!choice)throw Error('This station has no available case style for this phone model.');
+  await rememberLiveJob({...aiJob,model,caseMaterial,phoneTemplateId:choice.templateId||''});
+  Object.assign(state,{model,caseMaterial,phoneTemplateId:choice.templateId,phoneColor:null});
   selectSupplierTemplate(model,state.phoneTemplateId);colorNotice=false;reviewPass=null;aiUi.accepted=false;save();
  }catch(error){aiUi.error=error.message;notify(error.message);}
  finally{aiBusy=false;render(true);document.querySelector('#ai-phone-model')?.focus({preventScroll:true});}
